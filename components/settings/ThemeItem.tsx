@@ -12,6 +12,7 @@ import {useBottomSheetModal} from "@gorhom/bottom-sheet";
 import {getItem, setItem} from "@/lib/storage";
 
 import {useColorScheme} from "nativewind";
+import {setAndroidNavigationBar} from "@/lib/android-navigation-bar";
 
 type ItemData = {
   title: string;
@@ -75,9 +76,15 @@ export const ThemeSettingItem = () => {
   const onSelect = useCallback(
     (value: "light" | "dark" | "system") => {
       setColorScheme(value);
-      setItem("theme", value)
+      setItem("theme", value);
       setSelectedTheme(value);
-      dismiss()
+      
+      if (Platform.OS === "android") {
+        const themeValue = value === "system" ? (colorScheme || "dark") : value;
+        setAndroidNavigationBar(themeValue);
+      }
+      
+      dismiss();
     }, [selectedTheme, colorScheme, setColorScheme]
   )
   return (

@@ -14,6 +14,9 @@ import { getItem, setItem } from "@/lib/storage";
 import { useFrameworkReady } from "@/hooks/useFrameworkReady";
 import { Inter_400Regular, Inter_600SemiBold, useFonts } from '@expo-google-fonts/inter';
 import { useEffect } from "react";
+import { Platform } from "react-native";
+import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
+
 
 
 export {
@@ -60,19 +63,15 @@ export default function RootLayout() {
 
 
   return (
+
     <DatabaseProvider>
+      {__DEV__ && Platform.OS !== "web" ? <DrizzleStudioDevPlugin /> : null}
       <ThemeProvider value={colorScheme === "dark" ? DARK_THEME : LIGHT_THEME}>
         <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
         <GestureHandlerRootView style={{ flex: 1 }}>
           <BottomSheetModalProvider>
             <Stack>
-              <Stack.Screen name="(tabs)" options={{ title: "Habits", headerShown: false }} />
-              <Stack.Screen options={{
-                headerShadowVisible: false,
-              }} name="habits/archive" />
-              <Stack.Screen options={{
-                headerShadowVisible: false,
-              }} name="habits/[id]" />
+              <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
             </Stack>
           </BottomSheetModalProvider>
         </GestureHandlerRootView>

@@ -12,7 +12,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Habits',
+          title: 'Home',
           tabBarIcon: () => <List className="text-foreground" />,
         }}
       />

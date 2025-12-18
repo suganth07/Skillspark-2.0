@@ -7,7 +7,7 @@ import migrations from "./migrations/migrations";
 
 import * as schema from "./schema";
 
-const expoDb = openDatabaseSync("database.db", { enableChangeListener: true });
+export const expoDb = openDatabaseSync("database.db", { enableChangeListener: true });
 export const db = drizzle(expoDb, { schema });
 
 export const initialize = () => {

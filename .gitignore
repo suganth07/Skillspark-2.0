@@ -37,8 +37,8 @@ yarn-error.*
 
 app-example
 
-# Android build files
-android/gradlew.bat
+# # Android build files
+# android/gradlew.bat
 
-# Ignore the entire Android directory
-android/
+# # Ignore the entire Android directory
+# android/

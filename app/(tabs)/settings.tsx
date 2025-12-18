@@ -5,6 +5,7 @@ import {Muted} from "@/components/ui/typography";
 import {ScrollView} from 'react-native-gesture-handler';
 import List, {ListHeader} from "@/components/ui/list";
 import {ThemeSettingItem} from '@/components/settings/ThemeItem';
+import {UserManagement} from '@/components/settings/UserManagement';
 
 export default function Settings() {
   return (
@@ -13,6 +14,9 @@ export default function Settings() {
         <Text className="text-2xl font-bold mb-2">Settings</Text>
         <Muted>Configure your app preferences</Muted>
       </View>
+      
+      {/* User Account Management - Create, Switch, Delete Users */}
+      <UserManagement />
       
       <List>
         <ListHeader>

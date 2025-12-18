@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useUserStore } from '@/hooks/stores/useUserStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Text } from '@/components/ui/text';
@@ -12,14 +12,23 @@ import { cn } from '@/lib/utils';
 import { Muted, Large, Small } from '@/components/ui/typography';
 
 export function UserManagement() {
-  const { users, currentUser, switchUser, addUser, removeUser, initialize } = useUserStore();
+  const { users, currentUser, switchUser, addUser, removeUser, initialize, isLoading } = useUserStore();
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
 
   React.useEffect(() => {
-    if (!currentUser) initialize();
-  }, [currentUser]);
+    const initializeDatabase = async () => {
+      try {
+        await initialize();
+        console.log("UserManagement: Database initialized successfully");
+      } catch (error) {
+        console.error("UserManagement: Database initialization failed:", error);
+      }
+    };
+    
+    initializeDatabase();
+  }, []);
 
   const handleAddUser = async () => {
     if (newUserName.trim()) {
@@ -29,25 +38,72 @@ export function UserManagement() {
     }
   };
 
-  if (!currentUser) return null;
+  const handleDeleteUser = async (userId: string) => {
+    if (users.length <= 1) {
+      // Don't allow deleting the last user
+      return;
+    }
+    await removeUser(userId);
+  };
+
+  if (isLoading) {
+    return (
+      <View className="gap-4">
+        <View className="flex-row items-center justify-between">
+          <View>
+            <Text className="text-lg font-semibold">User Accounts</Text>
+            <Muted className="text-sm">Loading user data...</Muted>
+          </View>
+        </View>
+        <View className="p-6 bg-card rounded-lg border border-border">
+          <Text className="text-center">Initializing database...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!currentUser && users.length === 0) {
+    return (
+      <View className="gap-4">
+        <View className="flex-row items-center justify-between">
+          <View>
+            <Text className="text-lg font-semibold">User Accounts</Text>
+            <Muted className="text-sm">Setting up your first account</Muted>
+          </View>
+        </View>
+        <View className="p-6 bg-card rounded-lg border border-border">
+          <Text className="text-center mb-4">Creating your first account...</Text>
+          <Button onPress={async () => await addUser("My Account")} className="w-full">
+            <Text>Create Account</Text>
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center justify-between p-4 bg-card rounded-lg border border-border">
-         <View className="flex-row items-center gap-3">
-            <Avatar alt={currentUser.name || "User"}>
-              <AvatarImage source={{ uri: currentUser.avatarUrl || undefined }} />
+    <View style={{ gap: 16 }}>
+      {/* Section Header */}
+      <View>
+        <Text className="text-lg font-semibold">User Accounts</Text>
+        <Muted className="text-sm">Manage your profiles</Muted>
+      </View>
+      
+      <View style={styles.userCard}>
+         <View style={styles.userInfo}>
+            <Avatar alt={currentUser?.name || "User"}>
+              <AvatarImage source={{ uri: currentUser?.avatarUrl || undefined }} />
               <AvatarFallback>
-                <Text>{currentUser.name?.[0]?.toUpperCase() || "U"}</Text>
+                <Text>{currentUser?.name?.[0]?.toUpperCase() || "U"}</Text>
               </AvatarFallback>
             </Avatar>
-            <View>
-              <Large>{currentUser.name}</Large>
-              <Muted>Lvl {currentUser.level} • {currentUser.xp} XP</Muted>
+            <View style={{ marginLeft: 12 }}>
+              <Large>{currentUser?.name || "User"}</Large>
+              <Muted>Lvl {currentUser?.level || 1} • {currentUser?.xp || 0} XP</Muted>
             </View>
          </View>
          <Button variant="outline" size="sm" onPress={() => setIsManageOpen(true)}>
-            <Text>Switch</Text>
+            <Text>Manage</Text>
          </Button>
       </View>
 
@@ -57,39 +113,43 @@ export function UserManagement() {
             <DialogTitle>Manage Profiles</DialogTitle>
           </DialogHeader>
           
-          <View className="gap-2 py-4">
+          <View style={{ gap: 8, paddingVertical: 16 }}>
             {users.map((user) => (
-              <View key={user.id} className={cn("flex-row items-center justify-between p-3 rounded-md", 
-                currentUser.id === user.id ? "bg-secondary" : "hover:bg-muted"
-              )}>
+              <View key={user.id} style={[
+                styles.userItem, 
+                currentUser?.id === user.id ? styles.currentUser : styles.normalUser
+              ]}>
                  <Pressable 
-                    className="flex-row items-center gap-3 flex-1" 
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}
                     onPress={() => switchUser(user.id)}
                  >
-                    <Avatar alt={user.name!} className="h-8 w-8">
+                    <Avatar alt={user.name!}>
                        <AvatarFallback>
                          <Text>{user.name?.[0]?.toUpperCase()}</Text>
                        </AvatarFallback>
                     </Avatar>
-                    <Text className={cn("font-medium", currentUser.id === user.id && "text-primary")}>
+                    <Text style={{ fontWeight: currentUser?.id === user.id ? 'bold' : 'normal' }}>
                       {user.name}
                     </Text>
-                    {currentUser.id === user.id && <Check size={16} className="text-primary" />}
+                    {currentUser?.id === user.id && <Check size={16} />}
                  </Pressable>
 
-                 {currentUser.id !== user.id && (
-                   <Button variant="ghost" size="icon" onPress={() => removeUser(user.id)}>
-                      <Trash2 size={16} className="text-destructive" />
+                 {users.length > 1 && (
+                   <Button variant="ghost" size="icon" onPress={() => handleDeleteUser(user.id)}>
+                      <Trash2 size={16} />
                    </Button>
                  )}
               </View>
             ))}
           </View>
 
-          <DialogFooter>
-             <Button variant="outline" className="flex-row gap-2 w-full" onPress={() => setIsAddOpen(true)}>
-                <Plus size={16} className="text-foreground" />
-                <Text>Create New Profile</Text>
+          <DialogFooter className="flex-row gap-2">
+             <Button variant="outline" className="flex-1" onPress={() => setIsManageOpen(false)}>
+                <Text>Close</Text>
+             </Button>
+             <Button className="flex-row gap-2 flex-1" onPress={() => { setIsManageOpen(false); setIsAddOpen(true); }}>
+                <Plus size={16} className="text-primary-foreground" />
+                <Text>Add User</Text>
              </Button>
           </DialogFooter>
         </DialogContent>
@@ -120,3 +180,35 @@ export function UserManagement() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  userCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#1f1f1f',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 6,
+    marginVertical: 4,
+  },
+  currentUser: {
+    backgroundColor: '#333',
+  },
+  normalUser: {
+    backgroundColor: 'transparent',
+  },
+});

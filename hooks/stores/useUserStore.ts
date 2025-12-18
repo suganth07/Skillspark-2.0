@@ -24,32 +24,42 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   initialize: async () => {
     try {
+      console.log("UserStore: Starting initialization...");
       set({ isLoading: true });
+      
+      console.log("UserStore: Fetching users from database...");
       const usersList = await getAllUsers();
+      console.log(`UserStore: Found ${usersList.length} users in database`);
       
       // Sync with local storage ID
       const savedId = storage.getString("current_user_id");
+      console.log("UserStore: Saved user ID from storage:", savedId);
       let activeUser: User | null = null;
 
       if (savedId) {
         activeUser = usersList.find(u => u.id === savedId) || null;
+        console.log("UserStore: Found saved user:", activeUser ? activeUser.name : "none");
       }
 
       // If no valid saved user, but we have users, pick first
       if (!activeUser && usersList.length > 0) {
         activeUser = usersList[0];
         storage.set("current_user_id", activeUser.id);
+        console.log("UserStore: Using first available user:", activeUser.name);
       } else if (!activeUser && usersList.length === 0) {
         // First run! Create default user
-        const newUser = await createUser("Student");
+        console.log("UserStore: No users found, creating default user...");
+        const newUser = await createUser("My Account");
         activeUser = newUser;
         usersList.push(newUser);
         storage.set("current_user_id", newUser.id);
+        console.log("UserStore: Created default user:", newUser.name);
       }
 
+      console.log("UserStore: Initialization completed successfully");
       set({ users: usersList, currentUser: activeUser, isLoading: false });
     } catch (error) {
-      console.error("Failed to init user store:", error);
+      console.error("UserStore: Failed to initialize:", error);
       set({ isLoading: false });
     }
   },

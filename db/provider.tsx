@@ -3,7 +3,8 @@ import type {SQLJsDatabase} from "drizzle-orm/sql-js";
 import React, {type PropsWithChildren, useContext, useEffect, useState} from "react";
 import {initialize} from "./drizzle";
 
-type ContextType = {db: SQLJsDatabase | ExpoSQLiteDatabase | null}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ContextType = {db: any | SQLJsDatabase | ExpoSQLiteDatabase | null}
 
 export const DatabaseContext = React.createContext<ContextType>({db: null});
 
@@ -11,7 +12,8 @@ export const useDatabase = () => useContext(DatabaseContext);
 
 
 export function DatabaseProvider({children}: PropsWithChildren) {
-  const [db, setDb] = useState<SQLJsDatabase | ExpoSQLiteDatabase | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [db, setDb] = useState<any | SQLJsDatabase | ExpoSQLiteDatabase | null>(null);
 
   useEffect(() => {
     if (db) return

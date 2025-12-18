@@ -7,7 +7,7 @@ import {Moon, Palette, Smartphone, Sun} from '@/lib/icons';
 
 import ListItem from "@/components/ui/list-item";
 import {Check} from "@/lib/icons/Check";
-import {useCallback, useMemo, useState} from "react";
+import {JSX, useCallback, useMemo, useState} from "react";
 import {useBottomSheetModal} from "@gorhom/bottom-sheet";
 import {getItem, setItem} from "@/lib/storage";
 

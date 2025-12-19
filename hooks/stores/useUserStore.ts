@@ -17,9 +17,23 @@ interface UserState {
   removeUser: (userId: string) => Promise<void>;
 }
 
+// Initialize with stored user immediately if available
+const getInitialUser = (): User | null => {
+  try {
+    const savedId = storage.getString("current_user_id");
+    if (savedId) {
+      // We'll validate this user exists during initialize()
+      return { id: savedId, name: "Loading...", xp: 0, level: 1, currentStreak: 0, isOnboarded: false, createdAt: new Date(), avatarUrl: null };
+    }
+  } catch (error) {
+    console.warn("Failed to get initial user from storage:", error);
+  }
+  return null;
+};
+
 export const useUserStore = create<UserState>((set, get) => ({
   users: [],
-  currentUser: null,
+  currentUser: getInitialUser(),
   isLoading: true,
 
   initialize: async () => {
@@ -60,7 +74,25 @@ export const useUserStore = create<UserState>((set, get) => ({
       set({ users: usersList, currentUser: activeUser, isLoading: false });
     } catch (error) {
       console.error("UserStore: Failed to initialize:", error);
-      set({ isLoading: false });
+      // Still set a default user if initialization fails but we have a stored ID
+      const savedId = storage.getString("current_user_id");
+      if (savedId && !get().currentUser) {
+        set({ 
+          currentUser: { 
+            id: savedId, 
+            name: "User", 
+            xp: 0, 
+            level: 1, 
+            currentStreak: 0, 
+            isOnboarded: false, 
+            createdAt: new Date(),
+            avatarUrl: null 
+          },
+          isLoading: false 
+        });
+      } else {
+        set({ isLoading: false });
+      }
     }
   },
 

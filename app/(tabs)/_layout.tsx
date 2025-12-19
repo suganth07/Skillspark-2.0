@@ -1,5 +1,6 @@
 import {List} from '@/lib/icons/List';
 import {Settings} from '@/lib/icons/Settings';
+import {BookOpen as Book} from '@/lib/icons/Book';
 import {Tabs} from 'expo-router';
 
 export const unstable_settings = {
@@ -14,6 +15,13 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: () => <List className="text-foreground" />,
+        }}
+      />
+      <Tabs.Screen
+        name="roadmap"
+        options={{
+          title: 'Roadmaps',
+          tabBarIcon: () => <Book className="text-foreground" />,
         }}
       />
       <Tabs.Screen

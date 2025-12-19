@@ -37,8 +37,7 @@ yarn-error.*
 
 app-example
 
-# # Android build files
-# android/gradlew.bat
-
-# # Ignore the entire Android directory
-# android/
+# Ignore the entire Android directory
+android/
+android/app/src/main/java/com/expostarter/base/MainActivity.kt
+android/app/src/main/java/com/expostarter/base/MainActivity.kt

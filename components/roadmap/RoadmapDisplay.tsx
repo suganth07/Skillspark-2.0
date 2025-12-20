@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Alert } from 'react-native';
+import { View, Alert, Pressable } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,8 @@ import { useUserStore } from '@/hooks/stores/useUserStore';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { ActivityIndicator } from 'react-native';
-import { Check, Play, Clock, BookOpen, Zap } from 'lucide-react-native';
+import { Check, Play, Clock, BookOpen, Zap, ChevronRight } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 interface RoadmapDisplayProps {
   roadmapId: string;
@@ -20,6 +21,7 @@ interface RoadmapDisplayProps {
 
 export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
+  const router = useRouter();
   const { currentUser } = useUserStore();
   const { 
     currentRoadmap, 
@@ -66,6 +68,12 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
         'Failed to generate quiz. Please try again.',
         [{ text: 'OK' }]
       );
+    }
+  };
+
+  const handleTopicPress = (step: RoadmapStep) => {
+    if (step.topicId) {
+      router.push(`/topic/${step.topicId}`);
     }
   };
 
@@ -176,8 +184,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                 const isGeneratingThisQuiz = generatingQuizForStep === step.id;
                 
                 return (
-                  <View
+                  <Pressable
                     key={step.id}
+                    onPress={() => handleTopicPress(step)}
                     className={`border rounded-lg p-4 ${
                       status === 'completed' ? 'border-green-200 bg-green-50' :
                       'border-blue-200 bg-blue-50'
@@ -190,7 +199,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                       
                       <View className="flex-1">
                         <View className="flex-row items-center justify-between mb-2">
-                          <Text className="font-medium text-lg">{step.title}</Text>
+                          <View className="flex-1 flex-row items-center space-x-2">
+                            <Text className="font-medium text-lg">{step.title}</Text>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </View>
                           <View className="flex-row items-center space-x-2">
                             <Badge className={getDifficultyColor(step.difficulty || 'basic')}>
                               <Text className="text-xs font-medium">
@@ -244,7 +256,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                                 <Button
                                   size="sm"
                                   variant={hasQuiz ? 'default' : 'outline'}
-                                  onPress={() => handleTakeQuiz(step)}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleTakeQuiz(step);
+                                  }}
                                   disabled={isGeneratingQuiz}
                                 >
                                   <Text className={hasQuiz ? 'text-white text-sm' : 'text-sm'}>
@@ -263,7 +278,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                         </View>
                       </View>
                     </View>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>

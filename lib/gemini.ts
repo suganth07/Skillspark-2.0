@@ -37,6 +37,26 @@ export interface QuizQuestion {
   };
 }
 
+export interface TopicSubtopic {
+  id: string;
+  title: string;
+  explanation: string;
+  example?: string;
+  exampleExplanation?: string;
+  keyPoints?: string[];
+}
+
+export interface TopicExplanation {
+  topicName: string;
+  overview: string;
+  difficulty: 'basic' | 'intermediate' | 'advanced';
+  whyLearn?: string;
+  subtopics: TopicSubtopic[];
+  bestPractices?: string[];
+  commonPitfalls?: string[];
+  resources?: string[];
+}
+
 export class GeminiService {
   private model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
@@ -189,6 +209,75 @@ export class GeminiService {
     } catch (error) {
       console.error('Error generating feedback:', error);
       return 'Keep up the great work! Focus on practicing the fundamentals and you\'ll master this topic.';
+    }
+  }
+
+  async generateTopicExplanation(topicName: string, context: string): Promise<TopicExplanation> {
+    const prompt = `
+      Create a comprehensive, educational explanation for the topic "${topicName}" in the context of learning "${context}".
+      
+      Provide:
+      1. A clear overview of what ${topicName} is
+      2. Why someone learning ${context} should understand ${topicName}
+      3. 5-8 key subtopics/concepts within ${topicName}
+      4. For EACH subtopic, provide:
+         - A clear explanation
+         - A practical code example (if applicable)
+         - Explanation of the example
+         - 2-3 key points to remember
+      5. Best practices when using/applying ${topicName}
+      6. Common mistakes/pitfalls to avoid
+      7. Suggested resources for deeper learning
+      
+      Make explanations clear, beginner-friendly but thorough.
+      Include real-world, practical examples.
+      
+      Return ONLY valid JSON in this exact format:
+      {
+        "topicName": "${topicName}",
+        "overview": "Clear overview of the topic",
+        "difficulty": "basic|intermediate|advanced",
+        "whyLearn": "Why this topic matters for learning ${context}",
+        "subtopics": [
+          {
+            "id": "subtopic-1",
+            "title": "Subtopic name",
+            "explanation": "Detailed explanation",
+            "example": "Code example or practical example",
+            "exampleExplanation": "What this example demonstrates",
+            "keyPoints": ["Point 1", "Point 2", "Point 3"]
+          }
+        ],
+        "bestPractices": ["Practice 1", "Practice 2"],
+        "commonPitfalls": ["Pitfall 1", "Pitfall 2"],
+        "resources": ["Resource suggestion 1", "Resource suggestion 2"]
+      }
+      
+      Make content educational, accurate, and engaging.
+    `;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Parse JSON response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Invalid JSON response from Gemini');
+      }
+      
+      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      
+      // Validate response structure
+      if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
+        throw new Error('Invalid topic explanation structure');
+      }
+      
+      return explanation;
+    } catch (error) {
+      console.error('Error generating topic explanation:', error);
+      throw new Error(`Failed to generate topic explanation: ${error}`);
     }
   }
 }

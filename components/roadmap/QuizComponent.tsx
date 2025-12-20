@@ -129,9 +129,18 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
     return (
       <Card key={questionId} className="mb-4">
         <CardHeader>
-          <CardTitle className="text-lg">
-            Question {index + 1}
-          </CardTitle>
+          <View className="flex-row items-center justify-between">
+            <CardTitle className="text-lg">
+              Question {index + 1}
+            </CardTitle>
+            {question.subtopicName && (
+              <View className="bg-primary/10 px-3 py-1 rounded-full">
+                <Text className="text-xs font-medium text-primary">
+                  {question.subtopicName}
+                </Text>
+              </View>
+            )}
+          </View>
         </CardHeader>
         <CardContent className="space-y-4">
           <Text className="text-base leading-6">{question.content}</Text>

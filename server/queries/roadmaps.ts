@@ -659,7 +659,7 @@ export async function getUserRoadmapProgress(userId: string, roadmapId: string):
 // Get quiz with questions
 export async function getQuizWithQuestions(quizId: string): Promise<{
   quiz: typeof quizzes.$inferSelect;
-  questions: (typeof questions.$inferSelect)[];
+  questions: (typeof questions.$inferSelect & { subtopicName?: string })[];
 }> {
   const quiz = await db
     .select()
@@ -672,8 +672,17 @@ export async function getQuizWithQuestions(quizId: string): Promise<{
   }
 
   const quizQuestions = await db
-    .select()
+    .select({
+      id: questions.id,
+      quizId: questions.quizId,
+      subtopicId: questions.subtopicId,
+      content: questions.content,
+      type: questions.type,
+      data: questions.data,
+      subtopicName: subtopics.name
+    })
     .from(questions)
+    .leftJoin(subtopics, eq(questions.subtopicId, subtopics.id))
     .where(eq(questions.quizId, quizId));
 
   return {

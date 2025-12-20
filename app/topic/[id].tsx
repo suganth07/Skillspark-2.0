@@ -92,7 +92,26 @@ export default function TopicDetailScreen() {
     );
   }
 
-  const { topic, explanation } = currentTopicDetail;
+  const { topic, explanation, subtopicPerformance } = currentTopicDetail;
+  
+  console.log('📊 Subtopic Performance Map:', subtopicPerformance);
+  console.log('📊 Performance Map size:', subtopicPerformance?.size);
+  
+  const getPerformanceForSubtopic = (subtopicId: string) => {
+    const perf = subtopicPerformance?.get(subtopicId);
+    console.log(`📊 Getting performance for subtopic ${subtopicId}:`, perf);
+    return perf;
+  };
+  
+  const getPerformanceColor = (status: string) => {
+    switch (status) {
+      case 'strong': return 'text-green-600';
+      case 'weak': return 'text-red-600';
+      case 'neutral': return 'text-yellow-600';
+      default: return 'text-gray-600';
+    }
+  };
+  
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'basic': return 'bg-green-100 text-green-800';
@@ -149,6 +168,7 @@ export default function TopicDetailScreen() {
               <View className="space-y-3">
                 {explanation.subtopics.map((subtopic, index) => {
                   const isExpanded = expandedSections.has(subtopic.id);
+                  const performance = getPerformanceForSubtopic(subtopic.id);
                   
                   return (
                     <View 
@@ -161,10 +181,29 @@ export default function TopicDetailScreen() {
                         onPress={() => toggleSection(subtopic.id)}
                         className="w-full flex-row items-center justify-between p-4 rounded-none"
                       >
-                        <View className="flex-1">
-                          <Text className="font-semibold text-base text-left">
+                        <View className="flex-1 flex-row items-center space-x-2">
+                          <Text className="font-semibold text-base text-left flex-1">
                             {index + 1}. {subtopic.title}
                           </Text>
+                          <View className={`px-2 py-1 rounded ${
+                            performance 
+                              ? (performance.status === 'strong' ? 'bg-green-100' :
+                                 performance.status === 'weak' ? 'bg-red-100' :
+                                 'bg-yellow-100')
+                              : 'bg-gray-100'
+                          }`}>
+                            <Text className={`text-xs font-bold ${
+                              performance
+                                ? (performance.status === 'strong' ? 'text-green-700' :
+                                   performance.status === 'weak' ? 'text-red-700' :
+                                   'text-yellow-700')
+                                : 'text-gray-600'
+                            }`}>
+                              {performance 
+                                ? `${performance.correctCount}/${performance.totalAttempts}` 
+                                : 'No quiz'}
+                            </Text>
+                          </View>
                         </View>
                         {isExpanded ? (
                           <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
@@ -173,11 +212,13 @@ export default function TopicDetailScreen() {
                         )}
                       </Button>
 
+
                       {/* Accordion Content */}
                       {isExpanded && (
                         <View className="px-4 pb-4 pt-2 border-t border-border bg-muted/30">
                           <Text className="text-muted-foreground leading-6 mb-4">
                             {subtopic.explanation}
+                            
                           </Text>
 
                           {subtopic.example && (

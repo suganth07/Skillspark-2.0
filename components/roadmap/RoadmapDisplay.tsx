@@ -78,7 +78,13 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const handleTopicPress = (step: RoadmapStep) => {
     if (!step.topicId) return;
 
-    // Show dialog to check user's knowledge level
+    // If user has already attempted the quiz, skip the knowledge assessment
+    if (step.hasAttempt) {
+      router.push(`/topic/${step.topicId}`);
+      return;
+    }
+
+    // Show dialog to check user's knowledge level (only for first-time learners)
     Alert.alert(
       'Knowledge Assessment',
       'Are you totally new to this topic or have a little idea about it?',

@@ -60,7 +60,7 @@ export interface TopicExplanation {
 }
 
 export class GeminiService {
-  private model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  private model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
   async generateKnowledgeGraph(topic: string): Promise<KnowledgeGraph> {
     const prompt = `
@@ -293,16 +293,44 @@ export class GeminiService {
     }
   }
 
-  async generateTopicExplanation(topicName: string, context: string): Promise<TopicExplanation> {
+  async generateTopicExplanation(
+    topicName: string, 
+    context: string,
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  ): Promise<TopicExplanation> {
+    // Build performance guidance for AI
+    let performanceGuidance = '';
+    if (subtopicPerformance && subtopicPerformance.length > 0) {
+      performanceGuidance = `
+      
+      ⚡ CRITICAL: The user has taken a quiz. Adjust content length DRASTICALLY based on performance:
+      
+${subtopicPerformance.map(p => 
+`      📊 "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status.toUpperCase()})
+         → ${p.status === 'strong' 
+           ? '✅ BRIEF REVIEW ONLY: 1 short paragraph (3-4 sentences), 1 simple example, 2 key points'
+           : '❌ COMPREHENSIVE TEACHING: 3-4 full paragraphs, 2-3 detailed examples, 3-4 key points with explanations'
+         }`
+      ).join('\n')}
+      
+      REQUIREMENTS:
+      - Strong subtopics (≥70%): MAX 1 paragraph + 1 basic example (user knows this)
+      - Weak/Neutral (<70%): MIN 3 paragraphs + 2-3 diverse examples (user needs deep learning)
+      - Content length difference should be OBVIOUSLY visible
+      - Match subtopic titles EXACTLY to names above to apply correct depth
+      `;
+    }
+    
     const prompt = `
       Create a comprehensive, educational explanation for the topic "${topicName}" in the context of learning "${context}".
+      ${performanceGuidance}
       
       Provide:
       1. A clear overview of what ${topicName} is
       2. Why someone learning ${context} should understand ${topicName}
       3. 5-8 key subtopics/concepts within ${topicName}
       4. For EACH subtopic, provide:
-         - A clear explanation
+         - A clear explanation ${subtopicPerformance ? '(LENGTH MUST VARY based on performance data above!)' : ''}
          - A practical code example (if applicable)
          - Explanation of the example
          - 2-3 key points to remember
@@ -310,7 +338,10 @@ export class GeminiService {
       6. Common mistakes/pitfalls to avoid
       7. Suggested resources for deeper learning
       
-      Make explanations clear, beginner-friendly but thorough.
+      ${subtopicPerformance && subtopicPerformance.length > 0 
+        ? '🔥 CRITICAL: Strong subtopics = SHORT (1 paragraph), Weak subtopics = LONG (3-4 paragraphs). Do NOT make them all the same length!'
+        : 'Make explanations clear, beginner-friendly but thorough.'
+      }
       Include real-world, practical examples.
       
       Return ONLY valid JSON in this exact format:
@@ -323,7 +354,7 @@ export class GeminiService {
           {
             "id": "subtopic-1",
             "title": "Subtopic name",
-            "explanation": "Detailed explanation",
+            "explanation": "Detailed explanation (or minimal if user is strong in this area)",
             "example": "Code example or practical example",
             "exampleExplanation": "What this example demonstrates",
             "keyPoints": ["Point 1", "Point 2", "Point 3"]

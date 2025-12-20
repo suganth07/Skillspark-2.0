@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db/drizzle';
-import { topics, roadmapSteps, roadmaps, subtopics } from '@/db/schema';
+import { topics, roadmapSteps, roadmaps, subtopics, userSubtopicPerformance } from '@/db/schema';
 import { createId } from '@paralleldrive/cuid2';
 import type { TopicExplanation } from '@/lib/gemini';
 
@@ -114,6 +114,26 @@ export async function getSubtopics(parentTopicId: string) {
     .from(subtopics)
     .where(eq(subtopics.parentTopicId, parentTopicId))
     .orderBy(subtopics.order); // Order by display order
+
+  return result;
+}
+
+// Get user performance for subtopics
+export async function getUserSubtopicPerformance(userId: string, topicId: string) {
+  const result = await db
+    .select({
+      subtopicId: userSubtopicPerformance.subtopicId,
+      correctCount: userSubtopicPerformance.correctCount,
+      incorrectCount: userSubtopicPerformance.incorrectCount,
+      totalAttempts: userSubtopicPerformance.totalAttempts,
+      status: userSubtopicPerformance.status,
+      lastAttemptAt: userSubtopicPerformance.lastAttemptAt
+    })
+    .from(userSubtopicPerformance)
+    .where(and(
+      eq(userSubtopicPerformance.userId, userId),
+      eq(userSubtopicPerformance.topicId, topicId)
+    ));
 
   return result;
 }

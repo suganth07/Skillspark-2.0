@@ -1,70 +1,103 @@
-# Expo Local-first Template  [![Twitter](https://img.shields.io/twitter/url/https/twitter.com/cloudposse.svg?style=social&label=Follow%20%40expostarter)](https://twitter.com/expostarter)
+# SkillSpark
 
-[![Open in Bolt.new](https://www.expostarter.com/images/open-in-bolt.svg)](https://bolt.new/~/github.com/expo-starter/expo-local-first-template)
+A knowledge graph-based super personalized learning companion built with React Native and Expo.
 
-<p align="center">
-  <a href="https://expostarter.com/"><img src="assets/github-banner.png?raw=true" alt="Expo Starter Kit"></a>
-</p>
+## 🚀 Features
 
-The `Expo Local-First Template` is a free project model with up-to-date frameworks and configurations for your new local-first Expo project.
+- **Personalized Learning Roadmaps**: Create and customize learning paths tailored to your goals
+- **Knowledge Graph Integration**: Visualize and connect concepts through an intelligent graph structure
+- **Interactive Quizzes**: Test your knowledge with engaging, adaptive quizzes
+- **Progress Tracking**: Monitor your learning journey with detailed analytics
+- **User Management**: Manage profiles, preferences, and learning history
+- **Theme Support**: Light and dark mode with seamless theme switching
+- **AI-Powered Insights**: Leverage Gemini AI for personalized recommendations
+- **Cross-Platform**: Native mobile experience on iOS and Android
 
-If you're searching for a more production-ready template, consider purchasing the [Expo Starter Kit](https://expostarter.com). Your support will help us maintaining our free templates as well.
+## 🛠 Tech Stack
 
-For local-first example with remote sync please check our [article](https://www.expostarter.com/blog/expo-libsql-improve-app-performance)
+- **Framework**: React Native with Expo
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS with NativeWind
+- **Database**: Drizzle ORM with SQLite
+- **State Management**: Zustand stores
+- **UI Components**: Custom component library with Radix UI primitives
+- **AI Integration**: Google Gemini API
+- **Build Tools**: Metro bundler, Biome for linting/formatting
 
-## 📚 What's inside
+## 📦 Installation
 
-- ⚡ [Expo v54](https://expo.dev) - Built with Expo for cross-platform support
-- ⚛️ [React Native v0.81.4](https://reactnative.dev) for building native apps using React
-- 💽 Local-first based on [Expo SQLite for](https://docs.expo.dev/versions/latest/sdk/sqlite/) for native and [Sqlite.js](https://github.com/sql-js/sql.js) for Web
-- 💽 Full integrated with [DrizzleORM](https://drizzle.dev) including live query
-- 💎 Integrate with [NativeWind v4](https://www.nativewind.dev), Tailwind CSS for React Native
-- 📦 [zustand](docs.pmnd.rs/zustand)
-- 🎨 Common components from the [rn-reusables](https://github.com/mrzachnugent/react-native-reusables)
-- 🌗 Dark and light mode - Android Navigation Bar matches mode and Persistant mode
-- 📏 Linter and Code Formatter with [biome](https://biomejs.dev/)
-- 🗂 VSCode recommended extensions, settings, and snippets to enhance the developer experience.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/TharunCodes07/SkillSpark.git
+   cd SkillSpark
+   ```
 
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
+3. **Set up the database**
+   ```bash
+   # Generate migration files
+   npx drizzle-kit generate
 
-### Requirements
+   # Run migrations
+   npm run migrate
+   ```
 
-- Node.js 20+ and bun
-- [iOS Simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Android Studio Emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- For Windows users: [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) is required
+4. **Configure environment variables**
+   - Copy `.env.example` to `.env`
+   - Add your Gemini API key and other required variables
 
+5. **Start the development server**
+   ```bash
+   npx expo start
+   ```
 
-### Getting started
+## 📱 Usage
 
-Run the following command on your local environment:
+1. **Launch the app** on your device or simulator
+2. **Create an account** or sign in
+3. **Build your learning roadmap** by selecting topics and goals
+4. **Follow personalized paths** with interactive content
+5. **Take quizzes** to reinforce learning
+6. **Track progress** in your dashboard
 
-```shell
-bunx create-expo-app --template https://github.com/expo-starter/expo-local-first-template
+## 🏗 Project Structure
+
+```
+SkillSpark/
+├── app/                    # Expo Router pages
+├── components/             # Reusable UI components
+├── db/                     # Database configuration and migrations
+├── hooks/                  # Custom React hooks
+├── lib/                    # Utilities and services
+├── stores/                 # Zustand state stores
+├── assets/                 # Images and static files
+└── server/                 # Server-side queries
 ```
 
-Then, you can run locally in development mode with live reload:
+## 🤝 Contributing
 
-```shell
-bun run dev:ios
-# Or
-bun run dev:android
-```
+We welcome contributions! Please follow these steps:
 
-<p align="center">
-  <a href="https://expostarter.dev/"><img src="assets/preview-banner.png?raw=true" alt="React Native Expo Starter Kit"></a>
-</p>
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-This will open the app in the iOS simulator or Android emulator.
+## 📄 License
 
-### Contributions
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Everyone is welcome to contribute to this project. Feel free to open an issue if you have question or found a bug. Totally open to any suggestions and improvements.
+## 🙏 Acknowledgments
 
-### License
-
-See [LICENSE](LICENSE) for more information.
+- Built with ❤️ using React Native and Expo
+- UI components inspired by Radix UI
+- AI features powered by Google Gemini
 
 ---
 
-[Expo starter](expostarter.com) [![Twitter](https://img.shields.io/twitter/url/https/twitter.com/cloudposse.svg?style=social&label=Follow%20%40y0x53)](https://twitter.com/expostarter)
+**Happy Learning! 🚀**

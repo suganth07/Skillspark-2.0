@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,18 +80,20 @@ export default function RoadmapScreen() {
   // Show loading state while initializing user
   if (userLoading && !currentUser) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" />
-        <Text className="mt-4 text-muted-foreground">Initializing...</Text>
-      </View>
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" />
+          <Text className="mt-4 text-muted-foreground">Initializing...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   // Render dashboard
   const renderDashboard = () => (
-    <ScrollView className="flex-1 p-6 bg-background">
-      <View className="space-y-6">
-        {/* Header */}
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+      <ScrollView className="flex-1 p-6">
+        <View className="space-y-6">{/* Header */}
         <View>
           <Text className="text-3xl font-bold mb-2">Your Learning Journey</Text>
           <Text className="text-muted-foreground text-lg">
@@ -279,30 +282,34 @@ export default function RoadmapScreen() {
         )}
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 
   // Render based on current screen state
   switch (screenState.type) {
     case 'create':
       return (
-        <View className="flex-1">
-          <View className="flex-row items-center p-4 border-b border-border bg-background">
-            <Button 
-              variant="ghost" 
-              onPress={() => setScreenState({ type: 'dashboard' })}
-              className="mr-3"
-            >
-              <Text>← Back</Text>
-            </Button>
-            <Text className="text-lg font-semibold">Create Roadmap</Text>
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+          <View className="flex-1">
+            <View className="flex-row items-center p-4 border-b border-border">
+              <Button 
+                variant="ghost" 
+                onPress={() => setScreenState({ type: 'dashboard' })}
+                className="mr-3"
+              >
+                <Text>← Back</Text>
+              </Button>
+              <Text className="text-lg font-semibold">Create Roadmap</Text>
+            </View>
+            <RoadmapCreation onRoadmapCreated={handleRoadmapCreated} />
           </View>
-          <RoadmapCreation onRoadmapCreated={handleRoadmapCreated} />
-        </View>
+        </SafeAreaView>
       );
 
     case 'roadmap':
       return (
-        <View className="flex-1">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+          <View className="flex-1">
           <View className="flex-row items-center p-4 border-b border-border bg-background">
             <Button 
               variant="ghost" 
@@ -317,13 +324,15 @@ export default function RoadmapScreen() {
             roadmapId={screenState.roadmapId}
             onTakeQuiz={(quizId, stepTitle) => handleTakeQuiz(quizId, stepTitle, screenState.roadmapId)}
           />
-        </View>
+          </View>
+        </SafeAreaView>
       );
 
     case 'quiz':
       return (
-        <View className="flex-1">
-          <View className="flex-row items-center p-4 border-b border-border bg-background">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+          <View className="flex-1">
+            <View className="flex-row items-center p-4 border-b border-border">
             <Button 
               variant="ghost" 
               onPress={() => {
@@ -353,7 +362,8 @@ export default function RoadmapScreen() {
               }
             }}
           />
-        </View>
+          </View>
+        </SafeAreaView>
       );
 
     default:

@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { useUserStore } from '@/hooks/stores/useUserStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, User as UserIcon, Check } from 'lucide-react-native';
+import { Plus, Trash2 } from 'lucide-react-native';
 import { cn } from '@/lib/utils';
-import { Muted, Large, Small } from '@/components/ui/typography';
+import { Muted } from '@/components/ui/typography';
 
 export function UserManagement() {
   const { users, currentUser, switchUser, addUser, removeUser, initialize, isLoading } = useUserStore();
-  const [isManageOpen, setIsManageOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
 
   React.useEffect(() => {
     const initializeDatabase = async () => {
@@ -38,25 +39,21 @@ export function UserManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (users.length <= 1) {
-      // Don't allow deleting the last user
-      return;
+  const handleDeleteUser = async () => {
+    if (deleteUserId && users.length > 1) {
+      await removeUser(deleteUserId);
+      setDeleteUserId(null);
     }
-    await removeUser(userId);
   };
 
   if (isLoading) {
     return (
       <View className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-lg font-semibold">User Accounts</Text>
-            <Muted className="text-sm">Loading user data...</Muted>
-          </View>
+        <View className="pb-3">
+          <Muted className="text-xs font-medium uppercase tracking-wide">Accounts</Muted>
         </View>
-        <View className="p-6 bg-card rounded-lg border border-border">
-          <Text className="text-center">Initializing database...</Text>
+        <View className="p-6 bg-muted/30 rounded-lg border border-border">
+          <Text className="text-center text-muted-foreground">Loading accounts...</Text>
         </View>
       </View>
     );
@@ -65,16 +62,13 @@ export function UserManagement() {
   if (!currentUser && users.length === 0) {
     return (
       <View className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-lg font-semibold">User Accounts</Text>
-            <Muted className="text-sm">Setting up your first account</Muted>
-          </View>
+        <View className="pb-3">
+          <Muted className="text-xs font-medium uppercase tracking-wide">Accounts</Muted>
         </View>
-        <View className="p-6 bg-card rounded-lg border border-border">
-          <Text className="text-center mb-4">Creating your first account...</Text>
+        <View className="p-6 bg-muted/30 rounded-lg border border-border">
+          <Text className="text-center text-muted-foreground mb-4">No accounts found</Text>
           <Button onPress={async () => await addUser("My Account")} className="w-full">
-            <Text>Create Account</Text>
+            <Text>Create First Account</Text>
           </Button>
         </View>
       </View>
@@ -82,133 +76,125 @@ export function UserManagement() {
   }
 
   return (
-    <View style={{ gap: 16 }}>
-      {/* Section Header */}
-      <View>
-        <Text className="text-lg font-semibold">User Accounts</Text>
-        <Muted className="text-sm">Manage your profiles</Muted>
+    <View className="gap-4">
+      {/* Section Header with Add Button */}
+      <View className="flex-row items-center justify-between pb-1">
+        <Muted className="text-xs font-medium uppercase tracking-wide">Profiles</Muted>
+        <Pressable 
+          onPress={() => setIsAddOpen(true)}
+          className="h-8 w-8 items-center justify-center rounded-md bg-primary active:opacity-80"
+        >
+          <Plus size={18} className="text-primary-foreground" />
+        </Pressable>
       </View>
       
-      <View style={styles.userCard}>
-         <View style={styles.userInfo}>
-            <Avatar alt={currentUser?.name || "User"}>
-              <AvatarImage source={{ uri: currentUser?.avatarUrl || undefined }} />
-              <AvatarFallback>
-                <Text>{currentUser?.name?.[0]?.toUpperCase() || "U"}</Text>
-              </AvatarFallback>
-            </Avatar>
-            <View style={{ marginLeft: 12 }}>
-              <Large>{currentUser?.name || "User"}</Large>
-              <Muted>Lvl {currentUser?.level || 1} • {currentUser?.xp || 0} XP</Muted>
+      {/* Users List */}
+      <View className="rounded-lg border border-border bg-card overflow-hidden">
+        {users.map((user, index) => {
+          const isActive = currentUser?.id === user.id;
+          const isLast = index === users.length - 1;
+          
+          return (
+            <View key={user.id}>
+              <Pressable 
+                onPress={() => !isActive && switchUser(user.id)}
+                className={cn(
+                  "flex-row items-center justify-between p-4",
+                  isActive ? "bg-primary/5" : "active:bg-muted/50"
+                )}
+              >
+                {/* User Info */}
+                <View className="flex-row items-center flex-1 gap-3">
+                  <Avatar alt={user.name!} className="h-10 w-10">
+                    <AvatarImage source={{ uri: user.avatarUrl || undefined }} />
+                    <AvatarFallback>
+                      <Text className="text-sm">{user.name?.[0]?.toUpperCase()}</Text>
+                    </AvatarFallback>
+                  </Avatar>
+                  <View className="flex-1">
+                    <View className="flex-row items-center gap-2">
+                      <Text className={cn(
+                        "text-base",
+                        isActive && "font-medium"
+                      )}>
+                        {user.name}
+                      </Text>
+                      {isActive && (
+                        <View className="px-2 py-0.5 bg-primary/10 rounded">
+                          <Text className="text-xs text-primary font-medium">Active</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Muted className="text-sm">Level {user.level || 1} • {user.xp || 0} XP</Muted>
+                  </View>
+                </View>
+
+                {/* Delete Button */}
+                {users.length > 1 && (
+                  <Pressable 
+                    onPress={() => setDeleteUserId(user.id)}
+                    className="h-8 w-8 items-center justify-center rounded active:bg-destructive/10"
+                  >
+                    <Trash2 size={16} color="#ef4444" />
+                  </Pressable>
+                )}
+              </Pressable>
+              
+              {/* Divider */}
+              {!isLast && <View className="h-px bg-border mx-4" />}
             </View>
-         </View>
-         <Button variant="outline" size="sm" onPress={() => setIsManageOpen(true)}>
-            <Text>Manage</Text>
-         </Button>
+          );
+        })}
       </View>
 
-      <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Add User Dialog */}
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Manage Profiles</DialogTitle>
+            <DialogTitle>Create Account</DialogTitle>
           </DialogHeader>
-          
-          <View style={{ gap: 8, paddingVertical: 16 }}>
-            {users.map((user) => (
-              <View key={user.id} style={[
-                styles.userItem, 
-                currentUser?.id === user.id ? styles.currentUser : styles.normalUser
-              ]}>
-                 <Pressable 
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}
-                    onPress={() => switchUser(user.id)}
-                 >
-                    <Avatar alt={user.name!}>
-                       <AvatarFallback>
-                         <Text>{user.name?.[0]?.toUpperCase()}</Text>
-                       </AvatarFallback>
-                    </Avatar>
-                    <Text style={{ fontWeight: currentUser?.id === user.id ? 'bold' : 'normal' }}>
-                      {user.name}
-                    </Text>
-                    {currentUser?.id === user.id && <Check size={16} />}
-                 </Pressable>
-
-                 {users.length > 1 && (
-                   <Button variant="ghost" size="icon" onPress={() => handleDeleteUser(user.id)}>
-                      <Trash2 size={16} />
-                   </Button>
-                 )}
-              </View>
-            ))}
+          <View className="gap-4 py-4">
+            <View className="gap-2">
+              <Label nativeID="name">Account Name</Label>
+              <Input 
+                placeholder="Enter a name" 
+                value={newUserName} 
+                onChangeText={setNewUserName}
+                autoFocus
+              />
+            </View>
           </View>
-
-          <DialogFooter className="flex-row gap-2">
-             <Button variant="outline" className="flex-1" onPress={() => setIsManageOpen(false)}>
-                <Text>Close</Text>
-             </Button>
-             <Button className="flex-row gap-2 flex-1" onPress={() => { setIsManageOpen(false); setIsAddOpen(true); }}>
-                <Plus size={16} className="text-primary-foreground" />
-                <Text>Add User</Text>
-             </Button>
+          <DialogFooter className="flex-row gap-3">
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              onPress={() => {
+                setIsAddOpen(false);
+                setNewUserName("");
+              }}
+            >
+              <Text>Cancel</Text>
+            </Button>
+            <Button 
+              className="flex-1" 
+              onPress={handleAddUser}
+              disabled={!newUserName.trim()}
+            >
+              <Text>Create</Text>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-         <DialogContent>
-            <DialogHeader>
-               <DialogTitle>Create Profile</DialogTitle>
-            </DialogHeader>
-            <View className="gap-4 py-4">
-               <View className="gap-2">
-                  <Label nativeID="name">Name</Label>
-                  <Input 
-                    placeholder="Enter name..." 
-                    value={newUserName} 
-                    onChangeText={setNewUserName} 
-                  />
-               </View>
-            </View>
-            <DialogFooter>
-               <Button onPress={handleAddUser}>
-                  <Text>Create</Text>
-               </Button>
-            </DialogFooter>
-         </DialogContent>
-      </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={deleteUserId !== null}
+        onOpenChange={(open) => !open && setDeleteUserId(null)}
+        title="Delete Account"
+        description="Are you sure you want to delete this account? All progress and data will be permanently lost."
+        onConfirm={handleDeleteUser}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#1f1f1f',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  userItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 6,
-    marginVertical: 4,
-  },
-  currentUser: {
-    backgroundColor: '#333',
-  },
-  normalUser: {
-    backgroundColor: 'transparent',
-  },
-});

@@ -7,7 +7,8 @@ import {
   getRoadmapWithSteps,
   submitQuizAttempt,
   getUserRoadmapProgress,
-  getQuizWithQuestions
+  getQuizWithQuestions,
+  deleteRoadmap
 } from '@/server/queries/roadmaps';
 import type { RoadmapWithProgress, RoadmapStep, UserProgress } from '@/server/queries/roadmaps';
 
@@ -28,6 +29,7 @@ interface RoadmapState {
   loadRoadmapDetails: (roadmapId: string, userId: string) => Promise<void>;
   loadQuiz: (quizId: string) => Promise<void>;
   submitQuiz: (userId: string, quizId: string, answers: Record<string, any>, roadmapId?: string) => Promise<any>;
+  deleteRoadmap: (userId: string, roadmapId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -281,6 +283,37 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
       set({ 
         error: errorMessage,
         isGeneratingQuiz: false
+      });
+      throw new Error(errorMessage);
+    }
+  },
+
+  deleteRoadmap: async (userId: string, roadmapId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      await deleteRoadmap(userId, roadmapId);
+      
+      // Remove from local state
+      const updatedRoadmaps = get().roadmaps.filter(r => r.id !== roadmapId);
+      set({ 
+        roadmaps: updatedRoadmaps,
+        currentRoadmap: get().currentRoadmap?.roadmap.id === roadmapId ? null : get().currentRoadmap,
+        isLoading: false 
+      });
+      
+      console.log('✅ Roadmap deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete roadmap:', error);
+      
+      let errorMessage = 'Failed to delete roadmap';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      set({ 
+        error: errorMessage,
+        isLoading: false
       });
       throw new Error(errorMessage);
     }

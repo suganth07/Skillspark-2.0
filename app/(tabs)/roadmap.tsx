@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View } from 'react-native';
+import { View, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -11,23 +11,27 @@ import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
 import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
 import { QuizComponent } from '@/components/roadmap/QuizComponent';
+import { QuizResults } from '@/components/roadmap/QuizResults';
 import { ActivityIndicator } from 'react-native';
-import { Plus, BookOpen, TrendingUp, Clock, CheckCircle, ArrowRight } from 'lucide-react-native';
+import { Plus, BookOpen, TrendingUp, Clock, CheckCircle, ArrowRight, Trash2 } from 'lucide-react-native';
 
 type ScreenState = 
   | { type: 'dashboard' }
   | { type: 'create' }
   | { type: 'roadmap'; roadmapId: string }
-  | { type: 'quiz'; quizId: string; stepTitle: string; roadmapId?: string };
+  | { type: 'quiz'; quizId: string; stepTitle: string; roadmapId?: string }
+  | { type: 'results'; quizId: string; stepTitle: string; roadmapId?: string };
 
 export default function RoadmapScreen() {
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'dashboard' });
+  const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
   const { currentUser, isLoading: userLoading } = useUserStore();
   const { 
     roadmaps, 
     isLoading, 
     error, 
-    loadUserRoadmaps 
+    loadUserRoadmaps,
+    deleteRoadmap
   } = useRoadmapStore();
 
   useEffect(() => {
@@ -47,6 +51,10 @@ export default function RoadmapScreen() {
     setScreenState({ type: 'quiz', quizId, stepTitle, roadmapId });
   };
 
+  const handleViewResults = (quizId: string, stepTitle: string, roadmapId?: string) => {
+    setScreenState({ type: 'results', quizId, stepTitle, roadmapId });
+  };
+
   const handleQuizComplete = () => {
     // Return to roadmap after quiz completion
     if (screenState.type === 'quiz' && screenState.roadmapId) {
@@ -57,6 +65,51 @@ export default function RoadmapScreen() {
     if (currentUser) {
       loadUserRoadmaps(currentUser.id); // Refresh to update progress
     }
+  };
+
+  const handleCloseResults = () => {
+    // Return to roadmap after viewing results
+    if (screenState.type === 'results' && screenState.roadmapId) {
+      setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
+    } else {
+      setScreenState({ type: 'dashboard' });
+    }
+  };
+
+  const handleDeleteRoadmap = async (roadmapId: string, roadmapTitle: string) => {
+    if (!currentUser) return;
+
+    Alert.alert(
+      'Delete Roadmap',
+      `Are you sure you want to delete "${roadmapTitle}"? This will permanently delete all quizzes, questions, attempts, and related data. This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingRoadmapId(roadmapId);
+              await deleteRoadmap(currentUser.id, roadmapId);
+              setDeletingRoadmapId(null);
+              // Refresh the list
+              loadUserRoadmaps(currentUser.id);
+            } catch (error) {
+              setDeletingRoadmapId(null);
+              console.error('Failed to delete roadmap:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to delete roadmap',
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -263,15 +316,30 @@ export default function RoadmapScreen() {
                           )}
                         </View>
                         
-                        <Button
-                          onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
-                          className="flex-row items-center space-x-1"
-                        >
-                          <Text className="text-white">
-                            {roadmap.status === 'completed' ? 'Review' : 'Continue'}
-                          </Text>
-                          <ArrowRight className="h-4 w-4 text-white" />
-                        </Button>
+                        <View className="flex-row items-center space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
+                            disabled={deletingRoadmapId === roadmap.id}
+                          >
+                            {deletingRoadmapId === roadmap.id ? (
+                              <ActivityIndicator size="small" />
+                            ) : (
+                              <Trash2 className="h-5 w-5 text-red-600" />
+                            )}
+                          </Button>
+                          
+                          <Button
+                            onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
+                            className="flex-row items-center space-x-1"
+                          >
+                            <Text className="text-white">
+                              {roadmap.status === 'completed' ? 'Review' : 'Continue'}
+                            </Text>
+                            <ArrowRight className="h-4 w-4 text-white" />
+                          </Button>
+                        </View>
                       </View>
                     </CardContent>
                   </Card>
@@ -323,6 +391,8 @@ export default function RoadmapScreen() {
           <RoadmapDisplay 
             roadmapId={screenState.roadmapId}
             onTakeQuiz={(quizId, stepTitle) => handleTakeQuiz(quizId, stepTitle, screenState.roadmapId)}
+            onViewResults={(quizId, stepTitle) => handleViewResults(quizId, stepTitle, screenState.roadmapId)}
+            onDelete={() => setScreenState({ type: 'dashboard' })}
           />
           </View>
         </SafeAreaView>
@@ -364,6 +434,33 @@ export default function RoadmapScreen() {
           />
           </View>
         </SafeAreaView>
+      );
+
+    case 'results':
+      if (!currentUser) {
+        return null;
+      }
+      return (
+        <View className="flex-1">
+          <View className="flex-row items-center p-4 border-b border-border bg-background">
+            <Button 
+              variant="ghost" 
+              onPress={handleCloseResults}
+              className="mr-3"
+            >
+              <Text>← Back</Text>
+            </Button>
+            <Text className="text-lg font-semibold flex-1" numberOfLines={1}>
+              {screenState.stepTitle} Results
+            </Text>
+          </View>
+          <QuizResults
+            userId={currentUser.id}
+            quizId={screenState.quizId}
+            stepTitle={screenState.stepTitle}
+            onClose={handleCloseResults}
+          />
+        </View>
       );
 
     default:

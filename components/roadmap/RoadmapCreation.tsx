@@ -139,52 +139,6 @@ export function RoadmapCreation({ onRoadmapCreated }: RoadmapCreationProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>How it works</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <View className="flex-row items-start space-x-3">
-              <Text className="text-lg">📊</Text>
-              <View className="flex-1">
-                <Text className="font-medium">Knowledge Analysis</Text>
-                <Text className="text-sm text-muted-foreground">
-                  AI analyzes your topic and identifies all prerequisites
-                </Text>
-              </View>
-            </View>
-            
-            <View className="flex-row items-start space-x-3">
-              <Text className="text-lg">📚</Text>
-              <View className="flex-1">
-                <Text className="font-medium">Structured Learning Path</Text>
-                <Text className="text-sm text-muted-foreground">
-                  Prerequisites organized by difficulty (Basic → Intermediate → Advanced)
-                </Text>
-              </View>
-            </View>
-            
-            <View className="flex-row items-start space-x-3">
-              <Text className="text-lg">🧩</Text>
-              <View className="flex-1">
-                <Text className="font-medium">On-Demand Quizzes</Text>
-                <Text className="text-sm text-muted-foreground">
-                  Click on any prerequisite to instantly generate a personalized quiz
-                </Text>
-              </View>
-            </View>
-            
-            <View className="flex-row items-start space-x-3">
-              <Text className="text-lg">🎯</Text>
-              <View className="flex-1">
-                <Text className="font-medium">Progress Tracking</Text>
-                <Text className="text-sm text-muted-foreground">
-                  Unlock new topics as you master prerequisites
-                </Text>
-              </View>
-            </View>
-          </CardContent>
-        </Card>
       </View>
     </ScrollView>
   );

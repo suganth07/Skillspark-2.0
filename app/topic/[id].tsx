@@ -269,24 +269,6 @@ export default function TopicDetailScreen() {
               </CardContent>
             </Card>
           )}
-
-          {/* Additional Resources */}
-          {explanation.resources && explanation.resources.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Learn More</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <View className="space-y-2">
-                  {explanation.resources.map((resource, index) => (
-                    <Text key={index} className="text-sm text-blue-600">
-                      • {resource}
-                    </Text>
-                  ))}
-                </View>
-              </CardContent>
-            </Card>
-          )}
         </View>
       </ScrollView>
     </View>

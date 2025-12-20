@@ -38,6 +38,7 @@ export interface RoadmapStep {
   prerequisiteName?: string;
   difficulty?: 'basic' | 'intermediate' | 'advanced';
   quizId?: string;
+  hasAttempt?: boolean; // Whether user has attempted this quiz
   canStart: boolean; // Based on prerequisites completion
 }
 
@@ -289,6 +290,7 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
   const stepsWithProgress = await Promise.all(
     steps.map(async (step) => {
       let quizId: string | undefined;
+      let hasAttempt = false;
 
       if (step.topicId) {
         // Get quiz ID for this topic
@@ -302,6 +304,20 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
           .limit(1);
         
         quizId = quiz[0]?.id;
+
+        // Check if user has attempted this quiz
+        if (quizId) {
+          const attempt = await db
+            .select({ id: quizAttempts.id })
+            .from(quizAttempts)
+            .where(and(
+              eq(quizAttempts.userId, userId),
+              eq(quizAttempts.quizId, quizId)
+            ))
+            .limit(1);
+          
+          hasAttempt = !!attempt[0];
+        }
       }
 
       const metadata = step.topicMetadata ? JSON.parse(step.topicMetadata as string) : {};
@@ -318,6 +334,7 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
         prerequisiteName: step.topicName,
         difficulty: metadata.difficulty,
         quizId,
+        hasAttempt,
         canStart: true // All steps are always available now
       } as RoadmapStep;
     })
@@ -496,7 +513,7 @@ export async function submitQuizAttempt(
       quizId,
       score,
       passed,
-      details: JSON.stringify(details)
+      details: details // Don't stringify - Drizzle handles it with mode: "json"
     });
 
     // Update user knowledge if passed
@@ -657,4 +674,216 @@ export async function getQuizWithQuestions(quizId: string): Promise<{
     quiz: quiz[0],
     questions: quizQuestions
   };
+}
+
+export interface QuizResultDetail {
+  questionId: string;
+  question: string;
+  options: string[];
+  userAnswer: number;
+  correctAnswer: number;
+  isCorrect: boolean;
+  explanation: string;
+  subtopicName?: string;
+}
+
+export async function getQuizResults(
+  userId: string,
+  quizId: string
+): Promise<{
+  score: number;
+  passed: boolean;
+  completedAt: Date | null;
+  results: QuizResultDetail[];
+}> {
+  console.log('🔍 getQuizResults called with:', { userId, quizId });
+  
+  // Get the latest quiz attempt for this user
+  const attempt = await db
+    .select()
+    .from(quizAttempts)
+    .where(and(
+      eq(quizAttempts.userId, userId),
+      eq(quizAttempts.quizId, quizId)
+    ))
+    .orderBy(desc(quizAttempts.completedAt))
+    .limit(1);
+
+  console.log('📊 Found attempts:', attempt.length);
+
+  if (!attempt[0]) {
+    console.error('❌ No quiz attempt found for userId:', userId, 'quizId:', quizId);
+    throw new Error('No quiz attempt found');
+  }
+
+  console.log('✅ Attempt found:', { 
+    id: attempt[0].id, 
+    score: attempt[0].score, 
+    passed: attempt[0].passed,
+    completedAt: attempt[0].completedAt
+  });
+
+  // Get quiz questions
+  const quizQuestions = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.quizId, quizId));
+
+  console.log('📝 Found questions:', quizQuestions.length);
+
+  // Parse details to get user answers
+  const attemptDetails = attempt[0].details as Record<string, any>;
+  console.log('📋 Attempt details keys:', Object.keys(attemptDetails || {}));
+  const results: QuizResultDetail[] = [];
+
+  for (const question of quizQuestions) {
+    const questionData = JSON.parse(question.data as string);
+    const answerDetail = attemptDetails[question.id];
+
+    if (answerDetail) {
+      results.push({
+        questionId: question.id,
+        question: question.content,
+        options: questionData.options,
+        userAnswer: answerDetail.answer,
+        correctAnswer: answerDetail.correctAnswer,
+        isCorrect: answerDetail.correct,
+        explanation: answerDetail.explanation,
+        subtopicName: answerDetail.subtopicName
+      });
+    } else {
+      console.warn('⚠️ No answer detail found for question:', question.id);
+    }
+  }
+
+  console.log('✅ Returning', results.length, 'results');
+
+  return {
+    score: attempt[0].score || 0,
+    passed: attempt[0].passed || false,
+    completedAt: attempt[0].completedAt,
+    results
+  };
+}
+
+export async function deleteRoadmap(userId: string, roadmapId: string): Promise<void> {
+  return await db.transaction(async (tx) => {
+    console.log('🗑️ Starting roadmap deletion:', { userId, roadmapId });
+
+    // Verify ownership
+    const roadmap = await tx
+      .select({ id: roadmaps.id })
+      .from(roadmaps)
+      .where(and(
+        eq(roadmaps.id, roadmapId),
+        eq(roadmaps.userId, userId)
+      ))
+      .limit(1);
+
+    if (!roadmap[0]) {
+      throw new Error('Roadmap not found or you do not have permission to delete it');
+    }
+
+    // Get all quizzes associated with this roadmap
+    const roadmapQuizzes = await tx
+      .select({ id: quizzes.id })
+      .from(quizzes)
+      .where(eq(quizzes.roadmapId, roadmapId));
+
+    const quizIds = roadmapQuizzes.map(q => q.id);
+
+    // Delete quiz attempts for all quizzes
+    if (quizIds.length > 0) {
+      for (const quizId of quizIds) {
+        await tx
+          .delete(quizAttempts)
+          .where(eq(quizAttempts.quizId, quizId));
+        
+        console.log('✅ Deleted quiz attempts for quiz:', quizId);
+      }
+
+      // Delete questions for all quizzes
+      for (const quizId of quizIds) {
+        await tx
+          .delete(questions)
+          .where(eq(questions.quizId, quizId));
+        
+        console.log('✅ Deleted questions for quiz:', quizId);
+      }
+
+      // Delete all quizzes
+      await tx
+        .delete(quizzes)
+        .where(eq(quizzes.roadmapId, roadmapId));
+      
+      console.log('✅ Deleted quizzes');
+    }
+
+    // Get all topics from roadmap steps
+    const steps = await tx
+      .select({ topicId: roadmapSteps.topicId })
+      .from(roadmapSteps)
+      .where(eq(roadmapSteps.roadmapId, roadmapId));
+
+    const topicIds = steps.map(s => s.topicId).filter(Boolean) as string[];
+
+    // Delete subtopics and their performance data
+    if (topicIds.length > 0) {
+      for (const topicId of topicIds) {
+        // Get subtopic IDs
+        const topicSubtopics = await tx
+          .select({ id: subtopics.id })
+          .from(subtopics)
+          .where(eq(subtopics.parentTopicId, topicId));
+
+        const subtopicIds = topicSubtopics.map(st => st.id);
+
+        // Delete user subtopic performance
+        if (subtopicIds.length > 0) {
+          for (const subtopicId of subtopicIds) {
+            await tx
+              .delete(userSubtopicPerformance)
+              .where(eq(userSubtopicPerformance.subtopicId, subtopicId));
+          }
+          console.log('✅ Deleted subtopic performance data');
+        }
+
+        // Delete subtopics
+        await tx
+          .delete(subtopics)
+          .where(eq(subtopics.parentTopicId, topicId));
+        
+        console.log('✅ Deleted subtopics for topic:', topicId);
+
+        // Delete user knowledge for topics
+        await tx
+          .delete(userKnowledge)
+          .where(and(
+            eq(userKnowledge.topicId, topicId),
+            eq(userKnowledge.userId, userId)
+          ));
+        
+        // Delete topics
+        await tx
+          .delete(topics)
+          .where(eq(topics.id, topicId));
+        
+        console.log('✅ Deleted topic:', topicId);
+      }
+    }
+
+    // Delete roadmap steps
+    await tx
+      .delete(roadmapSteps)
+      .where(eq(roadmapSteps.roadmapId, roadmapId));
+    
+    console.log('✅ Deleted roadmap steps');
+
+    // Delete the roadmap itself
+    await tx
+      .delete(roadmaps)
+      .where(eq(roadmaps.id, roadmapId));
+    
+    console.log('✅ Deleted roadmap');
+  });
 }

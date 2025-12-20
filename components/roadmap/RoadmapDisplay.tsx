@@ -11,16 +11,19 @@ import { useUserStore } from '@/hooks/stores/useUserStore';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { ActivityIndicator } from 'react-native';
-import { Check, Play, Clock, BookOpen, Zap, ChevronRight } from 'lucide-react-native';
+import { Check, Play, Clock, BookOpen, Zap, ChevronRight, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 interface RoadmapDisplayProps {
   roadmapId: string;
   onTakeQuiz?: (quizId: string, stepTitle: string) => void;
+  onViewResults?: (quizId: string, stepTitle: string) => void;
+  onDelete?: () => void;
 }
 
-export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
+export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete }: RoadmapDisplayProps) {
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
   const { currentUser } = useUserStore();
   const { 
@@ -30,6 +33,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
     error, 
     loadRoadmapDetails,
     generateQuizForPrerequisite,
+    deleteRoadmap,
     clearError
   } = useRoadmapStore();
 
@@ -72,9 +76,105 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
   };
 
   const handleTopicPress = (step: RoadmapStep) => {
-    if (step.topicId) {
-      router.push(`/topic/${step.topicId}`);
-    }
+    if (!step.topicId) return;
+
+    // Show dialog to check user's knowledge level
+    Alert.alert(
+      'Knowledge Assessment',
+      'Are you totally new to this topic or have a little idea about it?',
+      [
+        {
+          text: 'Totally New',
+          onPress: () => {
+            // User is new, show content directly
+            router.push(`/topic/${step.topicId}`);
+          }
+        },
+        {
+          text: 'Have Little Idea',
+          onPress: () => {
+            // User has some knowledge, check if quiz is available
+            if (step.quizId) {
+              Alert.alert(
+                'Take Quiz First',
+                'Since you have some prior knowledge, please take the quiz first to assess your understanding. This will help us identify areas where you need more focus.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // Navigate to quiz
+                      onTakeQuiz?.(step.quizId!, step.title);
+                    }
+                  }
+                ]
+              );
+            } else {
+              // No quiz available yet, need to generate
+              Alert.alert(
+                'Generate Quiz',
+                'A quiz needs to be generated first. Would you like to generate it now?',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel'
+                  },
+                  {
+                    text: 'Generate Quiz',
+                    onPress: () => handleTakeQuiz(step)
+                  }
+                ]
+              );
+            }
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const handleDeleteRoadmap = async () => {
+    if (!currentUser) return;
+
+    Alert.alert(
+      'Delete Roadmap',
+      'Are you sure you want to delete this roadmap? This will permanently delete all quizzes, questions, attempts, and related data. This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              await deleteRoadmap(currentUser.id, roadmapId);
+              Alert.alert(
+                'Success',
+                'Roadmap deleted successfully',
+                [{ 
+                  text: 'OK',
+                  onPress: () => onDelete?.()
+                }]
+              );
+            } catch (error) {
+              console.error('Failed to delete roadmap:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to delete roadmap',
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setIsDeleting(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -140,8 +240,25 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
         {/* Header */}
         <Card>
           <CardHeader>
-            <CardTitle>{roadmap.title}</CardTitle>
-            <CardDescription>{roadmap.description}</CardDescription>
+            <View className="flex-row items-start justify-between ">
+              <View className="flex-1">
+                <CardTitle>{roadmap.title}</CardTitle>
+                <CardDescription>{roadmap.description}</CardDescription>
+              </View>
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={handleDeleteRoadmap}
+                disabled={isDeleting}
+                className="ml-2"
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                )}
+              </Button>
+            </View>
           </CardHeader>
           <CardContent className="space-y-4">
             <View>
@@ -257,24 +374,46 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                                   </Text>
                                 </View>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  variant={hasQuiz ? 'default' : 'outline'}
-                                  onPress={() => handleTakeQuiz(step)}
-                                  disabled={isGeneratingQuiz}
-                                >
-                                  <Text className={hasQuiz ? 'text-white text-sm' : 'text-sm'}>
-                                    {hasQuiz ? 'Take Quiz' : 'Generate Quiz'}
-                                  </Text>
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant={hasQuiz ? 'default' : 'outline'}
+                                    onPress={() => handleTakeQuiz(step)}
+                                    disabled={isGeneratingQuiz}
+                                  >
+                                    <Text className={hasQuiz ? 'text-white text-sm' : 'text-sm'}>
+                                      {hasQuiz ? 'Take Quiz' : 'Generate Quiz'}
+                                    </Text>
+                                  </Button>
+                                  {hasQuiz && step.hasAttempt && onViewResults && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onPress={() => onViewResults(step.quizId!, step.title)}
+                                    >
+                                      <Text className="text-sm">View Results</Text>
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </View>
                           )}
                           
                           {status === 'completed' && (
-                            <Text className="text-xs text-green-600 font-medium">
-                              ✅ Completed
-                            </Text>
+                            <View className="flex-row items-center space-x-2">
+                              <Text className="text-xs text-green-600 font-medium">
+                                ✅ Completed
+                              </Text>
+                              {hasQuiz && step.hasAttempt && onViewResults && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onPress={() => onViewResults(step.quizId!, step.title)}
+                                >
+                                  <Text className="text-sm">View Results</Text>
+                                </Button>
+                              )}
+                            </View>
                           )}
                         </View>
                       </View>

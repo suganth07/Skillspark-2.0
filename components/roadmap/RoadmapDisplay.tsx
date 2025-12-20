@@ -246,8 +246,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         {/* Header */}
         <Card>
           <CardHeader>
-            <View className="flex-row items-start justify-between ">
-              <View className="flex-1">
+            <View className="flex-row items-start justify-between">
+              <View className="flex-1 mr-2">
                 <CardTitle>{roadmap.title}</CardTitle>
                 <CardDescription>{roadmap.description}</CardDescription>
               </View>
@@ -256,10 +256,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                 size="sm"
                 onPress={handleDeleteRoadmap}
                 disabled={isDeleting}
-                className="ml-2"
               >
                 {isDeleting ? (
-                  <ActivityIndicator size="small" />
+                  <ActivityIndicator size="small" color="#DC2626" />
                 ) : (
                   <Trash2 className="h-5 w-5 text-red-600" />
                 )}

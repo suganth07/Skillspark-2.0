@@ -306,6 +306,18 @@ export default function RoadmapScreen() {
                           {roadmap.progress}% complete
                         </Text>
                       </View>
+                      <Button
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
+                            disabled={deletingRoadmapId === roadmap.id}
+                          >
+                            {deletingRoadmapId === roadmap.id ? (
+                              <ActivityIndicator size="small" color="#DC2626" />
+                            ) : (
+                              <Trash2 className="h-5 w-5 text-red-600 " />
+                            )}
+                          </Button>
                       
                       <View className="flex-row items-center justify-between">
                         <View>
@@ -313,22 +325,12 @@ export default function RoadmapScreen() {
                             <Text className="text-xs text-muted-foreground">
                               Created {new Date(roadmap.createdAt).toLocaleDateString()}
                             </Text>
+                            
                           )}
+                          
                         </View>
                         
                         <View className="flex-row items-center space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onPress={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
-                            disabled={deletingRoadmapId === roadmap.id}
-                          >
-                            {deletingRoadmapId === roadmap.id ? (
-                              <ActivityIndicator size="small" />
-                            ) : (
-                              <Trash2 className="h-5 w-5 text-red-600" />
-                            )}
-                          </Button>
                           
                           <Button
                             onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}

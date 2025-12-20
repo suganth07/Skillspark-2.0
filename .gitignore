@@ -41,3 +41,4 @@ app-example
 android/
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
+.github/copilot-instructions.md

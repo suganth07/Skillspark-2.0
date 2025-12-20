@@ -21,7 +21,7 @@ type ScreenState =
 
 export default function RoadmapScreen() {
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'dashboard' });
-  const { currentUser } = useUserStore();
+  const { currentUser, isLoading: userLoading } = useUserStore();
   const { 
     roadmaps, 
     isLoading, 
@@ -75,6 +75,16 @@ export default function RoadmapScreen() {
       default: return <BookOpen className="h-5 w-5 text-gray-600" />;
     }
   };
+
+  // Show loading state while initializing user
+  if (userLoading && !currentUser) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" />
+        <Text className="mt-4 text-muted-foreground">Initializing...</Text>
+      </View>
+    );
+  }
 
   // Render dashboard
   const renderDashboard = () => (

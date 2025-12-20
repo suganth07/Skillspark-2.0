@@ -1,26 +1,12 @@
 {
-  "version": "6",
+  "version": "7",
   "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
       "version": "6",
-      "when": 1716375181235,
-      "tag": "0000_cultured_lizard",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1719918496003,
-      "tag": "0001_absurd_blonde_phantom",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1766050383215,
-      "tag": "0002_sweet_newton_destine",
+      "when": 1766205964453,
+      "tag": "0000_sparkling_marvel_apes",
       "breakpoints": true
     }
   ]

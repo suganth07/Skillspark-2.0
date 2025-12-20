@@ -16,6 +16,8 @@ import { Inter_400Regular, Inter_600SemiBold, useFonts } from '@expo-google-font
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
+import { useUserStore } from "@/hooks/stores/useUserStore";
+import { useDatabase } from "@/db/provider";
 
 
 
@@ -33,6 +35,8 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const { colorScheme, setColorScheme } = useColorScheme();
+  const { db } = useDatabase();
+  const initialize = useUserStore((state) => state.initialize);
 
   const [loaded, error] = useFonts({
     Inter_400Regular,
@@ -54,6 +58,14 @@ export default function RootLayout() {
       setColorScheme(colorTheme);
     }
   }, []);
+
+  // Initialize user store when database is ready
+  useEffect(() => {
+    if (db) {
+      console.log("Database ready, initializing user store...");
+      initialize();
+    }
+  }, [db, initialize]);
 
   useEffect(() => {
     if (loaded) {

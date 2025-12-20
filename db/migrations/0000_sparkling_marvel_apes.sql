@@ -100,5 +100,3 @@ CREATE TABLE `users` (
 	`is_onboarded` integer DEFAULT false,
 	`created_at` integer DEFAULT (CURRENT_TIMESTAMP)
 );
---> statement-breakpoint
-DROP TABLE `habits`;

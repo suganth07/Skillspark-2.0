@@ -342,7 +342,10 @@ export async function submitQuizAttempt(
       };
     }
 
-    const score = Math.round((correct / quizQuestions.length) * 100);
+    // Guard against division by zero
+    const score = quizQuestions.length > 0 
+      ? Math.round((correct / quizQuestions.length) * 100)
+      : 0;
     const passed = score >= 70; // 70% passing score
     
     // Record quiz attempt

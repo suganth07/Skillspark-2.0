@@ -96,8 +96,35 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   };
 
   const renderQuestion = (question: any, index: number) => {
-    const questionData = JSON.parse(question.data as string);
     const questionId = question.id;
+    let questionData: { options: string[] } | null = null;
+    
+    try {
+      questionData = JSON.parse(question.data as string);
+    } catch (error) {
+      console.error(`Failed to parse question data for question ${questionId}:`, error);
+      questionData = null;
+    }
+    
+    // Render fallback UI if question data is malformed
+    if (!questionData || !questionData.options || questionData.options.length === 0) {
+      return (
+        <Card key={questionId} className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-lg">
+              Question {index + 1}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ErrorDisplay 
+              error="This question is currently unavailable due to a data error."
+              variant="inline"
+              showIcon={false}
+            />
+          </CardContent>
+        </Card>
+      );
+    }
     
     return (
       <Card key={questionId} className="mb-4">

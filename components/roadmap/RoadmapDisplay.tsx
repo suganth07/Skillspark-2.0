@@ -244,7 +244,11 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                           </View>
                           
                           {status === 'available' && (
-                            <View className="flex-row items-center space-x-2">
+                            <View 
+                              className="flex-row items-center space-x-2"
+                              onStartShouldSetResponder={() => true}
+                              onResponderGrant={() => {}}
+                            >
                               {isGeneratingThisQuiz ? (
                                 <View className="flex-row items-center space-x-2">
                                   <ActivityIndicator size="small" />
@@ -256,10 +260,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz }: RoadmapDisplayProps) {
                                 <Button
                                   size="sm"
                                   variant={hasQuiz ? 'default' : 'outline'}
-                                  onPress={(e) => {
-                                    e.stopPropagation();
-                                    handleTakeQuiz(step);
-                                  }}
+                                  onPress={() => handleTakeQuiz(step)}
                                   disabled={isGeneratingQuiz}
                                 >
                                   <Text className={hasQuiz ? 'text-white text-sm' : 'text-sm'}>

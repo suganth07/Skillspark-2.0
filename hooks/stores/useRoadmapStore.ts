@@ -151,32 +151,7 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       
-      // Get quiz questions to calculate score
-      const quizQuestions = get().currentQuiz?.questions || [];
-      
-      // Calculate score
-      let correct = 0;
-      const details: Record<string, any> = {};
-
-      for (const question of quizQuestions) {
-        const questionData = JSON.parse(question.data as string);
-        const userAnswer = answers[question.id];
-        const isCorrect = userAnswer === questionData.correct;
-        
-        if (isCorrect) correct++;
-        
-        details[question.id] = {
-          answer: userAnswer,
-          correct: isCorrect,
-          correctAnswer: questionData.correct,
-          explanation: questionData.explanation
-        };
-      }
-
-      const score = Math.round((correct / quizQuestions.length) * 100);
-      const passed = score >= 70;
-      
-      // Submit the quiz attempt
+      // Submit the quiz attempt (server will compute score and result)
       const result = await submitQuizAttempt(userId, quizId, answers, roadmapId);
       
       set({ isLoading: false });

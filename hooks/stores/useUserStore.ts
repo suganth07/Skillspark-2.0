@@ -10,6 +10,7 @@ interface UserState {
   users: User[];
   currentUser: User | null;
   isLoading: boolean;
+  initError: string | null;
   
   initialize: () => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
@@ -23,7 +24,8 @@ const getInitialUser = (): User | null => {
     const savedId = storage.getString("current_user_id");
     if (savedId) {
       // We'll validate this user exists during initialize()
-      return { id: savedId, name: "Loading...", xp: 0, level: 1, currentStreak: 0, isOnboarded: false, createdAt: new Date(), avatarUrl: null };
+      // Return null here and let initialize() handle the actual user loading
+      return null;
     }
   } catch (error) {
     console.warn("Failed to get initial user from storage:", error);
@@ -35,11 +37,12 @@ export const useUserStore = create<UserState>((set, get) => ({
   users: [],
   currentUser: getInitialUser(),
   isLoading: true,
+  initError: null,
 
   initialize: async () => {
     try {
       console.log("UserStore: Starting initialization...");
-      set({ isLoading: true });
+      set({ isLoading: true, initError: null });
       
       console.log("UserStore: Fetching users from database...");
       const usersList = await getAllUsers();
@@ -71,28 +74,18 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
 
       console.log("UserStore: Initialization completed successfully");
-      set({ users: usersList, currentUser: activeUser, isLoading: false });
+      set({ users: usersList, currentUser: activeUser, isLoading: false, initError: null });
     } catch (error) {
       console.error("UserStore: Failed to initialize:", error);
-      // Still set a default user if initialization fails but we have a stored ID
-      const savedId = storage.getString("current_user_id");
-      if (savedId && !get().currentUser) {
-        set({ 
-          currentUser: { 
-            id: savedId, 
-            name: "User", 
-            xp: 0, 
-            level: 1, 
-            currentStreak: 0, 
-            isOnboarded: false, 
-            createdAt: new Date(),
-            avatarUrl: null 
-          },
-          isLoading: false 
-        });
-      } else {
-        set({ isLoading: false });
-      }
+      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize user store';
+      set({ 
+        initError: errorMessage,
+        isLoading: false,
+        currentUser: null,
+        users: []
+      });
+      // Re-throw so callers can handle the error
+      throw error;
     }
   },
 

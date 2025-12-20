@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "40255ea9-81c3-488c-a0b0-092dda9f4a02",
+  "id": "4740497c-9e44-47e7-a62e-bd9278319233",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "questions": {
@@ -418,8 +418,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "topic_relationships": {
-      "name": "topic_relationships",
+    "subtopics": {
+      "name": "subtopics",
       "columns": {
         "id": {
           "name": "id",
@@ -428,58 +428,75 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source_topic_id": {
-          "name": "source_topic_id",
+        "parent_topic_id": {
+          "name": "parent_topic_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "target_topic_id": {
-          "name": "target_topic_id",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "type": {
-          "name": "type",
+        "description": {
+          "name": "description",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
         }
       },
       "indexes": {
-        "topic_relationships_source_target_idx": {
-          "name": "topic_relationships_source_target_idx",
+        "subtopics_parent_idx": {
+          "name": "subtopics_parent_idx",
           "columns": [
-            "source_topic_id",
-            "target_topic_id"
+            "parent_topic_id"
+          ],
+          "isUnique": false
+        },
+        "subtopics_order_idx": {
+          "name": "subtopics_order_idx",
+          "columns": [
+            "parent_topic_id",
+            "order"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "topic_relationships_source_topic_id_topics_id_fk": {
-          "name": "topic_relationships_source_topic_id_topics_id_fk",
-          "tableFrom": "topic_relationships",
+        "subtopics_parent_topic_id_topics_id_fk": {
+          "name": "subtopics_parent_topic_id_topics_id_fk",
+          "tableFrom": "subtopics",
           "tableTo": "topics",
           "columnsFrom": [
-            "source_topic_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "topic_relationships_target_topic_id_topics_id_fk": {
-          "name": "topic_relationships_target_topic_id_topics_id_fk",
-          "tableFrom": "topic_relationships",
-          "tableTo": "topics",
-          "columnsFrom": [
-            "target_topic_id"
+            "parent_topic_id"
           ],
           "columnsTo": [
             "id"
@@ -523,6 +540,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "previous_topic_id": {
+          "name": "previous_topic_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "text",
@@ -530,6 +554,14 @@
           "notNull": false,
           "autoincrement": false,
           "default": "'{}'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
         }
       },
       "indexes": {
@@ -546,9 +578,30 @@
             "category"
           ],
           "isUnique": false
+        },
+        "topics_previous_idx": {
+          "name": "topics_previous_idx",
+          "columns": [
+            "previous_topic_id"
+          ],
+          "isUnique": false
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "topics_previous_topic_id_topics_id_fk": {
+          "name": "topics_previous_topic_id_topics_id_fk",
+          "tableFrom": "topics",
+          "tableTo": "topics",
+          "columnsFrom": [
+            "previous_topic_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

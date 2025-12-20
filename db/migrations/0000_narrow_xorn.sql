@@ -57,26 +57,33 @@ CREATE TABLE `roadmaps` (
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `topic_relationships` (
+CREATE TABLE `subtopics` (
 	`id` text PRIMARY KEY NOT NULL,
-	`source_topic_id` text NOT NULL,
-	`target_topic_id` text NOT NULL,
-	`type` text NOT NULL,
-	FOREIGN KEY (`source_topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`target_topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE no action
+	`parent_topic_id` text NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`order` integer NOT NULL,
+	`metadata` text DEFAULT '{}',
+	`created_at` integer DEFAULT (CURRENT_TIMESTAMP),
+	FOREIGN KEY (`parent_topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `topic_relationships_source_target_idx` ON `topic_relationships` (`source_topic_id`,`target_topic_id`);--> statement-breakpoint
+CREATE INDEX `subtopics_parent_idx` ON `subtopics` (`parent_topic_id`);--> statement-breakpoint
+CREATE INDEX `subtopics_order_idx` ON `subtopics` (`parent_topic_id`,`order`);--> statement-breakpoint
 CREATE TABLE `topics` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`description` text,
 	`category` text NOT NULL,
-	`metadata` text DEFAULT '{}'
+	`previous_topic_id` text,
+	`metadata` text DEFAULT '{}',
+	`created_at` integer DEFAULT (CURRENT_TIMESTAMP),
+	FOREIGN KEY (`previous_topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `topics_name_unique` ON `topics` (`name`);--> statement-breakpoint
 CREATE INDEX `topics_category_idx` ON `topics` (`category`);--> statement-breakpoint
+CREATE INDEX `topics_previous_idx` ON `topics` (`previous_topic_id`);--> statement-breakpoint
 CREATE TABLE `user_knowledge` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

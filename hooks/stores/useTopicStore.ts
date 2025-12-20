@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { geminiService, type TopicExplanation } from '@/lib/gemini';
-import { getTopicById, getRoadmapByTopicId } from '@/server/queries/topics';
+import { getTopicById, getRoadmapByTopicId, createSubtopics, getSubtopics } from '@/server/queries/topics';
 
 interface TopicDetail {
   topic: {
@@ -57,12 +57,56 @@ export const useTopicStore = create<TopicState>((set, get) => ({
       const roadmap = await getRoadmapByTopicId(topicId, userId);
       const context = roadmap?.title || topic.category;
 
+      // Check if subtopics already exist in database
+      const existingSubtopics = await getSubtopics(topicId);
+      
+      if (existingSubtopics.length > 0) {
+        // Reconstruct explanation from database
+        console.log(`📚 Loading ${existingSubtopics.length} subtopics from database`);
+        
+        const topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        
+        const explanation: TopicExplanation = {
+          topicName: topic.name,
+          overview: topic.description || '',
+          difficulty: topicMetadata.difficulty || 'intermediate',
+          subtopics: existingSubtopics.map(st => {
+            const metadata = JSON.parse(st.metadata as string || '{}');
+            return {
+              id: st.id,
+              title: st.name,
+              explanation: st.description || '',
+              example: metadata.example,
+              exampleExplanation: metadata.exampleExplanation,
+              keyPoints: metadata.keyPoints
+            };
+          }),
+          bestPractices: topicMetadata.bestPractices,
+          commonPitfalls: topicMetadata.commonPitfalls,
+          whyLearn: topicMetadata.whyLearn
+        };
+        
+        const newCache = new Map(get().cachedExplanations);
+        newCache.set(topicId, explanation);
+        
+        set({
+          currentTopicDetail: { topic, explanation },
+          cachedExplanations: newCache,
+          isLoading: false
+        });
+        return;
+      }
+
       // Generate explanation using Gemini
       console.log(`🤖 Generating explanation for topic: ${topic.name}`);
       const explanation = await geminiService.generateTopicExplanation(
         topic.name,
         context
       );
+
+      // Store subtopics in database
+      console.log(`💾 Storing ${explanation.subtopics.length} subtopics in database...`);
+      await createSubtopics(topicId, topic.category, explanation);
 
       // Cache the explanation
       const newCache = new Map(get().cachedExplanations);

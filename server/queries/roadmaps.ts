@@ -4,7 +4,6 @@ import {
   roadmaps, 
   roadmapSteps, 
   topics, 
-  topicRelationships, 
   quizzes, 
   questions, 
   quizAttempts, 
@@ -79,8 +78,10 @@ export async function createRoadmap(
       })
     });
 
-    // 2. Create topics for each prerequisite
+    // 2. Create topics for each prerequisite with prerequisite chain
     const topicIds: Record<string, string> = {};
+    let previousTopicId: string | null = null;
+    
     for (const prereq of knowledgeGraph.prerequisites) {
       const topicId = createId();
       topicIds[prereq.id] = topicId;
@@ -92,17 +93,21 @@ export async function createRoadmap(
           name: prereq.name,
           description: prereq.description,
           category: knowledgeGraph.mainTopic,
+          previousTopicId: previousTopicId, // Link to previous prerequisite
           metadata: JSON.stringify({
             difficulty: prereq.difficulty,
             estimatedHours: prereq.estimatedHours,
             prerequisiteOrder: prereq.order
           })
         });
+        
+        previousTopicId = topicId; // Set for next iteration
       } catch (error) {
         // Topic might already exist, update it
         await tx.update(topics)
           .set({
             description: prereq.description,
+            previousTopicId: previousTopicId,
             metadata: JSON.stringify({
               difficulty: prereq.difficulty,
               estimatedHours: prereq.estimatedHours,
@@ -118,23 +123,12 @@ export async function createRoadmap(
           .limit(1);
         if (existingTopic[0]) {
           topicIds[prereq.id] = existingTopic[0].id;
+          previousTopicId = existingTopic[0].id;
         }
       }
     }
 
-    // 3. Create prerequisite relationships
-    for (let i = 1; i < knowledgeGraph.prerequisites.length; i++) {
-      const currentPrereq = knowledgeGraph.prerequisites[i];
-      const previousPrereq = knowledgeGraph.prerequisites[i - 1];
-      
-      await tx.insert(topicRelationships).values({
-        sourceTopicId: topicIds[previousPrereq.id],
-        targetTopicId: topicIds[currentPrereq.id],
-        type: 'prerequisite'
-      });
-    }
-
-    // 4. Create roadmap steps for each prerequisite
+    // 3. Create roadmap steps for each prerequisite
     for (const prereq of knowledgeGraph.prerequisites) {
       await tx.insert(roadmapSteps).values({
         roadmapId,
@@ -147,7 +141,7 @@ export async function createRoadmap(
       });
     }
 
-    // 5. Initialize user knowledge tracking
+    // 4. Initialize user knowledge tracking
     for (const prereq of knowledgeGraph.prerequisites) {
       await tx.insert(userKnowledge).values({
         userId,
@@ -384,14 +378,11 @@ export async function submitQuizAttempt(
             eq(userKnowledge.topicId, quiz[0].topicId)
           ));
 
-        // Unlock next prerequisites
+        // Unlock next prerequisites - topics that have this as previousTopicId
         const nextTopics = await tx
-          .select({ targetTopicId: topicRelationships.targetTopicId })
-          .from(topicRelationships)
-          .where(and(
-            eq(topicRelationships.sourceTopicId, quiz[0].topicId),
-            eq(topicRelationships.type, 'prerequisite')
-          ));
+          .select({ id: topics.id })
+          .from(topics)
+          .where(eq(topics.previousTopicId, quiz[0].topicId));
 
         for (const nextTopic of nextTopics) {
           await tx
@@ -399,7 +390,7 @@ export async function submitQuizAttempt(
             .set({ status: 'available' })
             .where(and(
               eq(userKnowledge.userId, userId),
-              eq(userKnowledge.topicId, nextTopic.targetTopicId),
+              eq(userKnowledge.topicId, nextTopic.id),
               eq(userKnowledge.status, 'locked')
             ));
         }

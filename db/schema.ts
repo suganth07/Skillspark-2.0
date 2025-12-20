@@ -66,27 +66,40 @@ export const topics = sqliteTable(
     name: text("name").notNull().unique(),
     description: text("description"),
     category: text("category").notNull(), // e.g., "React", "Algorithm", "Biology"
+    
+    // For prerequisites - previous topic that must be completed first
+    previousTopicId: text("previous_topic_id").references((): any => topics.id),
 
-    // JSON metadata: { embeddings: number[], difficulty: "beginner"|"advanced", tags: string[] }
+    // JSON metadata: { difficulty: "basic"|"intermediate"|"advanced", estimatedHours: number, ... }
     metadata: text("metadata", { mode: "json" }).default("{}"),
+    
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
   },
   (t) => [
     index("topics_category_idx").on(t.category),
+    index("topics_previous_idx").on(t.previousTopicId),
   ]
 );
 
-export const topicRelationships = sqliteTable(
-  "topic_relationships",
+// Subtopics - direct children of topics for faster retrieval
+export const subtopics = sqliteTable(
+  "subtopics",
   {
     id: text("id").primaryKey().$defaultFn(() => createId()),
-    sourceTopicId: text("source_topic_id").references(() => topics.id).notNull(),
-    targetTopicId: text("target_topic_id").references(() => topics.id).notNull(),
-
-    // "prerequisite", "related", "subtopic"
-    type: text("type").notNull(),
+    parentTopicId: text("parent_topic_id").references(() => topics.id).notNull(),
+    
+    name: text("name").notNull(),
+    description: text("description"),
+    order: integer("order").notNull(), // Display order within parent topic
+    
+    // JSON metadata: { example: string, exampleExplanation: string, keyPoints: string[] }
+    metadata: text("metadata", { mode: "json" }).default("{}"),
+    
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
   },
   (t) => [
-    index("topic_relationships_source_target_idx").on(t.sourceTopicId, t.targetTopicId),
+    index("subtopics_parent_idx").on(t.parentTopicId),
+    index("subtopics_order_idx").on(t.parentTopicId, t.order),
   ]
 );
 
@@ -166,22 +179,21 @@ export const roadmapStepsRelations = relations(roadmapSteps, ({ one }) => ({
   topic: one(topics, { fields: [roadmapSteps.topicId], references: [topics.id] }),
 }));
 
-export const topicsRelations = relations(topics, ({ many }) => ({
-  outgoingRelations: many(topicRelationships, { relationName: "source" }),
-  incomingRelations: many(topicRelationships, { relationName: "target" }),
+export const topicsRelations = relations(topics, ({ one, many }) => ({
+  previousTopic: one(topics, {
+    fields: [topics.previousTopicId],
+    references: [topics.id],
+    relationName: "prerequisite",
+  }),
+  nextTopics: many(topics, { relationName: "prerequisite" }),
+  subtopics: many(subtopics),
   userStates: many(userKnowledge),
 }));
 
-export const topicRelationshipsRelations = relations(topicRelationships, ({ one }) => ({
-  source: one(topics, {
-    fields: [topicRelationships.sourceTopicId],
+export const subtopicsRelations = relations(subtopics, ({ one }) => ({
+  parentTopic: one(topics, {
+    fields: [subtopics.parentTopicId],
     references: [topics.id],
-    relationName: "source",
-  }),
-  target: one(topics, {
-    fields: [topicRelationships.targetTopicId],
-    references: [topics.id],
-    relationName: "target",
   }),
 }));
 

@@ -139,11 +139,12 @@ export const quizzes = sqliteTable("quizzes", {
 export const questions = sqliteTable("questions", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   quizId: text("quiz_id").references(() => quizzes.id).notNull(),
+  subtopicId: text("subtopic_id").references(() => subtopics.id), // Link to subtopic for tracking
 
   content: text("content").notNull(),
   type: text("type", { enum: ["multiple_choice", "text", "code"] }).default("multiple_choice"),
 
-  // { options: ["A", "B"], correct: "A", codeSnippet: "..." }
+  // { options: ["A", "B"], correct: "A", codeSnippet: "...", subtopicName: "..." }
   data: text("data", { mode: "json" }).notNull(),
 });
 
@@ -160,6 +161,31 @@ export const quizAttempts = sqliteTable("quiz_attempts", {
 
   completedAt: integer("completed_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
 });
+
+// Track user performance per subtopic
+export const userSubtopicPerformance = sqliteTable(
+  "user_subtopic_performance",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    userId: text("user_id").references(() => users.id).notNull(),
+    subtopicId: text("subtopic_id").references(() => subtopics.id).notNull(),
+    topicId: text("topic_id").references(() => topics.id).notNull(),
+    
+    // Performance tracking
+    correctCount: integer("correct_count").default(0),
+    incorrectCount: integer("incorrect_count").default(0),
+    totalAttempts: integer("total_attempts").default(0),
+    
+    // Strong/Weak status
+    status: text("status", { enum: ["strong", "weak", "neutral"] }).default("neutral"),
+    
+    lastAttemptAt: integer("last_attempt_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => [
+    uniqueIndex("user_subtopic_performance_user_subtopic_idx").on(t.userId, t.subtopicId),
+  ]
+);
 
 // ---------------- Relations ----------------
 

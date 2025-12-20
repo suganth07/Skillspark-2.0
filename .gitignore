@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-
+db/migrations/
 # Expo
 .expo/
 dist/
@@ -45,3 +45,5 @@ android/
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 .github/copilot-instructions.md
+rebuild.bat
+db/migrations/migrations.js

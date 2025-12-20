@@ -4,10 +4,12 @@ import {
   roadmaps, 
   roadmapSteps, 
   topics, 
+  subtopics,
   quizzes, 
   questions, 
   quizAttempts, 
   userKnowledge,
+  userSubtopicPerformance,
   users
 } from '@/db/schema';
 import type { KnowledgeGraph, Prerequisite, QuizQuestion } from '@/lib/gemini';
@@ -188,13 +190,17 @@ export async function createPrerequisiteQuiz(
       difficulty: prerequisite.difficulty
     });
 
-    // Create questions
+    // Create questions with subtopic linking
     for (const question of quizQuestions) {
       await tx.insert(questions).values({
         quizId,
+        subtopicId: question.subtopicId || null, // Link to subtopic if available
         content: question.content,
         type: question.type,
-        data: JSON.stringify(question.data)
+        data: JSON.stringify({
+          ...question.data,
+          subtopicName: question.subtopicName // Store subtopic name in data for tracking
+        })
       });
     }
 
@@ -329,17 +335,30 @@ export async function submitQuizAttempt(
   quizId: string,
   answers: Record<string, any>,
   roadmapId?: string
-): Promise<{ score: number; passed: boolean; feedback: string }> {
+): Promise<{ score: number; passed: boolean; feedback: string; weakSubtopics: string[] }> {
   return await db.transaction(async (tx) => {
-    // Get quiz questions
+    // Get quiz questions with subtopic info
     const quizQuestions = await tx
-      .select()
+      .select({
+        id: questions.id,
+        content: questions.content,
+        data: questions.data,
+        subtopicId: questions.subtopicId
+      })
       .from(questions)
       .where(eq(questions.quizId, quizId));
 
-    // Calculate score
+    // Get quiz to find topicId
+    const quiz = await tx
+      .select({ topicId: quizzes.topicId })
+      .from(quizzes)
+      .where(eq(quizzes.id, quizId))
+      .limit(1);
+
+    // Calculate score and track subtopic performance
     let correct = 0;
     const details: Record<string, any> = {};
+    const subtopicPerformance: Map<string, { correct: number; incorrect: number; name: string }> = new Map();
 
     for (const question of quizQuestions) {
       const userAnswer = answers[question.id];
@@ -369,8 +388,98 @@ export async function submitQuizAttempt(
         answer: userAnswer,
         correct: isCorrect,
         correctAnswer: questionData.correct,
-        explanation: questionData.explanation
+        explanation: questionData.explanation,
+        subtopicName: questionData.subtopicName
       };
+
+      // Track subtopic performance
+      if (question.subtopicId) {
+        const existing = subtopicPerformance.get(question.subtopicId) || { 
+          correct: 0, 
+          incorrect: 0,
+          name: questionData.subtopicName || 'Unknown'
+        };
+        
+        if (isCorrect) {
+          existing.correct++;
+        } else {
+          existing.incorrect++;
+        }
+        
+        subtopicPerformance.set(question.subtopicId, existing);
+      }
+    }
+
+    // Update user subtopic performance in database
+    const weakSubtopics: string[] = [];
+    
+    for (const [subtopicId, perf] of subtopicPerformance.entries()) {
+      const totalAttempts = perf.correct + perf.incorrect;
+      const accuracy = totalAttempts > 0 ? (perf.correct / totalAttempts) : 0;
+      
+      // Determine status: weak if accuracy < 50%, strong if >= 70%, neutral otherwise
+      let status: 'weak' | 'strong' | 'neutral' = 'neutral';
+      if (accuracy < 0.5) {
+        status = 'weak';
+        weakSubtopics.push(perf.name);
+      } else if (accuracy >= 0.7) {
+        status = 'strong';
+      }
+
+      // Check if record exists
+      const existingPerf = await tx
+        .select({ id: userSubtopicPerformance.id })
+        .from(userSubtopicPerformance)
+        .where(and(
+          eq(userSubtopicPerformance.userId, userId),
+          eq(userSubtopicPerformance.subtopicId, subtopicId)
+        ))
+        .limit(1);
+
+      if (existingPerf[0]) {
+        // Update existing record
+        const current = await tx
+          .select()
+          .from(userSubtopicPerformance)
+          .where(eq(userSubtopicPerformance.id, existingPerf[0].id))
+          .limit(1);
+
+        const currentData = current[0];
+        const newCorrect = (currentData.correctCount || 0) + perf.correct;
+        const newIncorrect = (currentData.incorrectCount || 0) + perf.incorrect;
+        const newTotal = (currentData.totalAttempts || 0) + totalAttempts;
+        const newAccuracy = newTotal > 0 ? (newCorrect / newTotal) : 0;
+        
+        let newStatus: 'weak' | 'strong' | 'neutral' = 'neutral';
+        if (newAccuracy < 0.5) {
+          newStatus = 'weak';
+        } else if (newAccuracy >= 0.7) {
+          newStatus = 'strong';
+        }
+
+        await tx
+          .update(userSubtopicPerformance)
+          .set({
+            correctCount: newCorrect,
+            incorrectCount: newIncorrect,
+            totalAttempts: newTotal,
+            status: newStatus,
+            lastAttemptAt: new Date()
+          })
+          .where(eq(userSubtopicPerformance.id, existingPerf[0].id));
+      } else {
+        // Create new record
+        await tx.insert(userSubtopicPerformance).values({
+          userId,
+          subtopicId,
+          topicId: quiz[0]?.topicId || '',
+          correctCount: perf.correct,
+          incorrectCount: perf.incorrect,
+          totalAttempts,
+          status,
+          lastAttemptAt: new Date()
+        });
+      }
     }
 
     // Guard against division by zero
@@ -462,10 +571,10 @@ export async function submitQuizAttempt(
     }
 
     const feedback = passed 
-      ? `Excellent! You scored ${score}% and can move to the next prerequisite.`
-      : `You scored ${score}%. You need 70% or higher to proceed. Review the material and try again.`;
+      ? `Excellent! You scored ${score}% and can move to the next prerequisite.${weakSubtopics.length > 0 ? `\n\nNote: You may want to review these subtopics: ${weakSubtopics.join(', ')}` : ''}`
+      : `You scored ${score}%. You need 70% or higher to proceed. Review the material and try again.${weakSubtopics.length > 0 ? `\n\nFocus on these weak areas: ${weakSubtopics.join(', ')}` : ''}`;
 
-    return { score, passed, feedback };
+    return { score, passed, feedback, weakSubtopics };
   });
 }
 

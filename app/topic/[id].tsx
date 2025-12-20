@@ -132,22 +132,7 @@ export default function TopicDetailScreen() {
             </CardHeader>
           </Card>
 
-          {/* Why Learn This */}
-          {explanation.whyLearn && (
-            <Card>
-              <CardHeader>
-                <View className="flex-row items-center space-x-2 mb-2">
-                  <Lightbulb className="h-5 w-5 text-yellow-600" />
-                  <CardTitle>Why Learn This?</CardTitle>
-                </View>
-              </CardHeader>
-              <CardContent>
-                <Text className="text-muted-foreground leading-6">
-                  {explanation.whyLearn}
-                </Text>
-              </CardContent>
-            </Card>
-          )}
+        
 
           {/* Subtopics */}
           <Card>

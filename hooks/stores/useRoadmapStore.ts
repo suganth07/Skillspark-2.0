@@ -191,27 +191,71 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
         throw new Error(`Step "${step.title || stepId}" is missing a topicId. Cannot generate quiz for prerequisite without a valid topic reference.`);
       }
       
-      // Create prerequisite object
-      const prerequisite = {
-        id: `temp-${Date.now()}`, // Temporary ID for quiz generation
-        name: prerequisiteName,
-        description: step.content || `Learn ${prerequisiteName}`,
-        difficulty: step.difficulty || 'intermediate',
-        estimatedHours: Math.ceil((step.durationMinutes || 120) / 60),
-        topics: [],
-        order: step.order || 1
-      };
+      // Get subtopics for this topic
+      const { getSubtopics } = await import('@/server/queries/topics');
+      const subtopics = await getSubtopics(step.topicId);
       
-      // Generate quiz questions using Gemini
-      const questions = await geminiService.generateQuizQuestions(prerequisite, roadmap.title);
+      let quizId: string;
       
-      // Create quiz in database with validated topicId
-      const quizId = await createPrerequisiteQuiz(
-        roadmapId,
-        prerequisite,
-        step.topicId, // Only pass validated topicId, no fallback
-        questions
-      );
+      if (subtopics.length > 0) {
+        // Generate quiz from subtopics (questions covering different subtopics)
+        console.log(`🎯 Generating quiz with ${subtopics.length} subtopics for ${prerequisiteName}`);
+        
+        const subtopicsData = subtopics.map(st => ({
+          id: st.id,
+          name: st.name,
+          description: st.description || ''
+        }));
+        
+        const questions = await geminiService.generateQuizQuestionsFromSubtopics(
+          prerequisiteName,
+          subtopicsData,
+          step.difficulty || 'intermediate',
+          roadmap.title
+        );
+        
+        // Create prerequisite object
+        const prerequisite = {
+          id: `temp-${Date.now()}`,
+          name: prerequisiteName,
+          description: step.content || `Learn ${prerequisiteName}`,
+          difficulty: step.difficulty || 'intermediate',
+          estimatedHours: Math.ceil((step.durationMinutes || 120) / 60),
+          topics: [],
+          order: step.order || 1
+        };
+        
+        quizId = await createPrerequisiteQuiz(
+          roadmapId,
+          prerequisite,
+          step.topicId,
+          questions
+        );
+        
+        console.log(`✅ Quiz created with questions from ${subtopics.length} subtopics`);
+      } else {
+        // Fallback: Generate quiz without subtopics (old method)
+        console.log(`⚠️ No subtopics found for ${prerequisiteName}, using fallback method`);
+        
+        const prerequisite = {
+          id: `temp-${Date.now()}`,
+          name: prerequisiteName,
+          description: step.content || `Learn ${prerequisiteName}`,
+          difficulty: step.difficulty || 'intermediate',
+          estimatedHours: Math.ceil((step.durationMinutes || 120) / 60),
+          topics: [],
+          order: step.order || 1
+        };
+        
+        const questions = await geminiService.generateQuizQuestions(prerequisite, roadmap.title);
+        
+        quizId = await createPrerequisiteQuiz(
+          roadmapId,
+          prerequisite,
+          step.topicId,
+          questions
+        );
+      }
       
       set({ isGeneratingQuiz: false });
       

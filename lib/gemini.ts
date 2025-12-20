@@ -29,6 +29,8 @@ export interface QuizQuestion {
   type: 'multiple_choice' | 'text' | 'code';
   difficulty: 'basic' | 'intermediate' | 'advanced';
   prerequisiteId: string;
+  subtopicId?: string; // Link to specific subtopic
+  subtopicName?: string; // Name of the subtopic this question tests
   data: {
     options?: string[];
     correct: string | number;
@@ -179,6 +181,83 @@ export class GeminiService {
     } catch (error) {
       console.error('Error generating quiz questions:', error);
       throw new Error(`Failed to generate quiz questions: ${error}`);
+    }
+  }
+
+  // NEW: Generate quiz questions from subtopics
+  async generateQuizQuestionsFromSubtopics(
+    topicName: string,
+    subtopics: Array<{ id: string; name: string; description: string }>,
+    difficulty: 'basic' | 'intermediate' | 'advanced',
+    context: string
+  ): Promise<QuizQuestion[]> {
+    const subtopicsList = subtopics.map(st => `- ${st.name}: ${st.description}`).join('\n');
+    
+    const prompt = `
+      Create a comprehensive quiz for "${topicName}" in the context of learning "${context}".
+      
+      Generate 1-2 questions for EACH of the following subtopics (total 8-12 questions):
+      ${subtopicsList}
+      
+      Requirements:
+      - Each question MUST specify which subtopic it tests
+      - Create ONLY multiple choice questions with 4 options each
+      - Questions should test understanding of that specific subtopic
+      - Make questions practical and relevant
+      - Difficulty level: ${difficulty}
+      
+      Return ONLY valid JSON in this exact format:
+      [
+        {
+          "id": "unique-question-id",
+          "content": "Question text here",
+          "type": "multiple_choice",
+          "difficulty": "${difficulty}",
+          "subtopicName": "exact subtopic name from the list above",
+          "data": {
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correct": 0,
+            "explanation": "Why this answer is correct and how it relates to the subtopic"
+          }
+        }
+      ]
+      
+      Ensure each subtopic gets at least 1 question.
+      Make questions challenging but fair for ${difficulty} level.
+    `;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Parse JSON response
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error('Invalid JSON response from Gemini');
+      }
+      
+      const questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+      
+      // Validate questions structure
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('Invalid questions structure');
+      }
+      
+      // Map subtopic names to IDs
+      questions.forEach(q => {
+        const matchingSubtopic = subtopics.find(
+          st => st.name.toLowerCase() === q.subtopicName?.toLowerCase()
+        );
+        if (matchingSubtopic) {
+          q.subtopicId = matchingSubtopic.id;
+        }
+      });
+      
+      return questions;
+    } catch (error) {
+      console.error('Error generating quiz questions from subtopics:', error);
+      throw new Error(`Failed to generate quiz questions from subtopics: ${error}`);
     }
   }
 

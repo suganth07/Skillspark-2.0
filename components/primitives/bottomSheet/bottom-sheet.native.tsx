@@ -32,7 +32,7 @@ type BottomSheetRef = React.ElementRef<typeof View>;
 type BottomSheetProps = React.ComponentPropsWithoutRef<typeof View>;
 
 interface BottomSheetContext {
-  sheetRef: React.RefObject<BottomSheetModal>;
+  sheetRef: React.RefObject<BottomSheetModal | null>;
 }
 
 const BottomSheetContext = React.createContext({} as BottomSheetContext);

@@ -37,6 +37,9 @@ yarn-error.*
 
 app-example
 
+# Drizzle
+db/migrations/
+
 # Ignore the entire Android directory
 android/
 android/app/src/main/java/com/expostarter/base/MainActivity.kt

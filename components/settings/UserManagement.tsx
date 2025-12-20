@@ -131,11 +131,11 @@ export function UserManagement() {
 
                 {/* Delete Button */}
                 {users.length > 1 && (
-                  <Pressable 
+                  <Pressable
                     onPress={() => setDeleteUserId(user.id)}
                     className="h-8 w-8 items-center justify-center rounded active:bg-muted"
                   >
-                    <Trash2 size={16} className="text-muted-foreground" />
+                    <Trash2 size={18} color="#6b7280" />
                   </Pressable>
                 )}
               </Pressable>
@@ -147,9 +147,8 @@ export function UserManagement() {
         })}
       </View>
 
-      {/* Add User Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[90%] max-w-[90%] min-w-[80%]">
           <DialogHeader>
             <DialogTitle>Create Account</DialogTitle>
           </DialogHeader>

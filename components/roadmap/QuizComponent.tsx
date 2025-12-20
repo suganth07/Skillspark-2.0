@@ -201,13 +201,15 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
         </Card>
 
         <View className="flex-row space-x-3">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onPress={onBack}
-          >
-            <Text>Back to Roadmap</Text>
-          </Button>
+          {onBack && (
+            <Button
+              variant="outline"
+              className="flex-1"
+              onPress={onBack}
+            >
+              <Text>Back to Roadmap</Text>
+            </Button>
+          )}
           
           {!quizResult.passed && (
             <Button

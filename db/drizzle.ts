@@ -12,16 +12,16 @@ export const expoDb = openDatabaseSync("database.db", { enableChangeListener: tr
 export const db = drizzle(expoDb, { schema });
 
 // Run migrations automatically when initializing
-export const initialize = async () => {
+export const initialize = async (): Promise<{ db: typeof db; migrationSuccess: boolean }> => {
   try {
     console.log("Running database migrations...");
     await migrate(db, migrations);
     console.log("Database migrations completed successfully");
-    return db;
+    return { db, migrationSuccess: true };
   } catch (error) {
     console.error("Database migration failed:", error);
     // Still return db even if migrations fail (they might already be applied)
-    return db;
+     return { db, migrationSuccess: false };
   }
 };
 

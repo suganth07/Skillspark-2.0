@@ -33,11 +33,11 @@ export class RoadmapGenerationService {
         try {
           // Generate questions using Gemini
           const questions = await geminiService.generateQuizQuestions(prerequisite, topic);
-          
+
           // Create quiz in database - we'll need to get the topic ID
           const { roadmap, steps } = await getRoadmapWithSteps(roadmapId, userId);
           const matchingStep = steps.find(step => step.prerequisiteName === prerequisite.name);
-          
+
           if (matchingStep?.topicId) {
             const quizId = await createPrerequisiteQuiz(
               roadmapId, 
@@ -48,7 +48,7 @@ export class RoadmapGenerationService {
             console.log(`✅ Quiz created for ${prerequisite.name}: ${quizId}`);
             return { prerequisite: prerequisite.name, quizId, questionsCount: questions.length };
           }
-          
+
           return { prerequisite: prerequisite.name, error: 'No matching topic found' };
         } catch (error) {
           console.error(`❌ Failed to create quiz for ${prerequisite.name}:`, error);

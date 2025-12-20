@@ -35,6 +35,8 @@ export async function getRoadmapByTopicId(topicId: string, userId: string) {
   return result[0] || null;
 }
 
+
+
 // Create subtopics and store them in database
 export async function createSubtopics(
   parentTopicId: string,
@@ -48,13 +50,20 @@ export async function createSubtopics(
       .from(topics)
       .where(eq(topics.id, parentTopicId))
       .limit(1);
+      let existingMetadata = {};
+          try {
+            existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
+          } catch {
+            console.warn('Failed to parse existing metadata, using empty object');
+          }
 
     if (parentTopic[0]) {
       await tx
         .update(topics)
         .set({
           metadata: JSON.stringify({
-            ...JSON.parse(parentTopic[0].metadata as string || '{}'),
+            // ...JSON.parse(parentTopic[0].metadata as string || '{}'),
+            ...existingMetadata,
             bestPractices: explanation.bestPractices,
             commonPitfalls: explanation.commonPitfalls,
             whyLearn: explanation.whyLearn,

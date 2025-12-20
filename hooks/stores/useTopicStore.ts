@@ -64,14 +64,27 @@ export const useTopicStore = create<TopicState>((set, get) => ({
         // Reconstruct explanation from database
         console.log(`📚 Loading ${existingSubtopics.length} subtopics from database`);
         
-        const topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        // const topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        let topicMetadata: Record<string, any> = {};
+        try {
+          topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        } catch {
+          console.warn('Failed to parse topic metadata, using defaults');
+        }
+         
         
         const explanation: TopicExplanation = {
           topicName: topic.name,
           overview: topic.description || '',
           difficulty: topicMetadata.difficulty || 'intermediate',
           subtopics: existingSubtopics.map(st => {
-            const metadata = JSON.parse(st.metadata as string || '{}');
+            // 
+            let metadata: Record<string, any> = {};
+            try {
+              metadata = JSON.parse(st.metadata as string || '{}');
+            } catch {
+              console.warn(`Failed to parse subtopic metadata for ${st.id}`);
+            }
             return {
               id: st.id,
               title: st.name,

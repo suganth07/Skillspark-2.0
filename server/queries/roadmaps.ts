@@ -85,7 +85,7 @@ export async function createRoadmap(
     for (const prereq of knowledgeGraph.prerequisites) {
       const topicId = createId();
       topicIds[prereq.id] = topicId;
-      
+
       // Insert or update topic
       try {
         await tx.insert(topics).values({
@@ -100,7 +100,7 @@ export async function createRoadmap(
             prerequisiteOrder: prereq.order
           })
         });
-        
+
         previousTopicId = topicId; // Set for next iteration
       } catch (error) {
         // Topic might already exist, update it
@@ -115,7 +115,7 @@ export async function createRoadmap(
             })
           })
           .where(eq(topics.name, prereq.name));
-        
+
         // Get existing topic ID
         const existingTopic = await tx.select({ id: topics.id })
           .from(topics)
@@ -143,6 +143,20 @@ export async function createRoadmap(
 
     // 4. Initialize user knowledge tracking
     for (const prereq of knowledgeGraph.prerequisites) {
+      // Check if user knowledge already exists for this topic
+      const existingKnowledge = await tx
+        .select({ id: userKnowledge.id })
+        .from(userKnowledge)
+        .where(and(
+          eq(userKnowledge.userId, userId),
+          eq(userKnowledge.topicId, topicIds[prereq.id])
+        ))
+        .limit(1);
+
+      if (existingKnowledge[0]) {
+        continue; // Skip if already exists
+      }
+
       await tx.insert(userKnowledge).values({
         userId,
         topicId: topicIds[prereq.id],
@@ -328,8 +342,25 @@ export async function submitQuizAttempt(
     const details: Record<string, any> = {};
 
     for (const question of quizQuestions) {
-      const questionData = JSON.parse(question.data as string);
       const userAnswer = answers[question.id];
+      
+      // Guard against malformed JSON data
+      let questionData: any;
+      try {
+        questionData = JSON.parse(question.data as string);
+      } catch (error) {
+        console.error(`Failed to parse question data for question ${question.id}:`, error);
+        // Provide safe fallback for malformed question data
+        details[question.id] = {
+          answer: userAnswer,
+          correct: false,
+          correctAnswer: null,
+          explanation: 'Question data is malformed and could not be processed',
+          error: 'Parse error'
+        };
+        continue; // Skip to next question
+      }
+      
       const isCorrect = userAnswer === questionData.correct;
       
       if (isCorrect) correct++;
@@ -415,7 +446,8 @@ export async function submitQuizAttempt(
             .where(eq(roadmapSteps.roadmapId, roadmapId));
 
           const completedStepsCount = allSteps.filter(step => step.isCompleted).length;
-          const progress = Math.round((completedStepsCount / allSteps.length) * 100);
+          const progress = allSteps.length > 0 ? Math.round((completedStepsCount / allSteps.length) * 100) 
+            : 0;
 
           await tx
             .update(roadmaps)

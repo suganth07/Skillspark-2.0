@@ -186,6 +186,11 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
         throw new Error('Step not found');
       }
       
+      // Validate that step has a valid topicId
+      if (!step.topicId) {
+        throw new Error(`Step "${step.title || stepId}" is missing a topicId. Cannot generate quiz for prerequisite without a valid topic reference.`);
+      }
+      
       // Create prerequisite object
       const prerequisite = {
         id: `temp-${Date.now()}`, // Temporary ID for quiz generation
@@ -200,11 +205,11 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
       // Generate quiz questions using Gemini
       const questions = await geminiService.generateQuizQuestions(prerequisite, roadmap.title);
       
-      // Create quiz in database
+      // Create quiz in database with validated topicId
       const quizId = await createPrerequisiteQuiz(
         roadmapId,
         prerequisite,
-        step.topicId || stepId,
+        step.topicId, // Only pass validated topicId, no fallback
         questions
       );
       

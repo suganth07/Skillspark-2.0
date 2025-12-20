@@ -397,7 +397,13 @@ export async function submitQuizAttempt(
         continue; // Skip to next question
       }
       
-      const isCorrect = userAnswer === questionData.correct;
+      // Check if user selected "Not sure" (last option, typically index 4)
+      const isNotSure = questionData.options && 
+                        userAnswer === questionData.options.length - 1 && 
+                        questionData.options[userAnswer]?.toLowerCase().includes('not sure');
+      
+      // Mark as correct only if answer matches and not "Not sure"
+      const isCorrect = !isNotSure && userAnswer === questionData.correct;
       
       if (isCorrect) correct++;
       

@@ -148,13 +148,14 @@ export class GeminiService {
           "difficulty": "${prerequisite.difficulty}",
           "prerequisiteId": "${prerequisite.id}",
           "data": {
-            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "options": ["Option A", "Option B", "Option C", "Option D", "Not sure"],
             "correct": 0,
             "explanation": "Why this answer is correct"
           }
         }
       ]
       
+      IMPORTANT: Always include "Not sure" as the last option (5th option). If user selects "Not sure", give 0 marks.
       Make questions challenging but fair for ${prerequisite.difficulty} level.
       Ensure correct answers are accurate and explanations are helpful.
     `;
@@ -201,7 +202,7 @@ export class GeminiService {
       
       Requirements:
       - Each question MUST specify which subtopic it tests
-      - Create ONLY multiple choice questions with 4 options each
+      - Create ONLY multiple choice questions with 5 options each (4 regular + "Not sure")
       - Questions should test understanding of that specific subtopic
       - Make questions practical and relevant
       - Difficulty level: ${difficulty}
@@ -215,13 +216,14 @@ export class GeminiService {
           "difficulty": "${difficulty}",
           "subtopicName": "exact subtopic name from the list above",
           "data": {
-            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "options": ["Option A", "Option B", "Option C", "Option D", "Not sure"],
             "correct": 0,
             "explanation": "Why this answer is correct and how it relates to the subtopic"
           }
         }
       ]
       
+      IMPORTANT: Always include "Not sure" as the last option (5th option). If user selects "Not sure", give 0 marks.
       Ensure each subtopic gets at least 1 question.
       Make questions challenging but fair for ${difficulty} level.
     `;

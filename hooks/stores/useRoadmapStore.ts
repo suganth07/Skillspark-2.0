@@ -236,8 +236,39 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
         
         console.log(`✅ Quiz created with questions from ${subtopics.length} subtopics`);
       } else {
-        // Fallback: Generate quiz without subtopics (old method)
-        console.log(`⚠️ No subtopics found for ${prerequisiteName}, using fallback method`);
+        // Generate subtopics first, then create quiz
+        console.log(`⚠️ No subtopics found for ${prerequisiteName}, generating subtopics first`);
+        
+        // Generate subtopics using AI
+        const { createSubtopics } = await import('@/server/queries/topics');
+        const topicExplanation = await geminiService.generateTopicExplanation(
+          prerequisiteName, 
+          roadmap.title
+        );
+        
+        // Get topic category (use roadmap title as category fallback)
+        const topicCategory = roadmap.title.split(' ')[0] || 'General';
+        
+        // Store subtopics in database
+        await createSubtopics(step.topicId, topicCategory, topicExplanation);
+        console.log(`✅ Generated ${topicExplanation.subtopics.length} subtopics for ${prerequisiteName}`);
+        
+        // Now fetch the newly created subtopics
+        const newSubtopics = await getSubtopics(step.topicId);
+        
+        const subtopicsData = newSubtopics.map(st => ({
+          id: st.id,
+          name: st.name,
+          description: st.description || ''
+        }));
+        
+        // Generate quiz from newly created subtopics
+        const questions = await geminiService.generateQuizQuestionsFromSubtopics(
+          prerequisiteName,
+          subtopicsData,
+          step.difficulty || 'intermediate',
+          roadmap.title
+        );
         
         const prerequisite = {
           id: `temp-${Date.now()}`,
@@ -249,14 +280,14 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
           order: step.order || 1
         };
         
-        const questions = await geminiService.generateQuizQuestions(prerequisite, roadmap.title);
-        
         quizId = await createPrerequisiteQuiz(
           roadmapId,
           prerequisite,
           step.topicId,
           questions
         );
+        
+        console.log(`✅ Quiz created with questions from ${newSubtopics.length} newly generated subtopics`);
       }
       
       set({ isGeneratingQuiz: false });

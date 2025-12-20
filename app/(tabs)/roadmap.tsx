@@ -156,7 +156,7 @@ export default function RoadmapScreen() {
           className="flex-row items-center justify-center space-x-2 h-14"
         >
           <Plus className="h-5 w-5 text-white" />
-          <Text className="text-white font-medium text-lg text-black">Create New Roadmap</Text>
+          <Text className="font-medium text-lg">Create New Roadmap</Text>
         </Button>
 
         {/* Loading State */}

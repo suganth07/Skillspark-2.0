@@ -133,9 +133,9 @@ export function UserManagement() {
                 {users.length > 1 && (
                   <Pressable 
                     onPress={() => setDeleteUserId(user.id)}
-                    className="h-8 w-8 items-center justify-center rounded active:bg-destructive/10"
+                    className="h-8 w-8 items-center justify-center rounded active:bg-muted"
                   >
-                    <Trash2 size={16} color="#ef4444" />
+                    <Trash2 size={16} className="text-muted-foreground" />
                   </Pressable>
                 )}
               </Pressable>

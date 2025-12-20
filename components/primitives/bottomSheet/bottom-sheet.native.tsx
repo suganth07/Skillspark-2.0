@@ -235,7 +235,7 @@ const BottomSheetTextInput = React.forwardRef<
     <GBottomSheetTextInput
       ref={ref}
       className={cn(
-        "rounded-md border border-input bg-background px-3 text-xl h-14 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
+        "rounded-md border border-input bg-background px-3 text-xl h-14 leading-[1.25] items-center placeholder:text-muted-foreground disabled:opacity-50",
         className,
       )}
       placeholderClassName={cn("text-muted-foreground", placeholderClassName)}

@@ -39,7 +39,6 @@ const Combobox = React.forwardRef<
   (
     {
       className,
-      textClass,
       variant = "outline",
       size = "sm",
       inputProps,
@@ -151,7 +150,7 @@ const Combobox = React.forwardRef<
               className={buttonTextVariants({
                 variant,
                 size,
-                className: cn(!itemSelected && "opacity-50", textClass),
+                className: cn(!itemSelected && "opacity-50"),
               })}
               numberOfLines={1}
             >
@@ -199,8 +198,8 @@ const Combobox = React.forwardRef<
               paddingBottom: insets.bottom + HEADER_HEIGHT,
             }}
             renderItem={renderItem}
-            keyExtractor={(item, index) =>
-              (item as ComboboxOption)?.value ?? index.toString()
+            keyExtractor={(item: ComboboxOption, index: number) =>
+              item?.value ?? index.toString()
             }
             className={"px-4"}
             keyboardShouldPersistTaps="handled"

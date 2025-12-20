@@ -1,7 +1,7 @@
 import {cva, type VariantProps} from "class-variance-authority";
 import {Link} from "expo-router";
 import type {LinkProps} from "expo-router/build/link/Link";
-import type {ExpoRouter} from "expo-router/types/expo-router";
+import type {Href} from "expo-router";
 import type React from "react";
 import type {ElementType} from "react";
 import {Pressable, type PressableProps, Text, View, type ViewProps} from "react-native";
@@ -36,8 +36,8 @@ interface ItemProps {
 type ListItemProps = VariantProps<typeof listItemTextVariants> & {
 	label: string;
 	description?: string;
-	itemLeft?: (itemProps: ItemProps) => JSX.Element;
-	itemRight?: (itemProps: ItemProps) => JSX.Element;
+	itemLeft?: (itemProps: ItemProps) => React.ReactElement;
+	itemRight?: (itemProps: ItemProps) => React.ReactElement;
 	onPress?: () => void;
 	/**
 	 * If true, a detail arrow will appear on the item.
@@ -46,7 +46,7 @@ type ListItemProps = VariantProps<typeof listItemTextVariants> & {
 	/**
 	 * Convert the default Pressable with a Link component.
 	 */
-	href?: ExpoRouter.Href;
+	href?: Href;
 	className?: string;
 } & (ViewProps | PressableProps | LinkProps);
 
@@ -78,7 +78,7 @@ const ListItem: React.FC<ListItemProps> = ({
 		return null;
 	};
 	const pressable = props?.onPress || href;
-	const Component = (pressable ? Pressable : View) as ElementType<
+	const Component = (href ? Link : pressable ? Pressable : View) as ElementType<
 		ViewProps | PressableProps | LinkProps
 	>;
 
@@ -92,6 +92,8 @@ const ListItem: React.FC<ListItemProps> = ({
 			)}
 			accessibilityRole={pressable ? "button" : "none"}
 			accessibilityLabel={`${ label }${ description ? `, ${ description }` : "" }`}
+			{...props}
+			{...(href ? { href } as any : {})}
 			{...props}
 		>
 			{itemLeft && (

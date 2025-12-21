@@ -50,19 +50,19 @@ export async function createSubtopics(
       .from(topics)
       .where(eq(topics.id, parentTopicId))
       .limit(1);
-      let existingMetadata = {};
-          try {
-            existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
-          } catch {
-            console.warn('Failed to parse existing metadata, using empty object');
-          }
 
     if (parentTopic[0]) {
+      let existingMetadata = {};
+      try {
+        existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
+      } catch {
+        console.warn('Failed to parse existing metadata, using empty object');
+      }
+
       await tx
         .update(topics)
         .set({
           metadata: JSON.stringify({
-            // ...JSON.parse(parentTopic[0].metadata as string || '{}'),
             ...existingMetadata,
             bestPractices: explanation.bestPractices,
             commonPitfalls: explanation.commonPitfalls,
@@ -74,6 +74,8 @@ export async function createSubtopics(
     }
 
     // Create each subtopic in subtopics table
+    const errors: Array<{ subtopicId: string; title: string; error: string }> = [];
+    
     for (let i = 0; i < explanation.subtopics.length; i++) {
       const subtopic = explanation.subtopics[i];
       const subtopicId = createId();
@@ -94,9 +96,20 @@ export async function createSubtopics(
 
         console.log(`✅ Created subtopic: ${subtopic.title}`);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Failed to create subtopic ${subtopic.title}:`, error);
-        // Continue with next subtopic
+        errors.push({
+          subtopicId,
+          title: subtopic.title,
+          error: errorMessage
+        });
       }
+    }
+
+    // If any subtopics failed, abort the transaction
+    if (errors.length > 0) {
+      const failedTitles = errors.map(e => `${e.title} (${e.error})`).join(', ');
+      throw new Error(`Failed to create ${errors.length} subtopic(s): ${failedTitles}`);
     }
   });
 }

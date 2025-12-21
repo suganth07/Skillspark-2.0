@@ -61,16 +61,24 @@ export const useTopicStore = create<TopicState>((set, get) => ({
       const performanceMap = new Map<string, SubtopicPerformance>();
       
       performanceData.forEach(perf => {
-        const accuracy = perf.totalAttempts > 0 
-          ? Math.round((perf.correctCount / perf.totalAttempts) * 100) 
+        const totalAttempts = perf.totalAttempts ?? 0;
+        const correctCount = perf.correctCount ?? 0;
+        const incorrectCount = perf.incorrectCount ?? 0;
+        
+        const accuracy = totalAttempts > 0 
+          ? Math.round((correctCount / totalAttempts) * 100) 
           : 0;
+          const validStatuses = ['weak', 'strong', 'neutral'] as const;
+        const status = validStatuses.includes(perf.status as any) 
+          ? (perf.status as 'weak' | 'strong' | 'neutral')
+          : 'neutral'; // fallback to neutral
         
         performanceMap.set(perf.subtopicId, {
           subtopicId: perf.subtopicId,
-          correctCount: perf.correctCount,
-          incorrectCount: perf.incorrectCount,
-          totalAttempts: perf.totalAttempts,
-          status: perf.status as 'weak' | 'strong' | 'neutral',
+          correctCount,
+          incorrectCount,
+          totalAttempts,
+          status,
           accuracy
         });
       });
@@ -98,18 +106,7 @@ export const useTopicStore = create<TopicState>((set, get) => ({
         // If user has performance data, regenerate content with adaptive explanations
         if (performanceMap.size > 0) {
           console.log(`🔄 Regenerating content with performance-based adaptations`);
-          
-          // Create performance map by subtopic name
-          const performanceByName = new Map<string, { status: string; accuracy: number }>();
-          existingSubtopics.forEach(st => {
-            const perf = performanceMap.get(st.id);
-            if (perf) {
-              performanceByName.set(st.name, {
-                status: perf.status,
-                accuracy: perf.accuracy
-              });
-            }
-          });
+
           
           // Prepare subtopic guidance with names
           const subtopicGuidance = existingSubtopics.map(st => {
@@ -129,13 +126,16 @@ export const useTopicStore = create<TopicState>((set, get) => ({
           );
           
           // Map AI-generated subtopics back to database IDs
-          explanation.subtopics = explanation.subtopics.map((aiSubtopic, index) => {
-            const dbSubtopic = existingSubtopics[index];
-            return {
-              ...aiSubtopic,
-              id: dbSubtopic?.id || aiSubtopic.id // Use database ID if available
-            };
-          });
+          const dbSubtopicsByName = new Map(
+           existingSubtopics.map(st => [st.name.toLowerCase(), st.id])
+         );
+         explanation.subtopics = explanation.subtopics.map((aiSubtopic) => {
+           const dbId = dbSubtopicsByName.get(aiSubtopic.title.toLowerCase());
+           return {
+             ...aiSubtopic,
+             id: dbId || aiSubtopic.id
+           };
+         });
           
           const newCache = new Map(get().cachedExplanations);
           newCache.set(topicId, explanation);

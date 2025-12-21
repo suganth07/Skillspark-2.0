@@ -7,7 +7,7 @@ import * as React from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PortalHost } from "@/components/primitives/portal";
-import { DatabaseProvider } from "@/db/provider";
+import { DatabaseProvider, useDatabase } from "@/db/provider";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { DARK_THEME, LIGHT_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -18,7 +18,6 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
 import { useUserStore } from "@/hooks/stores/useUserStore";
-import { useDatabase } from "@/db/provider";
 
 
 
@@ -34,10 +33,26 @@ export const unstable_settings = {
 // Prevent the splash screen from auto-hiding before getting the color scheme.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const { colorScheme, setColorScheme } = useColorScheme();
+// Child component that initializes database-dependent logic
+function DatabaseInitializer({ children }: { children: React.ReactNode }) {
   const { db } = useDatabase();
   const initialize = useUserStore((state) => state.initialize);
+
+  // Initialize user store when database is ready
+  useEffect(() => {
+    if (db) {
+      console.log("Database ready, initializing user store...");
+      initialize().catch((err) => {
+        console.error("Failed to initialize user store:", err);
+      });
+    }
+  }, [db, initialize]);
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
+  const { colorScheme, setColorScheme } = useColorScheme();
 
   const [loaded, error] = useFonts({
     Inter_400Regular,
@@ -58,23 +73,6 @@ export default function RootLayout() {
       setAndroidNavigationBar(colorScheme);
     }
   }, []);
-
-  // Persist theme changes to storage
-  useEffect(() => {
-    const storedTheme = getItem<"light" | "dark">("theme");
-    if (storedTheme !== colorScheme) {
-      setItem("theme", colorScheme);
-      setAndroidNavigationBar(colorScheme);
-    }
-  }, [colorScheme]);
-
-  // Initialize user store when database is ready
-  useEffect(() => {
-    if (db) {
-      console.log("Database ready, initializing user store...");
-      initialize();
-    }
-  }, [db, initialize]);
 
   useEffect(() => {
     if (loaded) {

@@ -1,4 +1,4 @@
-import { and, eq, desc, asc } from 'drizzle-orm';
+import { and, eq, desc, asc, sql, inArray } from 'drizzle-orm';
 import { db } from '@/db/drizzle';
 import { 
   roadmaps, 
@@ -85,28 +85,64 @@ export async function createRoadmap(
     const topicIds: Record<string, string> = {};
     let previousTopicId: string | null = null;
     
+    // for (const prereq of knowledgeGraph.prerequisites) {
+    //   const topicId = createId();
+    //   topicIds[prereq.id] = topicId;
+
+    //   // Insert or update topic
+    //   try {
+    //     await tx.insert(topics).values({
+    //       id: topicId,
+    //       name: prereq.name,
+    //       description: prereq.description,
+    //       category: knowledgeGraph.mainTopic,
+    //       previousTopicId: previousTopicId, // Link to previous prerequisite
+    //       metadata: JSON.stringify({
+    //         difficulty: prereq.difficulty,
+    //         estimatedHours: prereq.estimatedHours,
+    //         prerequisiteOrder: prereq.order
+    //       })
+    //     });
+
+    //     previousTopicId = topicId; // Set for next iteration
+    //   } catch (error) {
+    //     // Topic might already exist, update it
+    //     await tx.update(topics)
+    //       .set({
+    //         description: prereq.description,
+    //         previousTopicId: previousTopicId,
+    //         metadata: JSON.stringify({
+    //           difficulty: prereq.difficulty,
+    //           estimatedHours: prereq.estimatedHours,
+    //           prerequisiteOrder: prereq.order
+    //         })
+    //       })
+    //       .where(eq(topics.name, prereq.name));
+
+    //     // Get existing topic ID
+    //     const existingTopic = await tx.select({ id: topics.id })
+    //       .from(topics)
+    //       .where(eq(topics.name, prereq.name))
+    //       .limit(1);
+    //     if (existingTopic[0]) {
+    //       topicIds[prereq.id] = existingTopic[0].id;
+    //       previousTopicId = existingTopic[0].id;
+    //     }
+    //   }
+    // }
+
     for (const prereq of knowledgeGraph.prerequisites) {
       const topicId = createId();
-      topicIds[prereq.id] = topicId;
-
-      // Insert or update topic
-      try {
-        await tx.insert(topics).values({
-          id: topicId,
-          name: prereq.name,
-          description: prereq.description,
-          category: knowledgeGraph.mainTopic,
-          previousTopicId: previousTopicId, // Link to previous prerequisite
-          metadata: JSON.stringify({
-            difficulty: prereq.difficulty,
-            estimatedHours: prereq.estimatedHours,
-            prerequisiteOrder: prereq.order
-          })
-        });
-
-        previousTopicId = topicId; // Set for next iteration
-      } catch (error) {
-        // Topic might already exist, update it
+      
+      // First check if topic exists
+      const existingTopic = await tx.select({ id: topics.id })
+        .from(topics)
+        .where(eq(topics.name, prereq.name))
+        .limit(1);
+      
+      if (existingTopic[0]) {
+        // Update existing topic
+        topicIds[prereq.id] = existingTopic[0].id;
         await tx.update(topics)
           .set({
             description: prereq.description,
@@ -117,20 +153,27 @@ export async function createRoadmap(
               prerequisiteOrder: prereq.order
             })
           })
-          .where(eq(topics.name, prereq.name));
-
-        // Get existing topic ID
-        const existingTopic = await tx.select({ id: topics.id })
-          .from(topics)
-          .where(eq(topics.name, prereq.name))
-          .limit(1);
-        if (existingTopic[0]) {
-          topicIds[prereq.id] = existingTopic[0].id;
-          previousTopicId = existingTopic[0].id;
-        }
+          .where(eq(topics.id, existingTopic[0].id));
+        previousTopicId = existingTopic[0].id;
+      } else {
+        // Insert new topic
+        topicIds[prereq.id] = topicId;
+        await tx.insert(topics).values({
+          id: topicId,
+          name: prereq.name,
+          description: prereq.description,
+          category: knowledgeGraph.mainTopic,
+          previousTopicId: previousTopicId,
+          metadata: JSON.stringify({
+            difficulty: prereq.difficulty,
+            estimatedHours: prereq.estimatedHours,
+            prerequisiteOrder: prereq.order
+          })
+        });
+        previousTopicId = topicId;
       }
     }
-
+ 
     // 3. Create roadmap steps for each prerequisite
     for (const prereq of knowledgeGraph.prerequisites) {
       await tx.insert(roadmapSteps).values({
@@ -211,7 +254,7 @@ export async function createPrerequisiteQuiz(
 
 // Get user's roadmaps with progress
 export async function getUserRoadmaps(userId: string): Promise<RoadmapWithProgress[]> {
-  const roadmapsList = await db
+  const roadmapsWithProgress = await db
     .select({
       id: roadmaps.id,
       title: roadmaps.title,
@@ -219,36 +262,22 @@ export async function getUserRoadmaps(userId: string): Promise<RoadmapWithProgre
       status: roadmaps.status,
       progress: roadmaps.progress,
       createdAt: roadmaps.createdAt,
+      stepsCount: sql<number>`COUNT(${roadmapSteps.id})`.as('stepsCount'),
+      completedSteps: sql<number>`SUM(CASE WHEN ${roadmapSteps.isCompleted} = 1 THEN 1 ELSE 0 END)`.as('completedSteps')
     })
     .from(roadmaps)
+    .leftJoin(roadmapSteps, eq(roadmaps.id, roadmapSteps.roadmapId))
     .where(eq(roadmaps.userId, userId))
+    .groupBy(roadmaps.id, roadmaps.title, roadmaps.description, roadmaps.status, roadmaps.progress, roadmaps.createdAt)
     .orderBy(desc(roadmaps.createdAt));
 
-  // Get step counts and progress for each roadmap
-  const roadmapsWithProgress = await Promise.all(
-    roadmapsList.map(async (roadmap) => {
-      const steps = await db
-        .select({
-          total: roadmapSteps.id,
-          completed: roadmapSteps.isCompleted
-        })
-        .from(roadmapSteps)
-        .where(eq(roadmapSteps.roadmapId, roadmap.id));
-
-      const stepsCount = steps.length;
-      const completedSteps = steps.filter(step => step.completed).length;
-
-      return {
-        ...roadmap,
-        status: roadmap.status || 'active',
-        progress: roadmap.progress || 0,
-        stepsCount,
-        completedSteps
-      } as RoadmapWithProgress;
-    })
-  );
-
-  return roadmapsWithProgress;
+  return roadmapsWithProgress.map(roadmap => ({
+    ...roadmap,
+    status: roadmap.status || 'active',
+    progress: roadmap.progress || 0,
+    stepsCount: roadmap.stepsCount || 0,
+    completedSteps: roadmap.completedSteps || 0
+  })) as RoadmapWithProgress[];
 }
 
 // Get roadmap details with steps
@@ -286,59 +315,69 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
     .where(eq(roadmapSteps.roadmapId, roadmapId))
     .orderBy(asc(roadmapSteps.order));
 
-  // Get user knowledge status for each step - all steps are now available
-  const stepsWithProgress = await Promise.all(
-    steps.map(async (step) => {
-      let quizId: string | undefined;
-      let hasAttempt = false;
-
-      if (step.topicId) {
-        // Get quiz ID for this topic
-        const quiz = await db
-          .select({ id: quizzes.id })
-          .from(quizzes)
-          .where(and(
-            eq(quizzes.topicId, step.topicId),
-            eq(quizzes.roadmapId, roadmapId)
-          ))
-          .limit(1);
-        
-        quizId = quiz[0]?.id;
-
-        // Check if user has attempted this quiz
-        if (quizId) {
-          const attempt = await db
-            .select({ id: quizAttempts.id })
-            .from(quizAttempts)
-            .where(and(
-              eq(quizAttempts.userId, userId),
-              eq(quizAttempts.quizId, quizId)
-            ))
-            .limit(1);
-          
-          hasAttempt = !!attempt[0];
-        }
-      }
-
-      const metadata = step.topicMetadata ? JSON.parse(step.topicMetadata as string) : {};
-
-      return {
-        id: step.id,
-        roadmapId: step.roadmapId,
-        order: step.order,
-        title: step.title,
-        content: step.content,
-        durationMinutes: step.durationMinutes,
-        isCompleted: step.isCompleted,
-        topicId: step.topicId,
-        prerequisiteName: step.topicName,
-        difficulty: metadata.difficulty,
-        quizId,
-        hasAttempt,
-        canStart: true // All steps are always available now
-      } as RoadmapStep;
+  // Fetch all quizzes for this roadmap once
+  const roadmapQuizzes = await db
+    .select({
+      id: quizzes.id,
+      topicId: quizzes.topicId
     })
-  );
+    .from(quizzes)
+    .where(eq(quizzes.roadmapId, roadmapId));
+
+  // Build a map from topicId to quizId
+  const topicToQuizMap = new Map<string, string>();
+  const quizIds: string[] = [];
+  for (const quiz of roadmapQuizzes) {
+    if (quiz.topicId) {
+      topicToQuizMap.set(quiz.topicId, quiz.id);
+      quizIds.push(quiz.id);
+    }
+  }
+
+  // Fetch all user attempts for these quizzes once
+  let attemptedQuizIds = new Set<string>();
+  if (quizIds.length > 0) {
+    const userAttempts = await db
+      .select({ quizId: quizAttempts.quizId })
+      .from(quizAttempts)
+      .where(and(
+        eq(quizAttempts.userId, userId),
+        inArray(quizAttempts.quizId, quizIds)
+      ));
+    
+    attemptedQuizIds = new Set(userAttempts.map(a => a.quizId));
+  }
+
+  // Map steps to RoadmapStep objects using in-memory structures
+  const stepsWithProgress = steps.map((step) => {
+    let quizId: string | undefined;
+    let hasAttempt = false;
+
+    if (step.topicId) {
+      quizId = topicToQuizMap.get(step.topicId);
+      if (quizId) {
+        hasAttempt = attemptedQuizIds.has(quizId);
+      }
+    }
+
+    const metadata = step.topicMetadata ? JSON.parse(step.topicMetadata as string) : {};
+
+    return {
+      id: step.id,
+      roadmapId: step.roadmapId,
+      order: step.order,
+      title: step.title,
+      content: step.content,
+      durationMinutes: step.durationMinutes,
+      isCompleted: step.isCompleted,
+      topicId: step.topicId,
+      prerequisiteName: step.topicName,
+      difficulty: metadata.difficulty,
+      quizId,
+      hasAttempt,
+      canStart: true // All steps are always available now
+    } as RoadmapStep;
+  });
 
   return {
     roadmap: roadmap[0],
@@ -491,11 +530,15 @@ export async function submitQuizAttempt(
           })
           .where(eq(userSubtopicPerformance.id, existingPerf[0].id));
       } else {
+         if (!quiz[0]?.topicId) {
+          console.error(`Cannot create subtopic performance: quiz has no topicId for subtopicId ${subtopicId}`);
+          continue; // Skip this subtopic
+        }
         // Create new record
         await tx.insert(userSubtopicPerformance).values({
           userId,
           subtopicId,
-          topicId: quiz[0]?.topicId || '',
+          topicId: quiz[0]?.topicId,
           correctCount: perf.correct,
           incorrectCount: perf.incorrect,
           totalAttempts,
@@ -523,14 +566,7 @@ export async function submitQuizAttempt(
     });
 
     // Update user knowledge if passed
-    if (passed) {
-      const quiz = await tx
-        .select({ topicId: quizzes.topicId })
-        .from(quizzes)
-        .where(eq(quizzes.id, quizId))
-        .limit(1);
-
-      if (quiz[0]?.topicId) {
+    if (passed && quiz[0]?.topicId) {
         // Mark this topic as mastered
         await tx
           .update(userKnowledge)
@@ -591,7 +627,6 @@ export async function submitQuizAttempt(
             .where(eq(roadmaps.id, roadmapId));
         }
       }
-    }
 
     const feedback = passed 
       ? `Excellent! You scored ${score}% and can move to the next prerequisite.${weakSubtopics.length > 0 ? `\n\nNote: You may want to review these subtopics: ${weakSubtopics.join(', ')}` : ''}`
@@ -621,14 +656,11 @@ export async function getUserRoadmapProgress(userId: string, roadmapId: string):
     .where(eq(roadmapSteps.roadmapId, roadmapId))
     .orderBy(asc(roadmapSteps.order));
 
-  // Get latest quiz scores
-  const progressWithScores = await Promise.all(
-    progress.map(async (item) => {
-      const metadata = item.difficulty ? JSON.parse(item.difficulty as string) : {};
-      
-      // Get latest quiz attempt
-      const latestAttempt = await db
+    const topicIds = progress.map(p => p.prerequisiteId);
+  const allAttempts = topicIds.length > 0
+    ? await db
         .select({
+          topicId: quizzes.topicId,
           score: quizAttempts.score,
           completedAt: quizAttempts.completedAt
         })
@@ -636,10 +668,28 @@ export async function getUserRoadmapProgress(userId: string, roadmapId: string):
         .innerJoin(quizzes, eq(quizAttempts.quizId, quizzes.id))
         .where(and(
           eq(quizAttempts.userId, userId),
-          eq(quizzes.topicId, item.prerequisiteId)
+          inArray(quizzes.topicId, topicIds)
         ))
         .orderBy(desc(quizAttempts.completedAt))
-        .limit(1);
+    : [];
+  
+  // Build a map of topicId to latest attempt
+  const latestAttemptByTopic = new Map<string, { score: number | null; completedAt: Date | null }>();
+  for (const attempt of allAttempts) {
+    if (attempt.topicId && !latestAttemptByTopic.has(attempt.topicId)) {
+      latestAttemptByTopic.set(attempt.topicId, {
+        score: attempt.score,
+        completedAt: attempt.completedAt
+      });
+    }
+  }
+
+  // Get latest quiz scores
+  const progressWithScores = progress.map((item) => {
+      const metadata = item.difficulty ? JSON.parse(item.difficulty as string) : {};
+      
+      // Get latest quiz attempt
+      const latestAttempt = latestAttemptByTopic.get(item.prerequisiteId);
 
       return {
         prerequisiteId: item.prerequisiteId,
@@ -647,11 +697,10 @@ export async function getUserRoadmapProgress(userId: string, roadmapId: string):
         difficulty: metadata.difficulty || 'basic',
         isUnlocked: item.knowledgeStatus !== 'locked',
         isCompleted: item.knowledgeStatus === 'mastered',
-        quizScore: latestAttempt[0]?.score || undefined,
-        lastAttemptDate: latestAttempt[0]?.completedAt || undefined
+        quizScore: latestAttempt?.score || undefined,
+        lastAttemptDate: latestAttempt?.completedAt || undefined
       } as UserProgress;
-    })
-  );
+    });
 
   return progressWithScores;
 }
@@ -687,7 +736,10 @@ export async function getQuizWithQuestions(quizId: string): Promise<{
 
   return {
     quiz: quiz[0],
-    questions: quizQuestions
+    questions: quizQuestions.map(q => ({
+      ...q,
+      subtopicName: q.subtopicName || undefined
+    }))
   };
 }
 
@@ -845,32 +897,18 @@ export async function deleteRoadmap(userId: string, roadmapId: string): Promise<
     // Delete subtopics and their performance data
     if (topicIds.length > 0) {
       for (const topicId of topicIds) {
-        // Get subtopic IDs
-        const topicSubtopics = await tx
-          .select({ id: subtopics.id })
-          .from(subtopics)
-          .where(eq(subtopics.parentTopicId, topicId));
+        // Check if topic is used by other roadmaps before deleting
+        const otherReferences = await tx
+          .select({ id: roadmapSteps.id })
+          .from(roadmapSteps)
+          .where(and(
+            eq(roadmapSteps.topicId, topicId),
+            sql`${roadmapSteps.roadmapId} != ${roadmapId}`
+          ))
+          .limit(1);
 
-        const subtopicIds = topicSubtopics.map(st => st.id);
-
-        // Delete user subtopic performance
-        if (subtopicIds.length > 0) {
-          for (const subtopicId of subtopicIds) {
-            await tx
-              .delete(userSubtopicPerformance)
-              .where(eq(userSubtopicPerformance.subtopicId, subtopicId));
-          }
-          console.log('✅ Deleted subtopic performance data');
-        }
-
-        // Delete subtopics
-        await tx
-          .delete(subtopics)
-          .where(eq(subtopics.parentTopicId, topicId));
-        
-        console.log('✅ Deleted subtopics for topic:', topicId);
-
-        // Delete user knowledge for topics
+        // Only delete user-specific data if topic is shared
+        // Delete user knowledge for this user only
         await tx
           .delete(userKnowledge)
           .where(and(
@@ -878,12 +916,44 @@ export async function deleteRoadmap(userId: string, roadmapId: string): Promise<
             eq(userKnowledge.userId, userId)
           ));
         
-        // Delete topics
-        await tx
-          .delete(topics)
-          .where(eq(topics.id, topicId));
-        
-        console.log('✅ Deleted topic:', topicId);
+        console.log('✅ Deleted user knowledge for topic:', topicId);
+
+        // If topic is not used by other roadmaps, delete topic and all related data
+        if (otherReferences.length === 0) {
+          // Get subtopic IDs
+          const topicSubtopics = await tx
+            .select({ id: subtopics.id })
+            .from(subtopics)
+            .where(eq(subtopics.parentTopicId, topicId));
+
+          const subtopicIds = topicSubtopics.map(st => st.id);
+
+          // Delete user subtopic performance for all users
+          if (subtopicIds.length > 0) {
+            for (const subtopicId of subtopicIds) {
+              await tx
+                .delete(userSubtopicPerformance)
+                .where(eq(userSubtopicPerformance.subtopicId, subtopicId));
+            }
+            console.log('✅ Deleted subtopic performance data');
+          }
+
+          // Delete subtopics
+          await tx
+            .delete(subtopics)
+            .where(eq(subtopics.parentTopicId, topicId));
+          
+          console.log('✅ Deleted subtopics for topic:', topicId);
+
+          // Delete the topic itself
+          await tx
+            .delete(topics)
+            .where(eq(topics.id, topicId));
+          
+          console.log('✅ Deleted topic:', topicId);
+        } else {
+          console.log('⚠️ Topic', topicId, 'is shared with other roadmaps, skipping topic deletion');
+        }
       }
     }
 

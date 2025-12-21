@@ -27,6 +27,9 @@ export class RoadmapGenerationService {
       console.log('💾 Creating roadmap in database...');
       const roadmapId = await createRoadmap(userId, knowledgeGraph);
       
+      // Fetch roadmap and steps once to avoid N+1 queries
+      const { roadmap, steps } = await getRoadmapWithSteps(roadmapId, userId);
+      
       // Step 3: Generate quiz questions for each prerequisite
       console.log('❓ Generating quiz questions for prerequisites...');
       const quizGenerationPromises = knowledgeGraph.prerequisites.map(async (prerequisite) => {
@@ -34,8 +37,7 @@ export class RoadmapGenerationService {
           // Generate questions using Gemini
           const questions = await geminiService.generateQuizQuestions(prerequisite, topic);
 
-          // Create quiz in database - we'll need to get the topic ID
-          const { roadmap, steps } = await getRoadmapWithSteps(roadmapId, userId);
+          // Find matching step using cached steps
           const matchingStep = steps.find(step => step.prerequisiteName === prerequisite.name);
 
           if (matchingStep?.topicId) {
@@ -169,11 +171,18 @@ export class RoadmapGenerationService {
     try {
       const roadmaps = await getUserRoadmaps(userId);
       
-      // Get analytics for each active roadmap
-      const roadmapAnalytics = await Promise.all(
-        roadmaps
-          .filter(r => r.status === 'active')
-          .map(async (roadmap) => {
+      // Get analytics for each active roadmap with limited concurrency
+      // TODO: Consider introducing caching for dashboard metrics to reduce database load
+      const activeRoadmaps = roadmaps.filter(r => r.status === 'active');
+      
+      // Process roadmap analytics with concurrency limit of 4
+      const roadmapAnalytics: Array<{ roadmapId: string; analytics: any } | null> = [];
+      const concurrency = 4;
+      
+      for (let i = 0; i < activeRoadmaps.length; i += concurrency) {
+        const batch = activeRoadmaps.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+          batch.map(async (roadmap) => {
             try {
               const analytics = await this.getRoadmapAnalytics(userId, roadmap.id);
               return { roadmapId: roadmap.id, analytics };
@@ -182,7 +191,9 @@ export class RoadmapGenerationService {
               return null;
             }
           })
-      );
+        );
+        roadmapAnalytics.push(...batchResults);
+      }
       
       const validAnalytics = roadmapAnalytics.filter(Boolean);
       

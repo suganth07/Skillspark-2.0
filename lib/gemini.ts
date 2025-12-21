@@ -1,7 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(API_KEY);
+const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+if (!API_KEY) {
+  console.error('⚠️ EXPO_PUBLIC_GEMINI_API_KEY is not set. Gemini features will not work.');
+}
+const genAI = new GoogleGenerativeAI(API_KEY || '');
 
 export interface Prerequisite {
   id: string;

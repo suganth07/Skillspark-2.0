@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Alert } from 'react-native';
+import { View, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useUserStore } from '@/hooks/stores/useUserStore';
@@ -12,8 +12,13 @@ import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
 import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
 import { QuizComponent } from '@/components/roadmap/QuizComponent';
 import { QuizResults } from '@/components/roadmap/QuizResults';
+import { RoadmapCard } from '@/components/roadmap/RoadmapCard';
+import { RoadmapSkeleton } from '@/components/roadmap/RoadmapSkeleton';
+import { RoadmapEmptyState } from '@/components/roadmap/RoadmapEmptyState';
+import { ProgressTimeline } from '@/components/roadmap/ProgressTimeline';
+import { ProgressTimelineSkeleton } from '@/components/roadmap/ProgressTimelineSkeleton';
 import { ActivityIndicator } from 'react-native';
-import { Plus, BookOpen, TrendingUp, Clock, CheckCircle, ArrowRight, Trash2 } from 'lucide-react-native';
+import { Plus, BookOpen, CheckCircle, TrendingUp } from 'lucide-react-native';
 
 type ScreenState = 
   | { type: 'dashboard' }
@@ -112,23 +117,7 @@ export default function RoadmapScreen() {
     );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'text-green-600';
-      case 'active': return 'text-blue-600';
-      case 'archived': return 'text-gray-500';
-      default: return 'text-gray-600';
-    }
-  };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'active': return <TrendingUp className="h-5 w-5 text-blue-600" />;
-      case 'archived': return <Clock className="h-5 w-5 text-gray-500" />;
-      default: return <BookOpen className="h-5 w-5 text-gray-600" />;
-    }
-  };
 
   // Show loading state while initializing user
   if (userLoading && !currentUser) {
@@ -145,213 +134,81 @@ export default function RoadmapScreen() {
   // Render dashboard
   const renderDashboard = () => (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <ScrollView className="flex-1 p-6">
-        <View className="space-y-6">{/* Header */}
-        <View>
-          <Text className="text-3xl font-bold mb-2">Your Learning Journey</Text>
-          <Text className="text-muted-foreground text-lg">
-            Master any topic with AI-powered roadmaps and interactive quizzes
-          </Text>
+      {/* Sticky Header */}
+      <View className="px-6 pt-4 pb-3 bg-background border-b border-border">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1">
+            <Text className="text-2xl font-bold text-foreground">Learning Roadmaps</Text>
+            <Text className="text-sm text-muted-foreground mt-1">
+              AI-powered paths to master any topic
+            </Text>
+          </View>
+          <Pressable 
+            onPress={() => setScreenState({ type: 'create' })}
+            className="h-10 w-10 items-center justify-center rounded-lg bg-primary active:opacity-80"
+          >
+            <Plus size={20} className="text-primary-foreground" />
+          </Pressable>
         </View>
-
-        {/* Quick Stats */}
-        {roadmaps.length > 0 && (
-          <View className="flex-row space-x-3">
-            <Card className="flex-1">
-              <CardContent className="p-4">
-                <View className="flex-row items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-blue-600" />
-                  <View>
-                    <Text className="text-sm text-muted-foreground">Active</Text>
-                    <Text className="text-xl font-bold">
-                      {roadmaps.filter(r => r.status === 'active').length}
-                    </Text>
-                  </View>
-                </View>
-              </CardContent>
-            </Card>
-
-            <Card className="flex-1">
-              <CardContent className="p-4">
-                <View className="flex-row items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <View>
-                    <Text className="text-sm text-muted-foreground">Completed</Text>
-                    <Text className="text-xl font-bold">
-                      {roadmaps.filter(r => r.status === 'completed').length}
-                    </Text>
-                  </View>
-                </View>
-              </CardContent>
-            </Card>
-
-            <Card className="flex-1">
-              <CardContent className="p-4">
-                <View className="flex-row items-center space-x-2">
-                  <TrendingUp className="h-5 w-5 text-purple-600" />
-                  <View>
-                    <Text className="text-sm text-muted-foreground">Avg. Progress</Text>
-                    <Text className="text-xl font-bold">
-                      {roadmaps.length > 0 
-                        ? Math.round(roadmaps.reduce((acc, r) => acc + r.progress, 0) / roadmaps.length)
-                        : 0}%
-                    </Text>
-                  </View>
-                </View>
-              </CardContent>
-            </Card>
-          </View>
-        )}
-
-        {/* Create New Roadmap Button */}
-        <Button
-          onPress={() => setScreenState({ type: 'create' })}
-          className="flex-row items-center justify-center space-x-2 h-14"
-        >
-          <Plus className="h-5 w-5 text-white" />
-          <Text className="font-medium text-lg">Create New Roadmap</Text>
-        </Button>
-
-        {/* Loading State */}
-        {isLoading && (
-          <View className="flex-row justify-center py-8">
-            <ActivityIndicator size="large" />
-          </View>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <ErrorDisplay
-            error={error}
-            onRetry={() => currentUser && loadUserRoadmaps(currentUser.id)}
-            variant="card"
-          />
-        )}
-
-        {/* Roadmaps List */}
-        {!isLoading && !error && (
-          <>
-            {roadmaps.length === 0 ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Welcome to SkillSpark! 🚀</CardTitle>
-                  <CardDescription>
-                    Start your learning journey by creating your first roadmap
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Text className="text-muted-foreground">
-                    Our AI will analyze any topic you want to learn and create a personalized learning path with:
-                  </Text>
-                  <View className="space-y-2">
-                    <View className="flex-row items-center space-x-2">
-                      <Text className="text-blue-600">•</Text>
-                      <Text className="text-sm text-muted-foreground">
-                        Step-by-step prerequisites organized by difficulty
-                      </Text>
-                    </View>
-                    <View className="flex-row items-center space-x-2">
-                      <Text className="text-blue-600">•</Text>
-                      <Text className="text-sm text-muted-foreground">
-                        Interactive quizzes to test your knowledge
-                      </Text>
-                    </View>
-                    <View className="flex-row items-center space-x-2">
-                      <Text className="text-blue-600">•</Text>
-                      <Text className="text-sm text-muted-foreground">
-                        Progress tracking and personalized feedback
-                      </Text>
-                    </View>
-                  </View>
-                </CardContent>
-              </Card>
-            ) : (
-              <View className="space-y-4">
-                <Text className="text-xl font-semibold">Your Roadmaps</Text>
-                {roadmaps.map((roadmap) => (
-                  <Card key={roadmap.id}>
-                    <CardHeader>
-                      <View className="flex-row items-start justify-between">
-                        <View className="flex-1">
-                          <CardTitle className="text-lg">{roadmap.title}</CardTitle>
-                          {roadmap.description && (
-                            <CardDescription className="mt-1">
-                              {roadmap.description}
-                            </CardDescription>
-                          )}
-                        </View>
-                        <View className="flex-row items-center space-x-1 ml-4">
-                          {getStatusIcon(roadmap.status)}
-                          <Text className={`text-sm font-medium ${getStatusColor(roadmap.status)}`}>
-                            {roadmap.status}
-                          </Text>
-                        </View>
-                      </View>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <View>
-                        <View className="flex-row justify-between items-center mb-2">
-                          <Text className="text-sm font-medium">Progress</Text>
-                          <Text className="text-sm text-muted-foreground">
-                            {roadmap.completedSteps}/{roadmap.stepsCount} completed
-                          </Text>
-                        </View>
-                        <View className="w-full bg-gray-200 rounded-full h-2">
-                          <View 
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${roadmap.progress}%` }}
-                          />
-                        </View>
-                        <Text className="text-xs text-muted-foreground mt-1">
-                          {roadmap.progress}% complete
-                        </Text>
-                      </View>
-                      <Button
-                            variant="ghost"
-                            size="sm"
-                            onPress={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
-                            disabled={deletingRoadmapId === roadmap.id}
-                          >
-                            {deletingRoadmapId === roadmap.id ? (
-                              <ActivityIndicator size="small" color="#DC2626" />
-                            ) : (
-                              <Trash2 className="h-5 w-5 text-red-600 " />
-                            )}
-                          </Button>
-                      
-                      <View className="flex-row items-center justify-between">
-                        <View>
-                          {roadmap.createdAt && (
-                            <Text className="text-xs text-muted-foreground">
-                              Created {new Date(roadmap.createdAt).toLocaleDateString()}
-                            </Text>
-                            
-                          )}
-                          
-                        </View>
-                        
-                        <View className="flex-row items-center space-x-2">
-                          
-                          <Button
-                            onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
-                            className="flex-row items-center space-x-1"
-                          >
-                            <Text className="text-white">
-                              {roadmap.status === 'completed' ? 'Review' : 'Continue'}
-                            </Text>
-                            <ArrowRight className="h-4 w-4 text-white" />
-                          </Button>
-                        </View>
-                      </View>
-                    </CardContent>
-                  </Card>
-                ))}
-              </View>
-            )}
-          </>
-        )}
       </View>
-    </ScrollView>
+
+      <ScrollView 
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="pb-6"
+      >
+        <View className="px-6 space-y-6 pt-5">
+          {/* Progress Timeline - Only show if roadmaps exist */}
+          {isLoading && (
+            <ProgressTimelineSkeleton />
+          )}
+          
+          {!isLoading && !error && roadmaps.length > 0 && (
+            <ProgressTimeline roadmaps={roadmaps} />
+          )}
+
+          {/* Loading State with Skeletons */}
+          {isLoading && <RoadmapSkeleton />}
+
+          {/* Error State */}
+          {error && !isLoading && (
+            <ErrorDisplay
+              error={error}
+              onRetry={() => currentUser && loadUserRoadmaps(currentUser.id)}
+              variant="card"
+            />
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && roadmaps.length === 0 && (
+            <View className="flex-1 items-center justify-center">
+              <RoadmapEmptyState  onCreateRoadmap={() => setScreenState({ type: 'create' })} />
+            </View>
+          )}
+
+          {/* Roadmaps List */}
+          {!isLoading && !error && roadmaps.length > 0 && (
+            <View className="space-y-4">
+              <Text className="text-base pt-3 font-semibold text-foreground">
+                Your Roadmaps ({roadmaps.length})
+              </Text>
+              
+              {roadmaps.map((roadmap, index) => (
+                <View key={roadmap.id} className='py-2'>
+                <RoadmapCard
+                  key={roadmap.id}
+                  roadmap={roadmap}
+                  index={index}
+                  onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
+                  onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
+                  isDeleting={deletingRoadmapId === roadmap.id}
+                />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 

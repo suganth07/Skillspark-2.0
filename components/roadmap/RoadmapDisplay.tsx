@@ -440,7 +440,9 @@ function RoadmapStepItem({
                       <View className="flex-row items-center gap-1">
                         <Clock size={12} color="#6b7280" />
                         <Text className="text-xs text-muted-foreground">
-                          {Math.round(step.durationMinutes / 60)}h
+                          {step.durationMinutes < 60 
+                            ? `${step.durationMinutes}m` 
+                            : `${Math.round(step.durationMinutes / 60)}h`}
                         </Text>
                       </View>
                     )}

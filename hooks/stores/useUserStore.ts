@@ -12,6 +12,7 @@ interface UserState {
   isLoading: boolean;
   initError: string | null;
   isInitialized: boolean;
+  isInitializing: boolean;
   
   initialize: () => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
@@ -40,15 +41,18 @@ export const useUserStore = create<UserState>((set, get) => ({
   isLoading: false,
   initError: null,
   isInitialized: false,
+  isInitializing: false,
 
   initialize: async () => {
     // Prevent duplicate initialization
-    const { isInitialized } = get();
-    if (isInitialized) {
-      console.log("UserStore: Already initialized, skipping...");
+    const { isInitialized, isInitializing } = get();
+    if (isInitialized || isInitializing) {
+      console.log("UserStore: Already initialized or initializing, skipping...");
       return;
     }
 
+    set({ isInitializing: true });
+    
     try {
       console.log("UserStore: Starting initialization...");
       set({ isLoading: true, initError: null });
@@ -95,6 +99,8 @@ export const useUserStore = create<UserState>((set, get) => ({
       });
       // Re-throw so callers can handle the error
       throw error;
+    } finally {
+      set({ isInitializing: false });
     }
   },
 

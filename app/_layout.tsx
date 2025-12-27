@@ -37,7 +37,7 @@ function AppInitializer({ children, onReady }: { children: React.ReactNode; onRe
     } else if (isInitialized) {
       onReady();
     }
-  }, [db, isInitialized]);
+  }, [db, isInitialized, initialize, onReady]);
 
   return <>{children}</>;
 }

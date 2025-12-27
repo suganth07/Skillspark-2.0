@@ -4,11 +4,7 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Rocket } from 'lucide-react-native';
 
-interface RoadmapEmptyStateProps {
-  onCreateRoadmap: () => void;
-}
-
-export function RoadmapEmptyState({ onCreateRoadmap }: RoadmapEmptyStateProps) {
+export function RoadmapEmptyState() {
   return (
     <View className="flex-1 items-center justify-center px-6 py-16">
       <View className="items-center space-y-4 max-w-md">

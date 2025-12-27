@@ -224,7 +224,11 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                     if (selectedStep.quizId) {
                       onTakeQuiz?.(selectedStep.quizId, selectedStep.title);
                     } else {
-                      handleTakeQuiz(selectedStep);
+                      Alert.alert(
+                        'Quiz Not Available',
+                        'No quiz is available for this step yet. Please try selecting "Totally New" to generate learning content.',
+                        [{ text: 'OK' }]
+                      );
                     }
                   }
                 }}

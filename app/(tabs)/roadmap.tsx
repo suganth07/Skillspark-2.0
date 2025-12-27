@@ -198,7 +198,7 @@ export default function RoadmapScreen() {
           {/* Empty State */}
           {!isLoading && !error && roadmaps.length === 0 && (
             <View className="flex-1 items-center justify-center">
-              <RoadmapEmptyState  onCreateRoadmap={() => setScreenState({ type: 'create' })} />
+              <RoadmapEmptyState />
             </View>
           )}
 

@@ -223,6 +223,15 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                 />
               </CardHeader>
               <CardContent>
+                {validationError && (
+                  <View className="mb-4">
+                    <ErrorDisplay
+                      error={validationError}
+                      onDismiss={() => setValidationError(null)}
+                      variant="inline"
+                    />
+                  </View>
+                )}
                 {error && (
                   <View className="mb-4">
                     <ErrorDisplay

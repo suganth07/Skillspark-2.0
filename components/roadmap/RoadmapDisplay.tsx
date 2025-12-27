@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { View, Alert, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Pressable, ActivityIndicator, Modal, Alert } from 'react-native';
+import Animated, { FadeInDown, FadeIn, ZoomIn, FadeOut } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorDisplay } from '@/components/ui/error-display';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { useUserStore } from '@/hooks/stores/useUserStore';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
-import { ActivityIndicator } from 'react-native';
-import { Check, Play, Clock, BookOpen, Zap, ChevronRight, Trash2 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { 
+  CheckCircle, 
+  Circle, 
+  Clock, 
+  Sparkles, 
+  Trophy,
+  BookOpen,
+  ChevronRight,
+  Trash2,
+  Rocket,
+} from 'lucide-react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { cn } from '@/lib/utils';
 
 interface RoadmapDisplayProps {
   roadmapId: string;
@@ -22,8 +33,9 @@ interface RoadmapDisplayProps {
 }
 
 export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete }: RoadmapDisplayProps) {
-  const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
   const router = useRouter();
   const { currentUser } = useUserStore();
   const { 
@@ -34,7 +46,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     loadRoadmapDetails,
     generateQuizForPrerequisite,
     deleteRoadmap,
-    clearError
   } = useRoadmapStore();
 
   useEffect(() => {
@@ -43,176 +54,77 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     }
   }, [roadmapId, currentUser]);
 
+  // Reload roadmap details when returning from quiz
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser && roadmapId) {
+        loadRoadmapDetails(roadmapId, currentUser.id);
+      }
+    }, [roadmapId, currentUser, loadRoadmapDetails])
+  );
+
   const handleTakeQuiz = async (step: RoadmapStep) => {
-    if (!currentUser) return;
+    if (!currentUser || !step.quizId) return;
     
-    try {
-      let quizId = step.quizId;
-      
-      // If no quiz exists, generate one
-      if (!quizId) {
-        setGeneratingQuizForStep(step.id);
-        quizId = await generateQuizForPrerequisite(
-          currentUser.id,
-          roadmapId,
-          step.id,
-          step.title
-        );
-        setGeneratingQuizForStep(null);
-      }
-      
-      if (quizId) {
-        onTakeQuiz?.(quizId, step.title);
-      }
-    } catch (error) {
-      setGeneratingQuizForStep(null);
-      console.error('Failed to generate/load quiz:', error);
-      Alert.alert(
-        'Error',
-        'Failed to generate quiz. Please try again.',
-        [{ text: 'OK' }]
-      );
-    }
+    onTakeQuiz?.(step.quizId, step.title);
   };
 
   const handleTopicPress = (step: RoadmapStep) => {
     if (!step.topicId) return;
 
-    // If user has already attempted the quiz, skip the knowledge assessment
     if (step.hasAttempt) {
       router.push(`/topic/${step.topicId}`);
       return;
     }
 
-    // Show dialog to check user's knowledge level (only for first-time learners)
-    Alert.alert(
-      'Knowledge Assessment',
-      'Are you totally new to this topic or have a little idea about it?',
-      [
-        {
-          text: 'Totally New',
-          onPress: () => {
-            // User is new, show content directly
-            router.push(`/topic/${step.topicId}`);
-          }
-        },
-        {
-          text: 'Have Little Idea',
-          onPress: () => {
-            // User has some knowledge, check if quiz is available
-            if (step.quizId) {
-              Alert.alert(
-                'Take Quiz First',
-                'Since you have some prior knowledge, please take the quiz first to assess your understanding. This will help us identify areas where you need more focus.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      // Navigate to quiz
-                      onTakeQuiz?.(step.quizId!, step.title);
-                    }
-                  }
-                ]
-              );
-            } else {
-              // No quiz available yet, need to generate
-              Alert.alert(
-                'Generate Quiz',
-                'A quiz needs to be generated first. Would you like to generate it now?',
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel'
-                  },
-                  {
-                    text: 'Generate Quiz',
-                    onPress: () => handleTakeQuiz(step)
-                  }
-                ]
-              );
-            }
-          }
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
+    setSelectedStep(step);
+    setShowKnowledgeModal(true);
   };
 
-  const handleDeleteRoadmap = async () => {
+  const handleConfirmDelete = async () => {
     if (!currentUser) return;
 
-    Alert.alert(
-      'Delete Roadmap',
-      'Are you sure you want to delete this roadmap? This will permanently delete all quizzes, questions, attempts, and related data. This action cannot be undone.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeleting(true);
-              await deleteRoadmap(currentUser.id, roadmapId);
-              Alert.alert(
-                'Success',
-                'Roadmap deleted successfully',
-                [{ 
-                  text: 'OK',
-                  onPress: () => onDelete?.()
-                }]
-              );
-            } catch (error) {
-              console.error('Failed to delete roadmap:', error);
-              Alert.alert(
-                'Error',
-                error instanceof Error ? error.message : 'Failed to delete roadmap',
-                [{ text: 'OK' }]
-              );
-            } finally {
-              setIsDeleting(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'basic': return 'bg-green-100 text-green-800';
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800';
-      case 'advanced': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStepStatus = (step: RoadmapStep) => {
-    if (step.isCompleted) return 'completed';
-    return 'available';
-  };
-
-  const getStepIcon = (status: string, hasQuiz: boolean) => {
-    switch (status) {
-      case 'completed':
-        return <Check className="h-5 w-5 text-green-600" />;
-      case 'available':
-        return hasQuiz ? <Play className="h-5 w-5 text-blue-600" /> : <BookOpen className="h-5 w-5 text-gray-600" />;
-      default:
-        return <Clock className="h-5 w-5 text-gray-400" />;
+    try {
+      await deleteRoadmap(currentUser.id, roadmapId);
+      onDelete?.();
+    } catch (error) {
+      console.error('Failed to delete roadmap:', error);
     }
   };
 
   if (isLoading) {
     return (
-      <View className="flex-1 justify-center items-center p-6">
-        <ActivityIndicator size="large" />
-        <Text className="mt-4 text-center text-muted-foreground">Loading roadmap...</Text>
+      <View className="flex-1 bg-background p-6">
+        {/* Header Skeleton */}
+        <View className="flex-row items-start mb-6">
+          <Skeleton className="h-8 w-8 rounded-full mr-3" />
+          <View className="flex-1">
+            <Skeleton className="h-7 w-3/4 mb-2" />
+            <Skeleton className="h-4 w-full" />
+          </View>
+          <Skeleton className="h-10 w-10 rounded-lg ml-4" />
+        </View>
+
+        {/* Progress Card Skeleton */}
+        <View className="mb-6">
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </View>
+
+        {/* Timeline Skeletons */}
+        <Skeleton className="h-5 w-32 mb-2" />
+        <Skeleton className="h-3 w-48 mb-6" />
+
+        {[1, 2, 3].map((i) => (
+          <View key={i} className="flex-row mb-6">
+            <View className="items-center mr-4">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              {i !== 3 && <View className="w-0.5 flex-1 my-1" style={{ minHeight: 60, backgroundColor: 'rgba(128, 128, 128, 0.2)' }} />}
+            </View>
+            <View className="flex-1">
+              <Skeleton className="h-40 w-full rounded-xl" />
+            </View>
+          </View>
+        ))}
       </View>
     );
   }
@@ -229,7 +141,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
 
   if (!currentRoadmap) {
     return (
-      <View className="flex-1 justify-center items-center p-6">
+      <View className="flex-1 justify-center items-center p-6 bg-background">
         <Text className="text-center text-muted-foreground">No roadmap data available</Text>
       </View>
     );
@@ -239,220 +151,341 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const completedSteps = steps.filter(step => step.isCompleted).length;
   const totalSteps = steps.length;
   const progressPercentage = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+  const isCompleted = completedSteps === totalSteps && totalSteps > 0;
 
   return (
-    <ScrollView className="flex-1 p-6 bg-background">
-      <View className="space-y-6">
-        {/* Header */}
-        <Card>
-          <CardHeader>
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1 mr-2">
-                <CardTitle>{roadmap.title}</CardTitle>
-                <CardDescription>{roadmap.description}</CardDescription>
-              </View>
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={handleDeleteRoadmap}
-                disabled={isDeleting}
+    <>
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Roadmap"
+        description="Are you sure you want to delete this roadmap? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDelete}
+      />
+
+      {/* Knowledge Assessment Modal */}
+      <Modal
+        transparent
+        visible={showKnowledgeModal}
+        animationType="none"
+        onRequestClose={() => setShowKnowledgeModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowKnowledgeModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-sm overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <Text className="text-xl font-bold text-foreground mb-2">
+                Knowledge Assessment
+              </Text>
+              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                Are you totally new to this topic or have a little idea about it?
+              </Text>
+
+              <Pressable
+                onPress={() => {
+                  if (selectedStep?.topicId) {
+                    router.push(`/topic/${selectedStep.topicId}`);
+                  }
+                  setShowKnowledgeModal(false);
+                }}
+                className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90 mb-3"
               >
-                {isDeleting ? (
-                  <ActivityIndicator size="small" color="#DC2626" />
-                ) : (
-                  <Trash2 className="h-5 w-5 text-red-600" />
-                )}
-              </Button>
-            </View>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <View>
-              <View className="flex-row justify-between items-center mb-2">
-                <Text className="text-sm font-medium">Overall Progress</Text>
-                <Text className="text-sm text-muted-foreground">
-                  {completedSteps}/{totalSteps} completed
+                <Text className="text-base font-semibold text-primary-foreground">
+                  Totally New
                 </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowKnowledgeModal(false);
+                  if (selectedStep) {
+                    if (selectedStep.quizId) {
+                      onTakeQuiz?.(selectedStep.quizId, selectedStep.title);
+                    } else {
+                      handleTakeQuiz(selectedStep);
+                    }
+                  }
+                }}
+                className="w-full h-12 items-center justify-center rounded-lg border border-border bg-background active:bg-secondary mb-3"
+              >
+                <Text className="text-base font-medium text-foreground">
+                  Have Little Idea
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setShowKnowledgeModal(false)}
+                className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
+              >
+                <Text className="text-base font-medium text-muted-foreground">
+                  Cancel
+                </Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
+      {/* Header Section */}
+      <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
+        <View className="flex-row items-start justify-between mb-4">
+          
+          <View className="flex-1 mr-4">
+            <Text className="text-2xl font-bold text-foreground mb-2">{roadmap.title}</Text>
+            {roadmap.description && (
+              <Text className="text-sm text-muted-foreground leading-relaxed">
+                {roadmap.description}
+              </Text>
+            )}
+          </View>
+          <Pressable
+            onPress={() => setShowDeleteDialog(true)}
+            className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <Trash2 size={20} className="text-red-600 dark:text-red-400" />
+          </Pressable>
+        </View>
+
+        {/* Progress Card */}
+        <Card className="overflow-hidden">
+          <View className="p-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center gap-2">
+                <Trophy size={18} className="text-primary" />
+                <Text className="text-sm font-semibold text-foreground">Your Progress</Text>
               </View>
-              <Progress value={progressPercentage} className="h-3" />
-              <Text className="text-xs text-muted-foreground mt-1">
-                {Math.round(progressPercentage)}% complete
+              <Text className="text-sm font-bold text-primary">
+                {completedSteps}/{totalSteps}
               </Text>
             </View>
-
-            {roadmap.status === 'completed' && (
-              <View className="bg-green-50 p-3 rounded-lg">
-                <Text className="text-green-800 font-medium">🎉 Roadmap Completed!</Text>
-                <Text className="text-green-700 text-sm">
-                  Congratulations! You've mastered all prerequisites for this topic.
+            <Progress value={progressPercentage} className="h-2 mb-2" />
+            <Text className="text-xs text-muted-foreground">
+              {Math.round(progressPercentage)}% complete
+            </Text>
+          </View>
+          
+          {isCompleted && (
+            <View 
+              className="px-4 pb-4 pt-2"
+              style={{
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                borderTopWidth: 1,
+                borderTopColor: 'rgba(34, 197, 94, 0.2)',
+              }}
+            >
+              <View className="flex-row items-center gap-2">
+                <Sparkles size={16} className="text-green-600 dark:text-green-400" />
+                <Text className="text-sm font-semibold text-green-600 dark:text-green-400">
+                  Roadmap Completed! Congratulations!
                 </Text>
               </View>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Learning Path */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Learning Path</CardTitle>
-            <CardDescription>
-              Complete each prerequisite in order. Unlock new topics by passing quizzes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <View className="space-y-3">
-              {steps.map((step, index) => {
-                const status = getStepStatus(step);
-                const hasQuiz = Boolean(step.quizId);
-                const isGeneratingThisQuiz = generatingQuizForStep === step.id;
-                
-                return (
-                  <Pressable
-                    key={step.id}
-                    onPress={() => handleTopicPress(step)}
-                    className={`border rounded-lg p-4 ${
-                      status === 'completed' ? 'border-green-200 bg-green-50' :
-                      'border-blue-200 bg-blue-50'
-                    }`}
-                  >
-                    <View className="flex-row items-start space-x-3">
-                      <View className="flex-shrink-0 mt-1">
-                        {getStepIcon(status, hasQuiz)}
-                      </View>
-                      
-                      <View className="flex-1">
-                        <View className="flex-row items-center justify-between mb-2">
-                          <View className="flex-1 flex-row items-center space-x-2">
-                            <Text className="font-medium text-lg">{step.title}</Text>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </View>
-                          <View className="flex-row items-center space-x-2">
-                            <Badge className={getDifficultyColor(step.difficulty || 'basic')}>
-                              <Text className="text-xs font-medium">
-                                {step.difficulty || 'basic'}
-                              </Text>
-                            </Badge>
-                            <Text className="text-xs text-muted-foreground">
-                              Step {step.order}
-                            </Text>
-                          </View>
-                        </View>
-                        
-                        {step.content && (
-                          <Text className="text-sm text-muted-foreground mb-3 leading-5">
-                            {step.content.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').substring(0, 150)}
-                            {step.content.length > 150 ? '...' : ''}
-                          </Text>
-                        )}
-                        
-                        <View className="flex-row items-center justify-between">
-                          <View className="flex-row items-center space-x-4">
-                            {step.durationMinutes && (
-                              <View className="flex-row items-center space-x-1">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                <Text className="text-xs text-muted-foreground">
-                                  {Math.round(step.durationMinutes / 60)}h
-                                </Text>
-                              </View>
-                            )}
-                            
-                            {hasQuiz && (
-                              <View className="flex-row items-center space-x-1">
-                                <Zap className="h-4 w-4 text-green-600" />
-                                <Text className="text-xs text-green-600">
-                                  Quiz Ready
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          
-                          {status === 'available' && (
-                            <View 
-                              className="flex-row items-center space-x-2"
-                              onStartShouldSetResponder={() => true}
-                              onResponderGrant={() => {}}
-                            >
-                              {isGeneratingThisQuiz ? (
-                                <View className="flex-row items-center space-x-2">
-                                  <ActivityIndicator size="small" />
-                                  <Text className="text-xs text-muted-foreground">
-                                    Creating quiz...
-                                  </Text>
-                                </View>
-                              ) : (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant={hasQuiz ? 'default' : 'outline'}
-                                    onPress={() => handleTakeQuiz(step)}
-                                    disabled={isGeneratingQuiz}
-                                  >
-                                    <Text className={hasQuiz ? 'text-white text-sm' : 'text-sm'}>
-                                      {hasQuiz ? 'Take Quiz' : 'Generate Quiz'}
-                                    </Text>
-                                  </Button>
-                                  {hasQuiz && step.hasAttempt && onViewResults && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onPress={() => onViewResults(step.quizId!, step.title)}
-                                    >
-                                      <Text className="text-sm">View Results</Text>
-                                    </Button>
-                                  )}
-                                </>
-                              )}
-                            </View>
-                          )}
-                          
-                          {status === 'completed' && (
-                            <View className="flex-row items-center space-x-2">
-                              <Text className="text-xs text-green-600 font-medium">
-                                ✅ Completed
-                              </Text>
-                              {hasQuiz && step.hasAttempt && onViewResults && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onPress={() => onViewResults(step.quizId!, step.title)}
-                                >
-                                  <Text className="text-sm">View Results</Text>
-                                </Button>
-                              )}
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
             </View>
-          </CardContent>
+          )}
         </Card>
+      </Animated.View>
 
-        {/* Progress Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Progress Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <View className="space-y-2">
-              <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted-foreground">Total Steps</Text>
-                <Text className="text-sm">{totalSteps}</Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted-foreground">Completed</Text>
-                <Text className="text-sm">{completedSteps}</Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted-foreground">Remaining</Text>
-                <Text className="text-sm">{totalSteps - completedSteps}</Text>
-              </View>
-            </View>
-          </CardContent>
-        </Card>
+      {/* Roadmap Timeline */}
+      <View className="px-6 pb-8">
+        <View className="mb-4">
+          <Text className="text-base font-semibold text-foreground">Learning Path</Text>
+          <Text className="text-xs text-muted-foreground mt-1">
+            Complete each step to master the topic
+          </Text>
+        </View>
+
+        {steps.map((step, index) => (
+          <RoadmapStepItem
+            key={step.id}
+            step={step}
+            index={index}
+            isLast={index === steps.length - 1}
+            onPress={() => handleTopicPress(step)}
+            onTakeQuiz={() => handleTakeQuiz(step)}
+            onViewResults={
+              step.quizId && step.hasAttempt && onViewResults
+                ? () => onViewResults(step.quizId!, step.title)
+                : undefined
+            }
+          />
+        ))}
       </View>
     </ScrollView>
+    </>
+  );
+}
+
+interface RoadmapStepItemProps {
+  step: RoadmapStep;
+  index: number;
+  isLast: boolean;
+  onPress: () => void;
+  onTakeQuiz: () => void;
+  onViewResults?: () => void;
+}
+
+function RoadmapStepItem({
+  step,
+  index,
+  isLast,
+  onPress,
+  onTakeQuiz,
+  onViewResults,
+}: RoadmapStepItemProps) {
+  const isCompleted = step.isCompleted;
+  const hasQuiz = Boolean(step.quizId);
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 50).duration(400).springify()}
+      className="flex-row"
+    >
+      {/* Timeline */}
+      <View className="items-center mr-4 pt-1">
+        {/* Node */}
+        <View
+          className={cn(
+            'h-10 w-10 rounded-full items-center justify-center border-2',
+            isCompleted
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
+              : 'bg-background border-primary'
+          )}
+        >
+          {isCompleted ? (
+            <CheckCircle size={20} color="#22c55e" />
+          ) : (
+            <Circle size={20} className="text-primary" />
+          )}
+        </View>
+
+        {/* Connecting Line */}
+        {!isLast && (
+          <View
+            className={cn(
+              'w-0.5 flex-1 my-1',
+              isCompleted ? 'bg-green-500/30' : 'bg-border'
+            )}
+            style={{ minHeight: 60 }}
+          />
+        )}
+      </View>
+
+      {/* Content */}
+      <View className="flex-1 pb-6">
+        <Pressable onPress={onPress} className="active:opacity-70">
+          <Card className="overflow-hidden">
+            <View className="p-4">
+              {/* Title */}
+              <View className="flex-row items-start justify-between mb-2">
+                <View className="flex-1 mr-2">
+                  <Text className="text-base font-semibold text-foreground mb-1">
+                    {step.title}
+                  </Text>
+                  <View className="flex-row items-center gap-1 flex-wrap">
+                    <View className="flex-row items-center gap-1">
+                      <Text className="text-xs text-muted-foreground">Step {step.order}</Text>
+                    </View>
+                    {step.difficulty && (
+                      <View
+                        className={cn(
+                          'px-2 py-0.5 rounded-full',
+                          step.difficulty === 'basic'
+                            ? 'bg-green-100 dark:bg-green-950'
+                            : step.difficulty === 'intermediate'
+                            ? 'bg-yellow-100 dark:bg-yellow-950'
+                            : 'bg-red-100 dark:bg-red-950'
+                        )}
+                      >
+                        <Text
+                          className={cn(
+                            'text-xs font-medium',
+                            step.difficulty === 'basic'
+                              ? 'text-green-700 dark:text-green-400'
+                              : step.difficulty === 'intermediate'
+                              ? 'text-yellow-700 dark:text-yellow-400'
+                              : 'text-red-700 dark:text-red-400'
+                          )}
+                        >
+                          {step.difficulty}
+                        </Text>
+                      </View>
+                    )}
+                    {step.durationMinutes && (
+                      <View className="flex-row items-center gap-1">
+                        <Clock size={12} color="#6b7280" />
+                        <Text className="text-xs text-muted-foreground">
+                          {Math.round(step.durationMinutes / 60)}h
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <ChevronRight size={18} className="text-muted-foreground mt-1" />
+              </View>
+
+              {/* Actions */}
+              <View className="flex-row items-center gap-2 flex-wrap">
+                {!isCompleted && hasQuiz && (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onTakeQuiz();
+                    }}
+                    className="px-4 py-2 rounded-lg flex-row items-center gap-2 bg-primary active:opacity-90"
+                  >
+                    <BookOpen size={14} className="text-primary-foreground" />
+                    <Text className="text-sm font-medium text-primary-foreground">
+                      Take Quiz
+                    </Text>
+                  </Pressable>
+                )}
+
+                {onViewResults && (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onViewResults();
+                    }}
+                    className="px-4 py-2 rounded-lg border border-border bg-background active:bg-secondary"
+                  >
+                    <Text className="text-sm font-medium text-foreground">View Results</Text>
+                  </Pressable>
+                )}
+
+                {isCompleted && (
+                  <View className="px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950">
+                    <Text className="text-xs font-semibold text-green-700 dark:text-green-400">
+                      ✓ Completed
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Card>
+        </Pressable>
+      </View>
+    </Animated.View>
   );
 }

@@ -29,6 +29,8 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [quizResult, setQuizResult] = useState<any>(null);
   const [showResults, setShowResults] = useState(false);
   const [timeStarted, setTimeStarted] = useState<Date>(new Date());
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
   const { currentUser } = useUserStore();
   const { 
@@ -59,13 +61,12 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
     // Check if all questions are answered
     const unansweredQuestions = currentQuiz.questions.filter(q => !(q.id in answers));
     if (unansweredQuestions.length > 0) {
-      Alert.alert(
-        'Incomplete Quiz',
-        `Please answer all questions before submitting. ${unansweredQuestions.length} questions remaining.`,
-        [{ text: 'OK' }]
-      );
+      setValidationError(`Please answer all questions before submitting. ${unansweredQuestions.length} questions remaining.`);
       return;
     }
+
+    setValidationError(null);
+    setSubmitError(null);
 
     Alert.alert(
       'Submit Quiz',
@@ -87,7 +88,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
               onQuizComplete?.(result);
             } catch (err) {
               console.error('Failed to submit quiz:', err);
-              Alert.alert('Error', 'Failed to submit quiz. Please try again.');
+              setSubmitError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.');
             }
           }
         }
@@ -280,6 +281,24 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   return (
     <ScrollView className="flex-1 p-6 bg-background">
       <View className="space-y-6">
+        {/* Validation Error */}
+        {validationError && (
+          <ErrorDisplay
+            error={validationError}
+            onDismiss={() => setValidationError(null)}
+            variant="inline"
+          />
+        )}
+        
+        {/* Submit Error */}
+        {submitError && (
+          <ErrorDisplay
+            error={submitError}
+            onDismiss={() => setSubmitError(null)}
+            variant="inline"
+          />
+        )}
+        
         {/* Quiz Header */}
         <Card>
           <CardHeader>

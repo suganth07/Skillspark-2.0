@@ -3,11 +3,12 @@ import { View, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useUserStore } from '@/hooks/stores/useUserStore';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
+import { useColorScheme } from '@/lib/useColorScheme';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
 import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
 import { QuizComponent } from '@/components/roadmap/QuizComponent';
@@ -15,10 +16,8 @@ import { QuizResults } from '@/components/roadmap/QuizResults';
 import { RoadmapCard } from '@/components/roadmap/RoadmapCard';
 import { RoadmapSkeleton } from '@/components/roadmap/RoadmapSkeleton';
 import { RoadmapEmptyState } from '@/components/roadmap/RoadmapEmptyState';
-import { ProgressTimeline } from '@/components/roadmap/ProgressTimeline';
-import { ProgressTimelineSkeleton } from '@/components/roadmap/ProgressTimelineSkeleton';
 import { ActivityIndicator } from 'react-native';
-import { Plus, BookOpen, CheckCircle, TrendingUp } from 'lucide-react-native';
+import { Plus, ArrowLeft, Search, Rocket } from 'lucide-react-native';
 
 type ScreenState = 
   | { type: 'dashboard' }
@@ -30,8 +29,11 @@ type ScreenState =
 export default function RoadmapScreen() {
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'dashboard' });
   const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { currentUser, isLoading: userLoading } = useUserStore();
-  const { 
+  const { isDarkColorScheme } = useColorScheme();
+  const {
     roadmaps, 
     isLoading, 
     error, 
@@ -105,11 +107,7 @@ export default function RoadmapScreen() {
             } catch (error) {
               setDeletingRoadmapId(null);
               console.error('Failed to delete roadmap:', error);
-              Alert.alert(
-                'Error',
-                error instanceof Error ? error.message : 'Failed to delete roadmap',
-                [{ text: 'OK' }]
-              );
+              setDeleteError(error instanceof Error ? error.message : 'Failed to delete roadmap');
             }
           }
         }
@@ -137,6 +135,24 @@ export default function RoadmapScreen() {
       {/* Sticky Header */}
       <View className="px-6 pt-4 pb-3 bg-background border-b border-border">
         <View className="flex-row items-center justify-between">
+          {/* Rocket Icon with Glow */}
+          <View className="mr-3">
+            <View
+              style={{
+                shadowColor: '#7c3aed',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.6,
+                shadowRadius: 12,
+                elevation: 8,
+              }}
+            >
+              <Rocket 
+                size={28} 
+                color="#7c3aed"
+              />
+            </View>
+          </View>
+          
           <View className="flex-1">
             <Text className="text-2xl font-bold text-foreground">Learning Roadmaps</Text>
             <Text className="text-sm text-muted-foreground mt-1">
@@ -158,15 +174,15 @@ export default function RoadmapScreen() {
         contentContainerClassName="pb-6"
       >
         <View className="px-6 space-y-6 pt-5">
-          {/* Progress Timeline - Only show if roadmaps exist */}
-          {isLoading && (
-            <ProgressTimelineSkeleton />
+          {/* Delete Error */}
+          {deleteError && (
+            <ErrorDisplay
+              error={deleteError}
+              onDismiss={() => setDeleteError(null)}
+              variant="inline"
+            />
           )}
           
-          {!isLoading && !error && roadmaps.length > 0 && (
-            <ProgressTimeline roadmaps={roadmaps} />
-          )}
-
           {/* Loading State with Skeletons */}
           {isLoading && <RoadmapSkeleton />}
 
@@ -189,20 +205,55 @@ export default function RoadmapScreen() {
           {/* Roadmaps List */}
           {!isLoading && !error && roadmaps.length > 0 && (
             <View className="space-y-4">
-              <Text className="text-base pt-3 font-semibold text-foreground">
-                Your Roadmaps ({roadmaps.length})
+              {/* Search Bar */}
+              <View className="relative">
+                <Input
+                  placeholder="Search roadmaps..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  className="pl-10 h-11 bg-secondary/50 border-border"
+                />
+                <View className="absolute left-3 top-0 bottom-0 justify-center">
+                  <Search 
+                    size={18} 
+                    className="text-muted-foreground"
+                  />
+                </View>
+              </View>
+              
+              <Text className="text-base pt-2 font-semibold text-foreground">
+                Your Roadmaps ({roadmaps.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase())).length})
               </Text>
               
-              {roadmaps.map((roadmap, index) => (
+              {roadmaps
+                .filter(roadmap => roadmap.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((roadmap, index) => (
                 <View key={roadmap.id} className='py-2'>
-                <RoadmapCard
-                  key={roadmap.id}
-                  roadmap={roadmap}
-                  index={index}
-                  onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
-                  onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
-                  isDeleting={deletingRoadmapId === roadmap.id}
-                />
+                  {/* Purple glow container */}
+                  <View className="relative">
+                    {/* Glow effect */}
+                    <View 
+                      className="absolute -inset-[1px] rounded-xl" 
+                      style={{ 
+                        backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                        shadowColor: '#7c3aed',
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.4,
+                        shadowRadius: 16,
+                        elevation: 10,
+                      }}
+                    />
+                    {/* Card */}
+                    <View style={{ position: 'relative', zIndex: 1 }}>
+                      <RoadmapCard
+                        roadmap={roadmap}
+                        index={index}
+                        onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
+                        onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
+                        isDeleting={deletingRoadmapId === roadmap.id}
+                      />
+                    </View>
+                  </View>
                 </View>
               ))}
             </View>
@@ -217,35 +268,23 @@ export default function RoadmapScreen() {
     case 'create':
       return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-          <View className="flex-1">
-            <View className="flex-row items-center p-4 border-b border-border">
-              <Button 
-                variant="ghost" 
-                onPress={() => setScreenState({ type: 'dashboard' })}
-                className="mr-3"
-              >
-                <Text>← Back</Text>
-              </Button>
-              <Text className="text-lg font-semibold">Create Roadmap</Text>
-            </View>
-            <RoadmapCreation onRoadmapCreated={handleRoadmapCreated} />
-          </View>
+          <RoadmapCreation 
+            onRoadmapCreated={handleRoadmapCreated}
+            onBack={() => setScreenState({ type: 'dashboard' })}
+          />
         </SafeAreaView>
       );
 
     case 'roadmap':
       return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-          <View className="flex-1">
-          <View className="flex-row items-center p-4 border-b border-border bg-background">
-            <Button 
-              variant="ghost" 
+          <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+            <Pressable 
               onPress={() => setScreenState({ type: 'dashboard' })}
-              className="mr-3"
+              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
             >
-              <Text>← Back</Text>
-            </Button>
-            <Text className="text-lg font-semibold">Learning Roadmap</Text>
+              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            </Pressable>
           </View>
           <RoadmapDisplay 
             roadmapId={screenState.roadmapId}
@@ -253,7 +292,6 @@ export default function RoadmapScreen() {
             onViewResults={(quizId, stepTitle) => handleViewResults(quizId, stepTitle, screenState.roadmapId)}
             onDelete={() => setScreenState({ type: 'dashboard' })}
           />
-          </View>
         </SafeAreaView>
       );
 
@@ -261,9 +299,8 @@ export default function RoadmapScreen() {
       return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
           <View className="flex-1">
-            <View className="flex-row items-center p-4 border-b border-border">
-            <Button 
-              variant="ghost" 
+            <View className="flex-row items-center px-4 py-3 border-b border-border">
+            <Pressable 
               onPress={() => {
                 if (screenState.roadmapId) {
                   setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
@@ -271,11 +308,11 @@ export default function RoadmapScreen() {
                   setScreenState({ type: 'dashboard' });
                 }
               }}
-              className="mr-3"
+              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
             >
-              <Text>← Back</Text>
-            </Button>
-            <Text className="text-lg font-semibold flex-1" numberOfLines={1}>
+              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            </Pressable>
+            <Text className="text-lg font-semibold flex-1 ml-3" numberOfLines={1}>
               {screenState.stepTitle} Quiz
             </Text>
           </View>
@@ -301,15 +338,14 @@ export default function RoadmapScreen() {
       }
       return (
         <View className="flex-1">
-          <View className="flex-row items-center p-4 border-b border-border bg-background">
-            <Button 
-              variant="ghost" 
+          <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+            <Pressable 
               onPress={handleCloseResults}
-              className="mr-3"
+              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
             >
-              <Text>← Back</Text>
-            </Button>
-            <Text className="text-lg font-semibold flex-1" numberOfLines={1}>
+              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            </Pressable>
+            <Text className="text-lg font-semibold flex-1 ml-3" numberOfLines={1}>
               {screenState.stepTitle} Results
             </Text>
           </View>

@@ -274,7 +274,9 @@ export async function getUserRoadmaps(userId: string): Promise<RoadmapWithProgre
   return roadmapsWithProgress.map(roadmap => ({
     ...roadmap,
     status: roadmap.status || 'active',
-    progress: roadmap.progress || 0,
+    progress: roadmap.stepsCount > 0 
+      ? Math.round(((roadmap.completedSteps || 0) / roadmap.stepsCount) * 100) 
+      : 0,
     stepsCount: roadmap.stepsCount || 0,
     completedSteps: roadmap.completedSteps || 0
   })) as RoadmapWithProgress[];

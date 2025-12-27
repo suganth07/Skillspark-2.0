@@ -83,17 +83,6 @@ export function RoadmapCard({ roadmap, onPress, onDelete, isDeleting, index = 0 
                 </Text>
               )}
             </View>
-            
-            <View className={cn(
-              'flex-row items-center gap-1.5 px-2.5 py-1 rounded-full border',
-              statusConfig.bgColor,
-              statusConfig.borderColor
-            )}>
-              <StatusIcon className={cn('h-3.5 w-3.5', statusConfig.iconColor)} />
-              <Text className={cn('text-xs font-medium', statusConfig.textColor)}>
-                {statusConfig.label}
-              </Text>
-            </View>
           </View>
         </CardHeader>
 

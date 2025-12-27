@@ -13,23 +13,10 @@ import { cn } from '@/lib/utils';
 import { Muted } from '@/components/ui/typography';
 
 export function UserManagement() {
-  const { users, currentUser, switchUser, addUser, removeUser, initialize, isLoading } = useUserStore();
+  const { users, currentUser, switchUser, addUser, removeUser, isLoading } = useUserStore();
   const [newUserName, setNewUserName] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    const initializeDatabase = async () => {
-      try {
-        await initialize();
-        console.log("UserManagement: Database initialized successfully");
-      } catch (error) {
-        console.error("UserManagement: Database initialization failed:", error);
-      }
-    };
-    
-    initializeDatabase();
-  }, []);
 
   const handleAddUser = async () => {
     if (newUserName.trim()) {

@@ -1,13 +1,14 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, RefreshCw, Clock } from 'lucide-react-native';
+import { AlertTriangle, RefreshCw, Clock, X } from 'lucide-react-native';
 
 interface ErrorDisplayProps {
   error: string | Error | null;
   onRetry?: () => void;
+  onDismiss?: () => void;
   retryText?: string;
   title?: string;
   showIcon?: boolean;
@@ -16,7 +17,8 @@ interface ErrorDisplayProps {
 
 export function ErrorDisplay({ 
   error, 
-  onRetry, 
+  onRetry,
+  onDismiss,
   retryText = 'Retry', 
   title,
   showIcon = true,
@@ -67,11 +69,18 @@ export function ErrorDisplay({
 
   const errorContent = (
     <View className="space-y-3">
-      {showIcon && (
-        <View className="flex-row items-center justify-center">
-          {getErrorIcon()}
-        </View>
-      )}
+      <View className="flex-row items-center justify-between">
+        {showIcon && (
+          <View className="flex-row items-center justify-center flex-1">
+            {getErrorIcon()}
+          </View>
+        )}
+        {onDismiss && (
+          <TouchableOpacity onPress={onDismiss} className="p-1">
+            <X className="h-4 w-4 text-red-600" />
+          </TouchableOpacity>
+        )}
+      </View>
       
       <View className="space-y-2">
         <Text className="font-medium text-center text-red-800">

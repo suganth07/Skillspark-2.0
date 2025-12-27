@@ -11,6 +11,7 @@ interface UserState {
   currentUser: User | null;
   isLoading: boolean;
   initError: string | null;
+  isInitialized: boolean;
   
   initialize: () => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
@@ -36,10 +37,18 @@ const getInitialUser = (): User | null => {
 export const useUserStore = create<UserState>((set, get) => ({
   users: [],
   currentUser: getInitialUser(),
-  isLoading: true,
+  isLoading: false,
   initError: null,
+  isInitialized: false,
 
   initialize: async () => {
+    // Prevent duplicate initialization
+    const { isInitialized } = get();
+    if (isInitialized) {
+      console.log("UserStore: Already initialized, skipping...");
+      return;
+    }
+
     try {
       console.log("UserStore: Starting initialization...");
       set({ isLoading: true, initError: null });
@@ -74,7 +83,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
 
       console.log("UserStore: Initialization completed successfully");
-      set({ users: usersList, currentUser: activeUser, isLoading: false, initError: null });
+      set({ users: usersList, currentUser: activeUser, isLoading: false, initError: null, isInitialized: true });
     } catch (error) {
       console.error("UserStore: Failed to initialize:", error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to initialize user store';

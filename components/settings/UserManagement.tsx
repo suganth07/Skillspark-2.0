@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
-import { useUserStore } from '@/hooks/stores/useUserStore';
+import { useUserManagement } from '@/hooks/stores/useUserStoreV2';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -13,23 +13,41 @@ import { cn } from '@/lib/utils';
 import { Muted } from '@/components/ui/typography';
 
 export function UserManagement() {
-  const { users, currentUser, switchUser, addUser, removeUser, isLoading } = useUserStore();
+  const { 
+    users, 
+    currentUser, 
+    isLoading, 
+    isCreatingUser,
+    isDeletingUser,
+    switchUser, 
+    createUser, 
+    deleteUser 
+  } = useUserManagement();
+  
   const [newUserName, setNewUserName] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
 
   const handleAddUser = async () => {
     if (newUserName.trim()) {
-      await addUser(newUserName);
-      setNewUserName("");
-      setIsAddOpen(false);
+      try {
+        await createUser(newUserName);
+        setNewUserName("");
+        setIsAddOpen(false);
+      } catch (error) {
+        console.error('Failed to create user:', error);
+      }
     }
   };
 
   const handleDeleteUser = async () => {
     if (deleteUserId && users.length > 1) {
-      await removeUser(deleteUserId);
-      setDeleteUserId(null);
+      try {
+        await deleteUser(deleteUserId);
+        setDeleteUserId(null);
+      } catch (error) {
+        console.error('Failed to delete user:', error);
+      }
     }
   };
 
@@ -54,8 +72,12 @@ export function UserManagement() {
         </View>
         <View className="p-6 bg-muted/30 rounded-lg border border-border">
           <Text className="text-center text-muted-foreground mb-4">No accounts found</Text>
-          <Button onPress={async () => await addUser("My Account")} className="w-full">
-            <Text>Create First Account</Text>
+          <Button 
+            onPress={async () => await createUser("My Account")} 
+            className="w-full"
+            disabled={isCreatingUser}
+          >
+            <Text>{isCreatingUser ? "Creating..." : "Create First Account"}</Text>
           </Button>
         </View>
       </View>
@@ -164,9 +186,9 @@ export function UserManagement() {
             <Button 
               className="flex-1" 
               onPress={handleAddUser}
-              disabled={!newUserName.trim()}
+              disabled={!newUserName.trim() || isCreatingUser}
             >
-              <Text>Create</Text>
+              <Text>{isCreatingUser ? "Creating..." : "Create"}</Text>
             </Button>
           </DialogFooter>
         </DialogContent>

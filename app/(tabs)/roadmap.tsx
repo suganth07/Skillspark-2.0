@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
-import { useUserStore } from '@/hooks/stores/useUserStore';
+import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
 import { useColorScheme } from '@/lib/useColorScheme';
-import { getUserRoadmaps, deleteRoadmap } from '@/server/queries/roadmaps';
-import type { RoadmapWithProgress } from '@/server/queries/roadmaps';
+import { useUserRoadmaps, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
 import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
 import { QuizComponent } from '@/components/roadmap/QuizComponent';
@@ -32,40 +31,22 @@ export default function RoadmapScreen() {
   const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [roadmaps, setRoadmaps] = useState<RoadmapWithProgress[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { currentUser, isLoading: userLoading } = useUserStore();
+  const currentUserId = useCurrentUserId();
   const { isDarkColorScheme } = useColorScheme();
 
-  const loadUserRoadmaps = async (userId: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const userRoadmaps = await getUserRoadmaps(userId);
-      setRoadmaps(userRoadmaps);
-    } catch (err) {
-      console.error('Failed to load roadmaps:', err);
-      const errorMessage = err instanceof Error ? 
-        (err.message.toLowerCase().includes('network') ? 'Failed to connect. Please check your internet connection.' : err.message) :
-        'Failed to load roadmaps';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (currentUser) {
-      loadUserRoadmaps(currentUser.id);
-    }
-  }, [currentUser]);
+  // TanStack Query hooks - automatic caching and refetching
+  const { 
+    data: roadmaps = [], 
+    isLoading, 
+    error,
+    refetch: refetchRoadmaps 
+  } = useUserRoadmaps(currentUserId || undefined);
+  
+  const deleteRoadmapMutation = useDeleteRoadmap();
 
   const handleRoadmapCreated = (roadmapId: string) => {
     setScreenState({ type: 'roadmap', roadmapId });
-    if (currentUser) {
-      loadUserRoadmaps(currentUser.id); // Refresh the list
-    }
+    // TanStack Query automatically refetches due to cache invalidation
   };
 
   const handleTakeQuiz = (quizId: string, stepTitle: string, roadmapId?: string) => {
@@ -83,9 +64,7 @@ export default function RoadmapScreen() {
     } else {
       setScreenState({ type: 'dashboard' });
     }
-    if (currentUser) {
-      loadUserRoadmaps(currentUser.id); // Refresh to update progress
-    }
+    // TanStack Query automatically refetches due to cache invalidation in useSubmitQuiz
   };
 
   const handleCloseResults = () => {
@@ -98,7 +77,7 @@ export default function RoadmapScreen() {
   };
 
   const handleDeleteRoadmap = async (roadmapId: string, roadmapTitle: string) => {
-    if (!currentUser) return;
+    if (!currentUserId) return;
 
     Alert.alert(
       'Delete Roadmap',
@@ -114,10 +93,12 @@ export default function RoadmapScreen() {
           onPress: async () => {
             try {
               setDeletingRoadmapId(roadmapId);
-              await deleteRoadmap(currentUser.id, roadmapId);
+              await deleteRoadmapMutation.mutateAsync({ 
+                userId: currentUserId, 
+                roadmapId 
+              });
               setDeletingRoadmapId(null);
-              // Refresh the list
-              await loadUserRoadmaps(currentUser.id);
+              // TanStack Query automatically updates cache
             } catch (error) {
               setDeletingRoadmapId(null);
               console.error('Failed to delete roadmap:', error);
@@ -131,8 +112,8 @@ export default function RoadmapScreen() {
 
 
 
-  // Show loading state while initializing user
-  if (userLoading && !currentUser) {
+  // Show loading state while no user is available
+  if (!currentUserId) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <View className="flex-1 items-center justify-center">
@@ -204,7 +185,7 @@ export default function RoadmapScreen() {
           {error && !isLoading && (
             <ErrorDisplay
               error={error}
-              onRetry={() => currentUser && loadUserRoadmaps(currentUser.id)}
+              onRetry={() => currentUserId && refetchRoadmaps()}
               variant="card"
             />
           )}
@@ -347,7 +328,7 @@ export default function RoadmapScreen() {
       );
 
     case 'results':
-      if (!currentUser) {
+      if (!currentUserId) {
         return null;
       }
       return (
@@ -364,7 +345,7 @@ export default function RoadmapScreen() {
             </Text>
           </View>
           <QuizResults
-            userId={currentUser.id}
+            userId={currentUserId}
             quizId={screenState.quizId}
             stepTitle={screenState.stepTitle}
             onClose={handleCloseResults}

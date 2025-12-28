@@ -8,7 +8,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useUserStore } from '@/hooks/stores/useUserStore';
-import { getQuizWithQuestions, submitQuizAttempt } from '@/server/queries/roadmaps';
+import { useQuiz, useSubmitQuiz } from '@/hooks/queries/useRoadmapQueries';
 import { ActivityIndicator } from 'react-native';
 import { Check, X, Clock, Brain } from 'lucide-react-native';
 
@@ -31,48 +31,21 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [timeStarted, setTimeStarted] = useState<Date>(new Date());
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [currentQuiz, setCurrentQuiz] = useState<{ quiz: any; questions: any[] } | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   
   const { currentUser } = useUserStore();
-
-  const loadQuiz = async (quizId: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const quizData = await getQuizWithQuestions(quizId);
-      setCurrentQuiz(quizData);
-    } catch (err) {
-      console.error('Failed to load quiz:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load quiz');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const submitQuiz = async (userId: string, quizId: string, answers: Record<string, any>, roadmapId?: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Submit the quiz attempt (server will compute score and result)
-      const result = await submitQuizAttempt(userId, quizId, answers, roadmapId);
-      
-      setIsLoading(false);
-      return result;
-      
-    } catch (err) {
-      console.error('Failed to submit quiz:', err);
-      setError(err instanceof Error ? err.message : 'Failed to submit quiz');
-      setIsLoading(false);
-      throw err;
-    }
-  };
+  
+  // TanStack Query hooks - automatic caching
+  const { 
+    data: currentQuiz, 
+    isLoading, 
+    error,
+    refetch 
+  } = useQuiz(quizId);
+  
+  const submitQuizMutation = useSubmitQuiz();
 
   useEffect(() => {
     if (quizId) {
-      loadQuiz(quizId);
       setTimeStarted(new Date());
     }
   }, [quizId]);
@@ -106,12 +79,12 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
           text: 'Submit', 
           onPress: async () => {
             try {
-              const result = await submitQuiz(
-                currentUser.id,
+              const { result } = await submitQuizMutation.mutateAsync({
+                userId: currentUser.id,
                 quizId,
                 answers,
                 roadmapId
-              );
+              });
               setQuizResult(result);
               setShowResults(true);
               onQuizComplete?.(result);
@@ -281,7 +254,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
     return (
       <ErrorDisplay
         error={error}
-        onRetry={() => loadQuiz(quizId)}
+        onRetry={() => refetch()}
         title="Failed to load quiz"
       />
     );

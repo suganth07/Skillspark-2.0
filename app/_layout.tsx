@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PortalHost } from "@/components/primitives/portal";
 import { DatabaseProvider, useDatabase } from "@/db/provider";
+import { QueryProvider } from "@/lib/queryClient";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { DARK_THEME, LIGHT_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -17,12 +18,12 @@ import { Inter_400Regular, Inter_600SemiBold, useFonts } from '@expo-google-font
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
-import { useUserStore } from "@/hooks/stores/useUserStore";
+import { useUserStore } from "@/hooks/stores/useUserStoreV2";
 
 // Component to handle user initialization inside DatabaseProvider
 function AppInitializer({ children, onReady }: { children: React.ReactNode; onReady: () => void }) {
   const { db } = useDatabase();
-  const { initialize, isLoading: userLoading, isInitialized } = useUserStore();
+  const { initialize, isInitializing: userLoading, isInitialized } = useUserStore();
 
   useEffect(() => {
     if (db && !isInitialized) {
@@ -99,22 +100,24 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <DatabaseProvider>
-        <AppInitializer onReady={() => setAppReady(true)}>
-          {__DEV__ && Platform.OS !== "web" ? <DrizzleStudioDevPlugin /> : null}
-          <ThemeProvider value={colorScheme === "dark" ? DARK_THEME : LIGHT_THEME}>
-            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <BottomSheetModalProvider>
-                <Stack>
-                  <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
-                </Stack>
-              </BottomSheetModalProvider>
-            </GestureHandlerRootView>
-          </ThemeProvider>
-          <PortalHost />
-        </AppInitializer>
-      </DatabaseProvider>
+      <QueryProvider>
+        <DatabaseProvider>
+          <AppInitializer onReady={() => setAppReady(true)}>
+            {__DEV__ && Platform.OS !== "web" ? <DrizzleStudioDevPlugin /> : null}
+            <ThemeProvider value={colorScheme === "dark" ? DARK_THEME : LIGHT_THEME}>
+              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <BottomSheetModalProvider>
+                  <Stack>
+                    <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
+                  </Stack>
+                </BottomSheetModalProvider>
+              </GestureHandlerRootView>
+            </ThemeProvider>
+            <PortalHost />
+          </AppInitializer>
+        </DatabaseProvider>
+      </QueryProvider>
     </SafeAreaProvider>
   );
 }

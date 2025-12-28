@@ -18,10 +18,17 @@ export const initialize = async (): Promise<{ db: typeof db; migrationSuccess: b
     await migrate(db, migrations);
     console.log("Database migrations completed successfully");
     return { db, migrationSuccess: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database migration failed:", error);
+    
+    // Check if error is due to tables already existing
+    if (error?.message?.includes("already exists") || error?.cause?.message?.includes("already exists")) {
+      console.log("Tables already exist, skipping migrations");
+      return { db, migrationSuccess: true };
+    }
+    
     // Still return db even if migrations fail (they might already be applied)
-     return { db, migrationSuccess: false };
+    return { db, migrationSuccess: false };
   }
 };
 

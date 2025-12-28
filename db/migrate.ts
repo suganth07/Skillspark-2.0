@@ -8,11 +8,16 @@ import { migrate } from "drizzle-orm/sql-js/migrator";
 export let db: SQLJsDatabase;
 
 const run = async () => {
-  const filebuffer = fs.readFileSync(
-    path.resolve(".", "public/database.sqlite"),
-  );
+  const dbPath = path.resolve(".", "public/database.sqlite");
+  let filebuffer: Buffer | undefined;
+  
+  // Check if database file exists
+  if (fs.existsSync(dbPath)) {
+    filebuffer = fs.readFileSync(dbPath);
+  }
+  
   const SQL = await initSqlJs();
-  const sqldb = new SQL.Database(filebuffer);
+  const sqldb = filebuffer ? new SQL.Database(filebuffer) : new SQL.Database();
   const database = drizzle(sqldb);
   db = database;
 

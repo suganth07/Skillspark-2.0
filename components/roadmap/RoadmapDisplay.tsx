@@ -9,7 +9,9 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useUserStore } from '@/hooks/stores/useUserStore';
-import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
+import { getRoadmapWithSteps, deleteRoadmap, createPrerequisiteQuiz } from '@/server/queries/roadmaps';
+import { createSubtopics, getSubtopics } from '@/server/queries/topics';
+import { geminiService } from '@/lib/gemini';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -36,17 +38,166 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
+  const [currentRoadmap, setCurrentRoadmap] = useState<{ roadmap: any; steps: RoadmapStep[] } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { currentUser } = useUserStore();
-  const { 
-    currentRoadmap, 
-    isLoading, 
-    isGeneratingQuiz,
-    error, 
-    loadRoadmapDetails,
-    generateQuizForPrerequisite,
-    deleteRoadmap,
-  } = useRoadmapStore();
+
+  const loadRoadmapDetails = async (roadmapId: string, userId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const roadmapWithSteps = await getRoadmapWithSteps(roadmapId, userId);
+      setCurrentRoadmap(roadmapWithSteps);
+    } catch (err) {
+      console.error('Failed to load roadmap details:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load roadmap');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const generateQuizForPrerequisite = async (userId: string, roadmapId: string, stepId: string, prerequisiteName: string) => {
+    try {
+      setIsGeneratingQuiz(true);
+      setError(null);
+      
+      // Get the roadmap to find the topic
+      const { roadmap, steps } = await getRoadmapWithSteps(roadmapId, userId);
+      const step = steps.find(s => s.id === stepId);
+      
+      if (!step) {
+        throw new Error('Step not found');
+      }
+      
+      // Validate that step has a valid topicId
+      if (!step.topicId) {
+        throw new Error(`Step "${step.title || stepId}" is missing a topicId. Cannot generate quiz for prerequisite without a valid topic reference.`);
+      }
+      
+      // Get subtopics for this topic
+      const subtopics = await getSubtopics(step.topicId);
+      
+      let quizId: string;
+      
+      if (subtopics.length > 0) {
+        // Generate quiz from subtopics (questions covering different subtopics)
+        console.log(`🎯 Generating quiz with ${subtopics.length} subtopics for ${prerequisiteName}`);
+        
+        const subtopicsData = subtopics.map((st: any) => ({
+          id: st.id,
+          name: st.name,
+          description: st.description || ''
+        }));
+        
+        const questions = await geminiService.generateQuizQuestionsFromSubtopics(
+          prerequisiteName,
+          subtopicsData,
+          step.difficulty || 'intermediate',
+          roadmap.title
+        );
+        
+        // Create prerequisite object
+        const prerequisite = {
+          id: `temp-${Date.now()}`,
+          name: prerequisiteName,
+          description: step.content || `Learn ${prerequisiteName}`,
+          difficulty: step.difficulty || 'intermediate',
+          estimatedHours: Math.ceil((step.durationMinutes || 120) / 60),
+          topics: [],
+          order: step.order || 1
+        };
+        
+        quizId = await createPrerequisiteQuiz(
+          roadmapId,
+          prerequisite,
+          step.topicId,
+          questions
+        );
+        
+        console.log(`✅ Quiz created with questions from ${subtopics.length} subtopics`);
+      } else {
+        // Generate subtopics first, then create quiz
+        console.log(`⚠️ No subtopics found for ${prerequisiteName}, generating subtopics first`);
+        
+        // Generate subtopics using AI
+        const topicExplanation = await geminiService.generateTopicExplanation(
+          prerequisiteName, 
+          roadmap.title
+        );
+        
+        // Get topic category (use roadmap title as category fallback)
+        const topicCategory = roadmap.title.split(' ')[0] || 'General';
+        
+        // Store subtopics in database
+        await createSubtopics(step.topicId, topicCategory, topicExplanation);
+        console.log(`✅ Generated ${topicExplanation.subtopics.length} subtopics for ${prerequisiteName}`);
+        
+        // Now fetch the newly created subtopics
+        const newSubtopics = await getSubtopics(step.topicId);
+        
+        const subtopicsData = newSubtopics.map((st: any) => ({
+          id: st.id,
+          name: st.name,
+          description: st.description || ''
+        }));
+        
+        // Generate quiz from newly created subtopics
+        const questions = await geminiService.generateQuizQuestionsFromSubtopics(
+          prerequisiteName,
+          subtopicsData,
+          step.difficulty || 'intermediate',
+          roadmap.title
+        );
+        
+        const prerequisite = {
+          id: `temp-${Date.now()}`,
+          name: prerequisiteName,
+          description: step.content || `Learn ${prerequisiteName}`,
+          difficulty: step.difficulty || 'intermediate',
+          estimatedHours: Math.ceil((step.durationMinutes || 120) / 60),
+          topics: [],
+          order: step.order || 1
+        };
+        
+        quizId = await createPrerequisiteQuiz(
+          roadmapId,
+          prerequisite,
+          step.topicId,
+          questions
+        );
+        
+        console.log(`✅ Quiz created with questions from ${newSubtopics.length} newly generated subtopics`);
+      }
+      
+      setIsGeneratingQuiz(false);
+      
+      // Refresh roadmap data to show the new quiz
+      await loadRoadmapDetails(roadmapId, userId);
+      
+      return quizId;
+      
+    } catch (err) {
+      console.error('Failed to generate quiz for prerequisite:', err);
+      
+      let errorMessage = 'Failed to generate quiz';
+      if (err instanceof Error) {
+        if (err.message.toLowerCase().includes('overloaded') || 
+            err.message.toLowerCase().includes('quota') ||
+            err.message.toLowerCase().includes('rate limit')) {
+          errorMessage = 'AI service is temporarily overloaded. Please try again in a few minutes.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      setIsGeneratingQuiz(false);
+      throw new Error(errorMessage);
+    }
+  };
 
   useEffect(() => {
     if (currentUser && roadmapId) {
@@ -60,7 +211,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
       if (currentUser && roadmapId) {
         loadRoadmapDetails(roadmapId, currentUser.id);
       }
-    }, [roadmapId, currentUser, loadRoadmapDetails])
+    }, [roadmapId, currentUser])
   );
 
   const handleTakeQuiz = async (step: RoadmapStep) => {

@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useUserStore } from '@/hooks/stores/useUserStore';
-import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
+import { geminiService } from '@/lib/gemini';
+import { createRoadmap } from '@/server/queries/roadmaps';
 import { RocketLoadingAnimation } from './RocketLoadingAnimation';
 import { ArrowLeft, CheckCircle, X, WandSparkles } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
@@ -22,10 +23,55 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdRoadmapId, setCreatedRoadmapId] = useState<string | null>(null);
   const [createdTopic, setCreatedTopic] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { currentUser } = useUserStore();
   const { isDarkColorScheme } = useColorScheme();
-  const { isGenerating, generateCompleteRoadmap, error, clearError } = useRoadmapStore();
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const clearError = () => setError(null);
+
+  const generateCompleteRoadmap = async (userId: string, topic: string) => {
+    try {
+      console.log(`🚀 Starting roadmap generation for topic: ${topic}`);
+      setIsGenerating(true);
+      setError(null);
+      
+      // Step 1: Generate knowledge graph using Gemini
+      const knowledgeGraph = await geminiService.generateKnowledgeGraph(topic);
+      console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
+      
+      // Step 2: Create roadmap and store in database
+      const roadmapId = await createRoadmap(userId, knowledgeGraph);
+      
+      setIsGenerating(false);
+      console.log(`📚 Roadmap creation complete for topic: ${topic}`);
+      
+      return roadmapId;
+      
+    } catch (err) {
+      console.error('❌ Failed to generate roadmap:', err);
+      
+      // Handle specific error types
+      let errorMessage = 'Failed to generate roadmap';
+      if (err instanceof Error) {
+        if (err.message.toLowerCase().includes('overloaded') || 
+            err.message.toLowerCase().includes('quota') ||
+            err.message.toLowerCase().includes('rate limit')) {
+          errorMessage = 'AI service is temporarily overloaded. Please try again in a few minutes.';
+        } else if (err.message.toLowerCase().includes('network') || 
+                   err.message.toLowerCase().includes('fetch')) {
+          errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      setIsGenerating(false);
+      throw new Error(errorMessage);
+    }
+  };
 
   const handleGenerateRoadmap = async () => {
     setValidationError(null);

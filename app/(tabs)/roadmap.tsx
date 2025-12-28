@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useUserStore } from '@/hooks/stores/useUserStore';
-import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import { useColorScheme } from '@/lib/useColorScheme';
+import { getUserRoadmaps, deleteRoadmap } from '@/server/queries/roadmaps';
+import type { RoadmapWithProgress } from '@/server/queries/roadmaps';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
 import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
 import { QuizComponent } from '@/components/roadmap/QuizComponent';
@@ -31,15 +32,28 @@ export default function RoadmapScreen() {
   const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [roadmaps, setRoadmaps] = useState<RoadmapWithProgress[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { currentUser, isLoading: userLoading } = useUserStore();
   const { isDarkColorScheme } = useColorScheme();
-  const {
-    roadmaps, 
-    isLoading, 
-    error, 
-    loadUserRoadmaps,
-    deleteRoadmap
-  } = useRoadmapStore();
+
+  const loadUserRoadmaps = async (userId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const userRoadmaps = await getUserRoadmaps(userId);
+      setRoadmaps(userRoadmaps);
+    } catch (err) {
+      console.error('Failed to load roadmaps:', err);
+      const errorMessage = err instanceof Error ? 
+        (err.message.toLowerCase().includes('network') ? 'Failed to connect. Please check your internet connection.' : err.message) :
+        'Failed to load roadmaps';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -103,7 +117,7 @@ export default function RoadmapScreen() {
               await deleteRoadmap(currentUser.id, roadmapId);
               setDeletingRoadmapId(null);
               // Refresh the list
-              loadUserRoadmaps(currentUser.id);
+              await loadUserRoadmaps(currentUser.id);
             } catch (error) {
               setDeletingRoadmapId(null);
               console.error('Failed to delete roadmap:', error);

@@ -1,3 +1,4 @@
+import { getRoadmapWithSteps } from '@/server/queries/roadmaps';
 import { queryClient, queryKeys } from './queryClient';
 
 /**
@@ -175,7 +176,7 @@ export class CacheInvalidationService {
       // Update roadmap list optimistically
       queryClient.setQueryData(
         queryKeys.roadmaps.list(userId),
-        (old: any[]) => old?.filter(r => r.id !== roadmapId)
+        (old: any[] = []) => old.filter(r => r.id !== roadmapId)
       );
       
       // Clean up topic caches only if they're not used by other roadmaps
@@ -211,6 +212,7 @@ export class CacheInvalidationService {
       // Prefetch roadmap details
       queryClient.prefetchQuery({
         queryKey: queryKeys.roadmaps.detail(roadmapId, userId),
+        queryFn: () => getRoadmapWithSteps(roadmapId, userId), // Need to import this
         staleTime: 2 * 60 * 1000,
       });
     }

@@ -7,7 +7,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { useUserStore } from '@/hooks/stores/useUserStore';
+import { useUserManagement } from '@/hooks/stores/useUserStoreV2';
 import { useQuiz, useSubmitQuiz } from '@/hooks/queries/useRoadmapQueries';
 import { ActivityIndicator } from 'react-native';
 import { Check, X, Clock, Brain } from 'lucide-react-native';
@@ -32,7 +32,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   
-  const { currentUser } = useUserStore();
+  const { currentUser, currentUserId } = useUserManagement();
   
   // TanStack Query hooks - automatic caching
   const { 
@@ -58,7 +58,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   };
 
   const handleSubmitQuiz = async () => {
-    if (!currentUser || !currentQuiz) return;
+    if (!currentUserId || !currentQuiz) return;
 
     // Check if all questions are answered
     const unansweredQuestions = currentQuiz.questions.filter(q => !(q.id in answers));
@@ -80,7 +80,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
           onPress: async () => {
             try {
               const { result } = await submitQuizMutation.mutateAsync({
-                userId: currentUser.id,
+                userId: currentUserId,
                 quizId,
                 answers,
                 roadmapId

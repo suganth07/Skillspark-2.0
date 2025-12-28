@@ -11,7 +11,7 @@ import {
 } from '@/hooks/queries/useUserQueries';
 import { getAllUsers, getUserById } from '@/server/queries/users';
 import type { UserSchema } from '@/db/schema';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 type User = z.infer<typeof UserSchema>;
 
@@ -104,7 +104,7 @@ export const useUserStore = create<UserStoreState>()(
           });
           
           // Get users from React Query cache
-          const users = queryClient.getQueryData(['users']) as User[] | undefined;
+          const users = queryClient.getQueryData(queryKeys.users.all) as User[] | undefined;
           console.log(`UserStore: Found ${users?.length || 0} users`);
           
           let targetUserId = get().currentUserId; // From persisted state
@@ -128,13 +128,13 @@ export const useUserStore = create<UserStoreState>()(
           if (targetUserId) {
             // Prefetch the current user's details using queryClient directly
             await queryClient.prefetchQuery({
-              queryKey: ['users', 'detail', targetUserId],
+              queryKey: queryKeys.users.detail(targetUserId),
               queryFn: () => getUserById(targetUserId),
               staleTime: 10 * 60 * 1000,
             });
             
             // Update stats from user data
-            const userData = queryClient.getQueryData(['users', 'detail', targetUserId]) as User | undefined;
+            const userData = queryClient.getQueryData(queryKeys.users.detail(targetUserId)) as User | undefined;
             if (userData) {
               set({ 
                 cachedUserStats: {
@@ -172,7 +172,7 @@ export const useUserStore = create<UserStoreState>()(
           
           // Prefetch the new user's data using queryClient directly
           await queryClient.prefetchQuery({
-            queryKey: ['users', 'detail', userId],
+            queryKey: queryKeys.users.detail(userId),
             queryFn: () => getUserById(userId),
             staleTime: 10 * 60 * 1000,
           });
@@ -181,9 +181,9 @@ export const useUserStore = create<UserStoreState>()(
           set({ currentUserId: userId });
           
           // Update React Query's current user cache
-          const userData = queryClient.getQueryData(['users', 'detail', userId]) as User | undefined;
+          const userData = queryClient.getQueryData(queryKeys.users.detail(userId)) as User | undefined;
           if (userData) {
-            queryClient.setQueryData(['users', 'current'], userData);
+            queryClient.setQueryData(queryKeys.users.current(userId), userData);
             
             // Update cached stats
             set({ 

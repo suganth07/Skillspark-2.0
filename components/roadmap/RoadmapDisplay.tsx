@@ -9,7 +9,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
-import { useRoadmapDetails, useDeleteRoadmap, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
+import { useRoadmapDetails, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -48,9 +48,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   } = useRoadmapDetails(roadmapId, currentUserId || undefined);
   
   const deleteRoadmapMutation = useDeleteRoadmap();
-  const generateQuizMutation = useGenerateQuiz();
-  
-  const isGeneratingQuiz = generateQuizMutation.isPending;
 
   // Reload roadmap details when returning from quiz
   useFocusEffect(

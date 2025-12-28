@@ -35,7 +35,7 @@ export function useUsers() {
  */
 export function useCurrentUser(userId: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.users.current,
+    queryKey: userId ? queryKeys.users.current(userId) : ['users', 'current', 'none'],
     queryFn: () => getUserById(userId!),
     enabled: !!userId,
     staleTime: 5 * 60 * 1000, // Fresh for 5 minutes
@@ -156,9 +156,10 @@ export function useUpdateUser() {
       );
       
       // Update current user cache if it's the same user
-      const currentUser = queryClient.getQueryData<User>(queryKeys.users.current);
-      if (currentUser?.id === userId) {
-        queryClient.setQueryData(queryKeys.users.current, { ...currentUser, ...data });
+      const currentUserKey = queryKeys.users.current(userId);
+      const currentUser = queryClient.getQueryData<User>(currentUserKey);
+      if (currentUser) {
+        queryClient.setQueryData(currentUserKey, { ...currentUser, ...data });
       }
       
       return { previousUsers, previousUser };
@@ -182,9 +183,10 @@ export function useUpdateUser() {
       queryClient.setQueryData(['users', 'detail', userId], updatedUser);
       
       // Update current user if it matches
-      const currentUser = queryClient.getQueryData<User>(queryKeys.users.current);
-      if (currentUser?.id === userId) {
-        queryClient.setQueryData(queryKeys.users.current, updatedUser);
+      const currentUserKey = queryKeys.users.current(userId);
+      const currentUser = queryClient.getQueryData<User>(currentUserKey);
+      if (currentUser) {
+        queryClient.setQueryData(currentUserKey, updatedUser);
       }
       
       // Invalidate user-related caches across the app

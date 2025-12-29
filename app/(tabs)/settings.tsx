@@ -7,6 +7,7 @@ import {ScrollView} from 'react-native-gesture-handler';
 import List, {ListHeader} from "@/components/ui/list";
 import {ThemeSettingItem} from '@/components/settings/ThemeItem';
 import {UserManagement} from '@/components/settings/UserManagement';
+import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
 
 export default function Settings() {
   return (
@@ -30,6 +31,16 @@ export default function Settings() {
               <Muted>Appearance</Muted>
             </ListHeader>
             <ThemeSettingItem />
+          </List>
+        </View>
+
+        {/* Learning Features Section */}
+        <View className="px-6 pb-6">
+          <List>
+            <ListHeader>
+              <Muted>Learning Features</Muted>
+            </ListHeader>
+            <EmotionDetectionItem />
           </List>
         </View>
       </ScrollView>

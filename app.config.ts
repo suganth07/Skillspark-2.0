@@ -23,6 +23,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     newArchEnabled: true,
     supportsTablet: true,
     bundleIdentifier: "com.expostarter.base",
+    infoPlist: {
+      NSCameraUsageDescription: "This app uses the camera to detect your emotions and engagement while learning.",
+    },
   },
   android: {
     newArchEnabled: true,
@@ -31,13 +34,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#ffffff",
     },
     package: "com.expostarter.base",
+    permissions: ["CAMERA"],
   },
   web: {
     bundler: "metro",
     output: "static",
     favicon: "./assets/images/favicon.png",
   },
-  plugins: ["expo-router", "expo-sqlite", "expo-font", "expo-web-browser"],
+  plugins: [
+    "expo-router", 
+    "expo-sqlite", 
+    "expo-font", 
+    "expo-web-browser",
+    [
+      "expo-camera",
+      {
+        cameraPermission: "Allow $(PRODUCT_NAME) to access your camera for emotion detection during learning.",
+      },
+    ],
+  ],
   experiments: {
     typedRoutes: true,
     baseUrl: "/expo-local-first-template",

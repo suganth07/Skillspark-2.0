@@ -7,13 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
+import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useTopicDetail, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb } from 'lucide-react-native';
 
 export default function TopicDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
+  const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   // TanStack Query hook - automatic caching, loading, and error states
@@ -126,6 +129,16 @@ export default function TopicDetailScreen() {
       
       <ScrollView className="flex-1">
         <View className="p-6 space-y-6">
+          {/* Emotion Detection Card */}
+          {isEmotionDetectionEnabled && (
+            <TopicEmotionDetector 
+              onEmotionDetected={(emotion, confidence) => {
+                console.log(`📊 User emotion: ${emotion} (${(confidence * 100).toFixed(1)}%)`);
+                // TODO: Store emotion data for analytics
+              }}
+            />
+          )}
+
           {/* Header */}
           <Card>
             <CardHeader>

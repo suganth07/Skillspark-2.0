@@ -67,6 +67,7 @@
     "react-dom": "19.1.0",
     "react-hook-form": "^7.54.2",
     "react-native": "0.81.4",
+    "react-native-fast-tflite": "^1.6.1",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-mmkv": "^3.3.3",
     "react-native-reanimated": "~4.1.1",
@@ -78,6 +79,7 @@
     "sql.js": "^1.13.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "vision-camera-resize-plugin": "^3.2.0",
     "zod": "^3.24.1",
     "zustand": "^4.5.6"
   },

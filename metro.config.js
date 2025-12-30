@@ -7,7 +7,7 @@ const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push("sql");
 
 // Add wasm asset support
-config.resolver.assetExts.push("wasm");
+config.resolver.assetExts.push("tflite","txt","wasm");
 
 config.resolver.unstable_conditionNames = [
   "browser",

@@ -1,4 +1,13 @@
 {
-  "name": "SkillSpark",
-  "slug": "SkillSpark"
+  "expo": {
+    "plugins": [
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreMLDelegate": true,
+          "enableAndroidGpuLibraries": true
+        }
+      ]
+    ]
+  }
 }

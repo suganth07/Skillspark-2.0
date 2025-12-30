@@ -173,25 +173,21 @@ type Style = PressableStyle | ImageStyle;
 function combineStyles(slotStyle?: Style, childValue?: Style) {
   if (typeof slotStyle === "function" && typeof childValue === "function") {
     return (state: PressableStateCallbackType) => {
-      return StyleSheet.flatten([slotStyle(state), childValue(state)]);
+      return [slotStyle(state), childValue(state)];
     };
   }
   if (typeof slotStyle === "function") {
     return (state: PressableStateCallbackType) => {
-      return childValue
-        ? StyleSheet.flatten([slotStyle(state), childValue])
-        : slotStyle(state);
+      return childValue ? [slotStyle(state), childValue] : slotStyle(state);
     };
   }
   if (typeof childValue === "function") {
     return (state: PressableStateCallbackType) => {
-      return slotStyle
-        ? StyleSheet.flatten([slotStyle, childValue(state)])
-        : childValue(state);
+      return slotStyle ? [slotStyle, childValue(state)] : childValue(state);
     };
   }
 
-  return StyleSheet.flatten([slotStyle, childValue].filter(Boolean));
+  return [slotStyle, childValue].filter(Boolean);
 }
 
 export function isTextChildren(

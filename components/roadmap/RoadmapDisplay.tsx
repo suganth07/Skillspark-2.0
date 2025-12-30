@@ -10,6 +10,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
 import { useRoadmapDetails, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
+import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -36,8 +37,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
+  const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
   const router = useRouter();
   const currentUserId = useCurrentUserId();
+  const { generateQuizForPrerequisite } = useRoadmapStore();
 
   // TanStack Query hooks - automatic caching and refetching
   const { 
@@ -59,9 +62,35 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   );
 
   const handleTakeQuiz = async (step: RoadmapStep) => {
-    if (!currentUserId || !step.quizId) return;
+    if (!currentUserId) return;
     
-    onTakeQuiz?.(step.quizId, step.title);
+    try {
+      let quizId = step.quizId;
+      
+      // If no quiz exists, generate one
+      if (!quizId) {
+        setGeneratingQuizForStep(step.id);
+        quizId = await generateQuizForPrerequisite(
+          currentUserId,
+          roadmapId,
+          step.id,
+          step.title
+        );
+        setGeneratingQuizForStep(null);
+      }
+      
+      if (quizId) {
+        onTakeQuiz?.(quizId, step.title);
+      }
+    } catch (error) {
+      setGeneratingQuizForStep(null);
+      console.error('Failed to generate/load quiz:', error);
+      Alert.alert(
+        'Error',
+        'Failed to generate quiz. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleTopicPress = (step: RoadmapStep) => {
@@ -216,18 +245,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
               </Pressable>
 
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   setShowKnowledgeModal(false);
                   if (selectedStep) {
-                    if (selectedStep.quizId) {
-                      onTakeQuiz?.(selectedStep.quizId, selectedStep.title);
-                    } else {
-                      Alert.alert(
-                        'Quiz Not Available',
-                        'No quiz is available for this step yet. Please try selecting "Totally New" to generate learning content.',
-                        [{ text: 'OK' }]
-                      );
-                    }
+                    await handleTakeQuiz(selectedStep);
                   }
                 }}
                 className="w-full h-12 items-center justify-center rounded-lg border border-border bg-background active:bg-secondary mb-3"

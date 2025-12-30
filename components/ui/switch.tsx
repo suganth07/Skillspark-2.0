@@ -83,13 +83,12 @@ const SwitchNative = React.forwardRef<
         {...props}
         ref={ref}
       >
-        <Animated.View style={animatedThumbStyle}>
-          <SwitchPrimitives.Thumb
-            className={
-              "h-7 w-7 rounded-full bg-background shadow-md shadow-foreground/25 ring-0"
-            }
+        <SwitchPrimitives.Thumb asChild>
+          <Animated.View
+            style={animatedThumbStyle}
+            className="h-7 w-7 rounded-full bg-background shadow-md shadow-foreground/25 ring-0"
           />
-        </Animated.View>
+        </SwitchPrimitives.Thumb>
       </SwitchPrimitives.Root>
     </Animated.View>
   );

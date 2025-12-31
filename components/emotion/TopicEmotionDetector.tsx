@@ -846,7 +846,7 @@ import {
   useFrameProcessor,
 } from 'react-native-vision-camera';
 import { useResizePlugin } from 'vision-camera-resize-plugin';
-import { runOnJS } from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 
 // Conditionally import TFLite only if the native module is available
 let useTensorflowModel: any = null;
@@ -909,15 +909,16 @@ function argMax(arr: ArrayLike<number>) {
 
 export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetectorProps) {
   const [emotion, setEmotion] = useState<EmotionResult | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Shared values for cross-thread communication (avoids serialization issues)
+  const emotionIndex = useSharedValue(-1);
+  const emotionConfidence = useSharedValue(0);
 
   // VisionCamera permission
   const { hasPermission, requestPermission } = useCameraPermission();
 
   // Choose camera: "front" or "back"
-  // If your dataset is non-mirrored faces, back camera often matches better.
-  // You can switch to 'front' later.
-  const device = useCameraDevice('front'); // change to 'back' if you want
+  const device = useCameraDevice('front');
 
   // Resize plugin (native)
   const { resize } = useResizePlugin();
@@ -937,16 +938,26 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Small helper to update UI safely from worklet
-  const publishResult = (predicted: string, confidence: number) => {
-    const result: EmotionResult = {
-      emotion: predicted,
-      confidence,
-      timestamp: new Date(),
-    };
-    setEmotion(result);
-    onEmotionDetected?.(predicted, confidence);
-  };
+  // Monitor shared values and update UI when they change
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const idx = emotionIndex.value;
+      const conf = emotionConfidence.value;
+      
+      if (idx >= 0 && idx < EMOTIONS.length) {
+        const predicted = EMOTIONS[idx];
+        const result: EmotionResult = {
+          emotion: predicted,
+          confidence: conf,
+          timestamp: new Date(),
+        };
+        setEmotion(result);
+        onEmotionDetected?.(predicted, conf);
+      }
+    }, 1000); // Check every second
+
+    return () => clearInterval(interval);
+  }, [emotionIndex, emotionConfidence, onEmotionDetected]);
 
   // Frame processor (runs off the JS thread)
   const frameProcessor = useFrameProcessor(
@@ -956,18 +967,14 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
       if (!model) return;
 
       // 1) Resize + RGB float32 0..1 using plugin
-      // IMPORTANT: Python tf.image.resize STRETCHES to 224x224 (no crop).
-      // The plugin can crop by default; we force "use whole frame" crop to avoid center-crop.
       const rgb01 = resize(frame, {
         scale: { width: INPUT_W, height: INPUT_H },
-        crop: { x: 0, y: 0, width: frame.width, height: frame.height }, // stretch-like behavior
+        crop: { x: 0, y: 0, width: frame.width, height: frame.height },
         pixelFormat: 'rgb',
-        dataType: 'float32', // values 0..1
+        dataType: 'float32',
       }) as Float32Array;
 
-      // 2) MobileNetV3 preprocess_input:
-      // Python: x/127.5 - 1, where x is 0..255
-      // Here rgb01 is 0..1 -> equivalent is rgb01*2 - 1
+      // 2) MobileNetV3 preprocess_input: x*2 - 1 (converts 0..1 to -1..1)
       for (let i = 0; i < rgb01.length; i++) {
         rgb01[i] = rgb01[i] * 2.0 - 1.0;
       }
@@ -987,13 +994,11 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
         }
       }
 
-      const predicted = (EMOTIONS[bestIdx] ?? 'unknown') as string;
-      const confidence = (bestVal ?? 0) as number;
-
-      // 5) Send result back to JS/UI
-      runOnJS(publishResult)(predicted, confidence);
+      // 5) Update shared values (no serialization needed!)
+      emotionIndex.value = bestIdx;
+      emotionConfidence.value = bestVal;
     },
-    [model]
+    [model, emotionIndex, emotionConfidence]
   );
 
   if (!isTfliteAvailable) {

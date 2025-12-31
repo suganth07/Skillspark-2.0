@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db/drizzle';
-import { topics, roadmapSteps, roadmaps, subtopics, userSubtopicPerformance } from '@/db/schema';
+import { topics, roadmapSteps, roadmaps, subtopics, userSubtopicPerformance, userKnowledge } from '@/db/schema';
 import { createId } from '@paralleldrive/cuid2';
 import type { TopicExplanation } from '@/lib/gemini';
 
@@ -149,4 +149,117 @@ export async function getUserSubtopicPerformance(userId: string, topicId: string
     ));
 
   return result;
+}
+
+// Update existing subtopics with new adaptive content (after performance-based regeneration)
+export async function updateSubtopicsContent(
+  parentTopicId: string,
+  explanation: TopicExplanation
+) {
+  return await db.transaction(async (tx) => {
+    // Update parent topic metadata
+    const parentTopic = await tx
+      .select()
+      .from(topics)
+      .where(eq(topics.id, parentTopicId))
+      .limit(1);
+
+    if (parentTopic[0]) {
+      let existingMetadata = {};
+      try {
+        existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
+      } catch {
+        console.warn('Failed to parse existing metadata, using empty object');
+      }
+
+      await tx
+        .update(topics)
+        .set({
+          metadata: JSON.stringify({
+            ...existingMetadata,
+            bestPractices: explanation.bestPractices,
+            commonPitfalls: explanation.commonPitfalls,
+            whyLearn: explanation.whyLearn,
+            difficulty: explanation.difficulty
+          })
+        })
+        .where(eq(topics.id, parentTopicId));
+    }
+
+    // Update each subtopic with new adaptive content
+    for (const subtopic of explanation.subtopics) {
+      try {
+        await tx
+          .update(subtopics)
+          .set({
+            description: subtopic.explanation,
+            metadata: JSON.stringify({
+              example: subtopic.example,
+              exampleExplanation: subtopic.exampleExplanation,
+              keyPoints: subtopic.keyPoints
+            })
+          })
+          .where(eq(subtopics.id, subtopic.id));
+
+        console.log(`✅ Updated subtopic: ${subtopic.title}`);
+      } catch (error) {
+        console.error(`Failed to update subtopic ${subtopic.title}:`, error);
+      }
+    }
+
+    console.log(`💾 Updated ${explanation.subtopics.length} subtopics with adaptive content`);
+  });
+}
+
+// Check if user needs content regeneration for a topic
+export async function checkNeedsRegeneration(userId: string, topicId: string): Promise<boolean> {
+  const result = await db
+    .select({ needsRegeneration: userKnowledge.needsRegeneration })
+    .from(userKnowledge)
+    .where(and(
+      eq(userKnowledge.userId, userId),
+      eq(userKnowledge.topicId, topicId)
+    ))
+    .limit(1);
+
+  return result[0]?.needsRegeneration ?? false;
+}
+
+// Set needsRegeneration flag for a user-topic pair
+export async function setNeedsRegeneration(userId: string, topicId: string, value: boolean) {
+  await db
+    .update(userKnowledge)
+    .set({ needsRegeneration: value })
+    .where(and(
+      eq(userKnowledge.userId, userId),
+      eq(userKnowledge.topicId, topicId)
+    ));
+  
+  console.log(`🔄 Set needsRegeneration=${value} for user ${userId}, topic ${topicId}`);
+}
+
+// Mark content regeneration as needed after quiz completion
+export async function markContentForRegeneration(userId: string, topicId: string) {
+  // Check if user knowledge record exists
+  const existing = await db
+    .select({ id: userKnowledge.id })
+    .from(userKnowledge)
+    .where(and(
+      eq(userKnowledge.userId, userId),
+      eq(userKnowledge.topicId, topicId)
+    ))
+    .limit(1);
+
+  if (existing[0]) {
+    await setNeedsRegeneration(userId, topicId, true);
+  } else {
+    // Create user knowledge record with needsRegeneration = true
+    await db.insert(userKnowledge).values({
+      userId,
+      topicId,
+      status: 'available',
+      needsRegeneration: true
+    });
+    console.log(`📝 Created userKnowledge with needsRegeneration=true for user ${userId}, topic ${topicId}`);
+  }
 }

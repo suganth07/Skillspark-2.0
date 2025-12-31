@@ -5,7 +5,10 @@ import {
   getRoadmapByTopicId, 
   getSubtopics, 
   getUserSubtopicPerformance,
-  createSubtopics 
+  createSubtopics,
+  updateSubtopicsContent,
+  checkNeedsRegeneration,
+  setNeedsRegeneration
 } from '@/server/queries/topics';
 import { geminiService, type TopicExplanation } from '@/lib/gemini';
 
@@ -96,14 +99,18 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
       // Check if subtopics already exist in database
       const existingSubtopics = await getSubtopics(topicId);
       
+      // Check if regeneration is needed (set after quiz completion)
+      const needsRegeneration = await checkNeedsRegeneration(userId, topicId);
+      console.log(`🔄 Needs regeneration: ${needsRegeneration}`);
+      
       if (existingSubtopics.length > 0) {
-        console.log(`📚 Loading ${existingSubtopics.length} subtopics from database`);
+        console.log(`📚 Found ${existingSubtopics.length} subtopics in database`);
         
-        // If user has performance data, regenerate content with adaptive explanations
-        if (performanceMap.size > 0) {
-          console.log(`🔄 Regenerating content with performance-based adaptations`);
+        // SCENARIO 1: Content exists and needs regeneration (user completed a new quiz)
+        if (needsRegeneration && performanceMap.size > 0) {
+          console.log(`🎯 Regeneration flag is TRUE - Regenerating content based on updated performance`);
 
-          // Prepare subtopic guidance with names
+          // Prepare subtopic guidance with performance metrics
           const subtopicGuidance = existingSubtopics.map(st => {
             const perf = performanceMap.get(st.id);
             return {
@@ -113,14 +120,14 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
             };
           });
           
-          // Regenerate explanation with performance guidance
+          // Regenerate explanation with performance-based adaptations
           const explanation = await geminiService.generateTopicExplanation(
             topic.name,
             context,
             subtopicGuidance
           );
           
-          // Map AI-generated subtopics back to database IDs
+          // Map AI-generated subtopics back to database IDs to preserve references
           const dbSubtopicsByName = new Map(
             existingSubtopics.map(st => [st.name.toLowerCase(), st.id])
           );
@@ -132,10 +139,19 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
             };
           });
           
+          // Save the adaptive content back to database
+          console.log(`💾 Saving regenerated adaptive content to database...`);
+          await updateSubtopicsContent(topicId, explanation);
+          
+          // Reset the regeneration flag to prevent unnecessary regeneration next time
+          await setNeedsRegeneration(userId, topicId, false);
+          
+          console.log(`✅ Content regenerated and cached. Regeneration flag reset to FALSE.`);
           return { topic, explanation, subtopicPerformance: performanceMap };
         }
         
-        // No performance data, load from database as-is
+        // SCENARIO 2: Content exists, no regeneration needed - Load from database
+        console.log(`💾 Loading cached content from database (regeneration not needed)`);
         const topicMetadata = JSON.parse(topic.metadata as string || '{}');
         
         const explanation: TopicExplanation = {
@@ -163,22 +179,49 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
           whyLearn: topicMetadata.whyLearn
         };
         
+        console.log(`✅ Loaded ${existingSubtopics.length} subtopics from cache`);
         return { topic, explanation, subtopicPerformance: performanceMap };
       }
 
-      // Generate explanation using Gemini
-      console.log(`🤖 Generating explanation for topic: ${topic.name}`);
+      // SCENARIO 3: No subtopics in database - Generate fresh content with AI
+      // Check if user has performance data (came from "Have Little Idea" quiz path)
+      if (performanceMap.size > 0) {
+        console.log(`🤖 First time content generation WITH performance data`);
+        
+        // This shouldn't normally happen, but handle it gracefully
+        // Generate adaptive content based on performance
+        const subtopicGuidance = Array.from(performanceMap.values()).map(perf => ({
+          subtopicName: perf.subtopicId, // We'll use ID as placeholder
+          status: perf.status,
+          accuracy: perf.accuracy
+        }));
+        
+        const explanation = await geminiService.generateTopicExplanation(
+          topic.name,
+          context,
+          subtopicGuidance
+        );
+        
+        console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
+        await createSubtopics(topicId, topic.category, explanation);
+        
+        console.log(`✅ New adaptive content generated and cached`);
+        return { topic, explanation, subtopicPerformance: performanceMap };
+      }
+      
+      // SCENARIO 4: No content, no performance - "Totally New" user, first visit
+      console.log(`🤖 First time content generation for "Totally New" user`);
       
       const explanation = await geminiService.generateTopicExplanation(
         topic.name,
         context
       );
 
-      // Store subtopics in database
-      console.log(`💾 Storing ${explanation.subtopics.length} subtopics in database...`);
+      // Store generated subtopics in database for future use
+      console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
       await createSubtopics(topicId, topic.category, explanation);
 
-      console.log(`✅ Topic explanation loaded with ${explanation.subtopics.length} subtopics`);
+      console.log(`✅ New content generated and cached with ${explanation.subtopics.length} subtopics`);
       
       return { topic, explanation, subtopicPerformance: performanceMap };
     },

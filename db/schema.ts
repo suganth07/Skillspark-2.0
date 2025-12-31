@@ -116,6 +116,9 @@ export const userKnowledge = sqliteTable(
 
     lastReviewedAt: integer("last_reviewed_at", { mode: "timestamp" }),
     strength: integer("strength").default(100), // Spaced repetition strength
+
+    // Content regeneration flag - set to true when quiz completed, reset to false after regeneration
+    needsRegeneration: integer("needs_regeneration", { mode: "boolean" }).default(false),
   },
   (t) => [
     uniqueIndex("user_knowledge_user_topic_idx").on(t.userId, t.topicId),

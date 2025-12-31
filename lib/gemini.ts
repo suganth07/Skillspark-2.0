@@ -7,6 +7,32 @@ if (!API_KEY) {
 }
 const genAI = new GoogleGenerativeAI(API_KEY || '');
 
+// Helper function to retry API calls
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  delayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+      
+      if (attempt < maxRetries) {
+        console.log(`⏳ Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        delayMs *= 1.5; // Exponential backoff
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
 export interface Prerequisite {
   id: string;
   name: string;
@@ -211,7 +237,7 @@ export class GeminiService {
       - Make questions practical and relevant
       - Difficulty level: ${difficulty}
       
-      Return ONLY valid JSON in this exact format:
+      Return ONLY valid JSON array (no markdown, no code blocks, no extra text):
       [
         {
           "id": "unique-question-id",
@@ -227,27 +253,61 @@ export class GeminiService {
         }
       ]
       
-      IMPORTANT: Always include "Not sure" as the last option (5th option). If user selects "Not sure", give 0 marks.
-      Ensure each subtopic gets at least 1 question.
-      Make questions challenging but fair for ${difficulty} level.
+      IMPORTANT: 
+      - Return ONLY the JSON array, nothing else
+      - Always include "Not sure" as the last option (5th option)
+      - Ensure each subtopic gets at least 1 question
+      - Make questions challenging but fair for ${difficulty} level
     `;
 
-    try {
+    // Use retry wrapper for resilience
+    return withRetry(async () => {
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
       
-      // Parse JSON response
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+      // Log raw response for debugging
+      console.log('📝 Gemini raw response length:', text.length);
+      console.log('📝 Gemini response first 200 chars:', text.substring(0, 200));
+      
+      // Check if response is empty or starts with error indicators
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from Gemini API');
       }
       
-      const questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+      // Check for common error patterns
+      if (text.startsWith('Unable') || text.startsWith('Unavailable') || text.startsWith('Unfortunately')) {
+        throw new Error(`Gemini API error: ${text.substring(0, 100)}`);
+      }
+      
+      // Try to extract JSON - handle markdown code blocks too
+      let jsonText = text;
+      
+      // Remove markdown code blocks if present
+      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
+      }
+      
+      // Parse JSON response
+      const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        console.error('📛 Failed to find JSON array in response:', text.substring(0, 500));
+        throw new Error('Invalid JSON response from Gemini - no array found');
+      }
+      
+      let questions: QuizQuestion[];
+      try {
+        questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+      } catch (parseError) {
+        console.error('📛 JSON parse error:', parseError);
+        console.error('📛 Attempted to parse:', jsonMatch[0].substring(0, 500));
+        throw new Error(`Failed to parse quiz JSON: ${parseError}`);
+      }
       
       // Validate questions structure
       if (!Array.isArray(questions) || questions.length === 0) {
-        throw new Error('Invalid questions structure');
+        throw new Error('Invalid questions structure - empty array');
       }
       
       // Map subtopic names to IDs
@@ -260,11 +320,9 @@ export class GeminiService {
         }
       });
       
+      console.log(`✅ Generated ${questions.length} quiz questions from subtopics`);
       return questions;
-    } catch (error) {
-      console.error('Error generating quiz questions from subtopics:', error);
-      throw new Error(`Failed to generate quiz questions from subtopics: ${error}`);
-    }
+    }, 3, 1500); // 3 retries with 1.5s initial delay
   }
 
   async generatePersonalizedFeedback(

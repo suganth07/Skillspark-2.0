@@ -14,6 +14,7 @@ import {
 } from '@/db/schema';
 import type { KnowledgeGraph, Prerequisite, QuizQuestion } from '@/lib/gemini';
 import { createId } from '@paralleldrive/cuid2';
+import { markContentForRegeneration } from './topics';
 
 export interface RoadmapWithProgress {
   id: string;
@@ -633,6 +634,13 @@ export async function submitQuizAttempt(
     const feedback = passed 
       ? `Excellent! You scored ${score}% and can move to the next prerequisite.${weakSubtopics.length > 0 ? `\n\nNote: You may want to review these subtopics: ${weakSubtopics.join(', ')}` : ''}`
       : `You scored ${score}%. You need 70% or higher to proceed. Review the material and try again.${weakSubtopics.length > 0 ? `\n\nFocus on these weak areas: ${weakSubtopics.join(', ')}` : ''}`;
+
+    // Mark content for regeneration so next time user opens the topic, 
+    // it will regenerate with updated performance data
+    if (quiz[0]?.topicId) {
+      await markContentForRegeneration(userId, quiz[0].topicId);
+      console.log(`🔄 Marked topic ${quiz[0].topicId} for content regeneration after quiz completion`);
+    }
 
     return { score, passed, feedback, weakSubtopics };
   });

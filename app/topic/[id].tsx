@@ -10,7 +10,8 @@ import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useTopicDetail, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 export default function TopicDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,10 +23,14 @@ export default function TopicDetailScreen() {
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
     data: currentTopicDetail, 
-    isLoading, 
+    isLoading,
+    isFetching,
     error,
     refetch 
   } = useTopicDetail(id, currentUserId || undefined);
+
+  // Show regeneration loading when fetching but already have data (refetching/regenerating)
+  const isRegenerating = isFetching && !isLoading;
 
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -46,9 +51,9 @@ export default function TopicDetailScreen() {
             headerBackTitle: 'Back'
           }} 
         />
-        <View className="flex-1 justify-center items-center">
+        <View className="flex-1 justify-center items-center px-6">
           <ActivityIndicator size="large" />
-          <Text className="mt-4 text-muted-foreground">Loading topic details...</Text>
+          <Text className="mt-4 text-muted-foreground text-center">Loading topic details...</Text>
         </View>
       </View>
     );
@@ -126,6 +131,39 @@ export default function TopicDetailScreen() {
           headerBackTitle: 'Back'
         }} 
       />
+      
+      {/* Regeneration Loading Overlay */}
+      {isRegenerating && (
+        <Animated.View 
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="absolute inset-0 z-50 bg-background/90 justify-center items-center"
+          style={{ zIndex: 50 }}
+        >
+          <Card className="mx-8 p-6">
+            <View className="items-center">
+              <View className="bg-primary/10 rounded-full p-4 mb-4">
+                <Sparkles size={32} className="text-primary" />
+              </View>
+              <ActivityIndicator size="large" className="mb-4" />
+              <Text className="text-lg font-semibold text-foreground text-center mb-2">
+                Personalizing Content
+              </Text>
+              <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                Regenerating learning material based on your quiz performance...
+              </Text>
+              <View className="flex-row flex-wrap justify-center gap-2 mt-4">
+                <Badge className="bg-green-100">
+                  <Text className="text-xs text-green-700">Strengthening weak areas</Text>
+                </Badge>
+                <Badge className="bg-blue-100">
+                  <Text className="text-xs text-blue-700">Adapting to your level</Text>
+                </Badge>
+              </View>
+            </View>
+          </Card>
+        </Animated.View>
+      )}
       
       <ScrollView className="flex-1">
         <View className="p-6 space-y-6">

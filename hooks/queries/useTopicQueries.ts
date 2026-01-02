@@ -170,9 +170,13 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
             return {
               id: st.id,
               title: st.name,
-              explanation: st.description || '',
+              explanationDefault: st.contentDefault || '',
+              explanationSimplified: st.contentSimplified || st.contentDefault || '',
+              explanationStory: st.contentStory || st.contentDefault || '',
               example: metadata.example,
               exampleExplanation: metadata.exampleExplanation,
+              exampleSimplified: metadata.exampleSimplified,
+              exampleStory: metadata.exampleStory,
               keyPoints: metadata.keyPoints
             };
           }),
@@ -204,11 +208,11 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
             }
             return {
               subtopicName,
-              status: perf.status,
+              status: perf.status as 'strong' | 'weak' | 'neutral',
               accuracy: perf.accuracy
             };
           })
-          .filter((item): item is { subtopicName: string; status: string; accuracy: number } => item !== null);
+          .filter((item): item is { subtopicName: string; status: 'strong' | 'weak' | 'neutral'; accuracy: number } => item !== null);
         
         if (subtopicGuidance.length === 0) {
           console.error(`No valid subtopic names resolved from performance data`);

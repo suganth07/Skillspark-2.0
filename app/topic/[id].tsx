@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator, ScrollView } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
@@ -6,14 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { Badge } from '@/components/ui/badge';
-import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
+import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { useTopicDetail, usePersistTopicContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
+type ContentVersion = 'default' | 'simplified' | 'story';
 
 export default function TopicDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,6 +25,8 @@ export default function TopicDetailScreen() {
   const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
   const isGeneratedVideosEnabled = useIsGeneratedVideosEnabled();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [subtopicVersions, setSubtopicVersions] = useState<Record<string, ContentVersion>>({});
+  const [hasPersistedContent, setHasPersistedContent] = useState(false);
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -32,8 +37,41 @@ export default function TopicDetailScreen() {
     refetch 
   } = useTopicDetail(id, currentUserId || undefined);
 
+  // Mutation to persist content to database
+  const persistContentMutation = usePersistTopicContent();
+
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
+
+  // Persist content to database when it's generated
+  useEffect(() => {
+    if (currentTopicDetail && !hasPersistedContent && currentUserId) {
+      const { topic, explanation, subtopicPerformance } = currentTopicDetail;
+      
+      // Check if we need to persist (content was just generated but not saved)
+      const needsPersistence = explanation.subtopics.length > 0;
+      const isRegeneration = subtopicPerformance.size > 0;
+      
+      if (needsPersistence) {
+        console.log('🔄 Persisting generated content to database...');
+        persistContentMutation.mutate({
+          topicId: topic.id,
+          userId: currentUserId,
+          category: topic.category,
+          explanation,
+          isRegeneration,
+        }, {
+          onSuccess: () => {
+            console.log('✅ Content successfully persisted!');
+            setHasPersistedContent(true);
+          },
+          onError: (err) => {
+            console.error('❌ Failed to persist content:', err);
+          }
+        });
+      }
+    }
+  }, [currentTopicDetail, currentUserId, hasPersistedContent]);
 
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -43,6 +81,17 @@ export default function TopicDetailScreen() {
       newExpanded.add(sectionId);
     }
     setExpandedSections(newExpanded);
+  };
+
+  const setSubtopicVersion = (subtopicId: string, version: ContentVersion) => {
+    setSubtopicVersions(prev => ({
+      ...prev,
+      [subtopicId]: version
+    }));
+  };
+
+  const getSubtopicVersion = (subtopicId: string): ContentVersion => {
+    return subtopicVersions[subtopicId] || 'default';
   };
 
   if (isLoading) {
@@ -123,6 +172,29 @@ export default function TopicDetailScreen() {
       case 'intermediate': return 'bg-yellow-100 text-yellow-800';
       case 'advanced': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Get content based on selected version for a specific subtopic
+  const getSubtopicContent = (subtopic: any, subtopicId: string) => {
+    const version = getSubtopicVersion(subtopicId);
+    
+    switch (version) {
+      case 'simplified':
+        return {
+          explanation: subtopic.explanationSimplified || subtopic.explanationDefault || '',
+          example: subtopic.exampleSimplified || subtopic.example,
+        };
+      case 'story':
+        return {
+          explanation: subtopic.explanationStory || subtopic.explanationDefault || '',
+          example: subtopic.exampleStory || subtopic.example,
+        };
+      default:
+        return {
+          explanation: subtopic.explanationDefault || '',
+          example: subtopic.example,
+        };
     }
   };
 
@@ -217,7 +289,7 @@ export default function TopicDetailScreen() {
                 <CardTitle>Key Concepts</CardTitle>
               </View>
               <Text className="text-sm text-muted-foreground">
-                Tap each concept to learn more
+                Tap each concept to learn more • Switch learning style per concept
               </Text>
             </CardHeader>
             <CardContent>
@@ -225,6 +297,8 @@ export default function TopicDetailScreen() {
                 {explanation.subtopics.map((subtopic, index) => {
                   const isExpanded = expandedSections.has(subtopic.id);
                   const performance = getPerformanceForSubtopic(subtopic.id);
+                  const content = getSubtopicContent(subtopic, subtopic.id);
+                  const currentVersion = getSubtopicVersion(subtopic.id);
                   
                   return (
                     <View 
@@ -271,47 +345,89 @@ export default function TopicDetailScreen() {
 
                       {/* Accordion Content */}
                       {isExpanded && (
-                        <View className="px-4 pb-4 pt-2 border-t border-border bg-muted/30">
-                          <Text className="text-muted-foreground leading-6 mb-4">
-                            {subtopic.explanation}
-                            
-                          </Text>
-
-                          {subtopic.example && (
-                            <View className="mt-3">
-                              <View className="flex-row items-center space-x-2 mb-2">
-                                <Code className="h-4 w-4 text-green-600" />
-                                <Text className="text-sm font-semibold text-green-600">
-                                  Example:
+                        <View className="border-t border-border bg-muted/30">
+                          {/* Per-Subtopic Style Switcher */}
+                          <View className="px-4 pt-3 pb-2">
+                            <View className="flex-row gap-2 mb-3">
+                              <Button
+                                variant={currentVersion === 'default' ? 'default' : 'outline'}
+                                onPress={() => setSubtopicVersion(subtopic.id, 'default')}
+                                className="flex-1 py-2"
+                                size="sm"
+                              >
+                                <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
+                                  📚 Default
                                 </Text>
-                              </View>
-                              <View className="bg-slate-900 rounded-lg p-4">
-                                <Text className="text-slate-100 font-mono text-sm leading-6">
-                                  {subtopic.example}
+                              </Button>
+                              <Button
+                                variant={currentVersion === 'simplified' ? 'default' : 'outline'}
+                                onPress={() => setSubtopicVersion(subtopic.id, 'simplified')}
+                                className="flex-1 py-2"
+                                size="sm"
+                              >
+                                <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
+                                  🎯 Simplified
                                 </Text>
-                              </View>
-                              
-                              {subtopic.exampleExplanation && (
-                                <Text className="text-sm text-muted-foreground mt-2 italic">
-                                  💡 {subtopic.exampleExplanation}
+                              </Button>
+                              <Button
+                                variant={currentVersion === 'story' ? 'default' : 'outline'}
+                                onPress={() => setSubtopicVersion(subtopic.id, 'story')}
+                                className="flex-1 py-2"
+                                size="sm"
+                              >
+                                <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
+                                  📖 Story
                                 </Text>
-                              )}
+                              </Button>
                             </View>
-                          )}
+                          </View>
 
-                          {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
-                            <View className="mt-3">
-                              <Text className="text-sm font-semibold mb-2">Key Points:</Text>
-                              {subtopic.keyPoints.map((point, idx) => (
-                                <View key={idx} className="flex-row items-start space-x-2 mb-1">
-                                  <Text className="text-muted-foreground">•</Text>
-                                  <Text className="flex-1 text-sm text-muted-foreground">
-                                    {point}
+                          {/* Content */}
+                          <Animated.View 
+                            key={`${subtopic.id}-${currentVersion}`}
+                            entering={FadeIn.duration(300)}
+                            className="px-4 pb-4"
+                          >
+                            <Text className="text-muted-foreground leading-6 mb-4">
+                              {content.explanation}
+                            </Text>
+
+                            {content.example && (
+                              <View className="mt-3">
+                                <View className="flex-row items-center space-x-2 mb-2">
+                                  <Code className="h-4 w-4 text-green-600" />
+                                  <Text className="text-sm font-semibold text-green-600">
+                                    Example:
                                   </Text>
                                 </View>
-                              ))}
-                            </View>
-                          )}
+                                <View className="bg-slate-900 rounded-lg p-4">
+                                  <Text className="text-slate-100 font-mono text-sm leading-6">
+                                    {content.example}
+                                  </Text>
+                                </View>
+                                
+                                {subtopic.exampleExplanation && (
+                                  <Text className="text-sm text-muted-foreground mt-2 italic">
+                                    💡 {subtopic.exampleExplanation}
+                                  </Text>
+                                )}
+                              </View>
+                            )}
+
+                            {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
+                              <View className="mt-3">
+                                <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                {subtopic.keyPoints.map((point, idx) => (
+                                  <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                    <Text className="text-muted-foreground">•</Text>
+                                    <Text className="flex-1 text-sm text-muted-foreground">
+                                      {point}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </Animated.View>
                         </View>
                       )}
                     </View>

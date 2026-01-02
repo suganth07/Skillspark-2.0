@@ -5,7 +5,7 @@ export {
   useCurrentUserId,
   useUserPreferences,
   useUserStats,
-} from './useUserStoreV2';
+} from './useUserStore';
 
 // Emotion detection settings
 export {

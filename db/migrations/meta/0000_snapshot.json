@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "65b57120-6e11-43c7-afbd-fbe44a755804",
+  "id": "881a2972-3013-44d6-addd-093049a7fe3a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "questions": {
@@ -462,8 +462,22 @@
           "notNull": true,
           "autoincrement": false
         },
-        "description": {
-          "name": "description",
+        "content_default": {
+          "name": "content_default",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "content_simplified": {
+          "name": "content_simplified",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "content_story": {
+          "name": "content_story",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -680,6 +694,14 @@
           "notNull": false,
           "autoincrement": false,
           "default": 100
+        },
+        "needs_regeneration": {
+          "name": "needs_regeneration",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {

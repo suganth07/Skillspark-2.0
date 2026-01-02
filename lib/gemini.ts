@@ -72,9 +72,15 @@ export interface QuizQuestion {
 export interface TopicSubtopic {
   id: string;
   title: string;
-  explanation: string;
+  // Three types of explanations
+  explanationDefault: string;
+  explanationSimplified: string;
+  explanationStory: string;
+  // Examples for each type
   example?: string;
   exampleExplanation?: string;
+  exampleSimplified?: string;
+  exampleStory?: string;
   keyPoints?: string[];
 }
 
@@ -360,6 +366,53 @@ export class GeminiService {
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
   ): Promise<TopicExplanation> {
+    console.log(`🎯 Starting multi-version content generation for "${topicName}"`);
+    
+    // Generate all three versions in parallel for efficiency
+    const [defaultExplanation, simplifiedExplanation, storyExplanation] = await Promise.all([
+      this.generateDefaultContent(topicName, context, subtopicPerformance),
+      this.generateSimplifiedContent(topicName, context, subtopicPerformance),
+      this.generateStoryContent(topicName, context, subtopicPerformance)
+    ]);
+
+    // Merge the three versions into a single TopicExplanation structure
+    const mergedExplanation: TopicExplanation = {
+      topicName: defaultExplanation.topicName,
+      overview: defaultExplanation.overview,
+      difficulty: defaultExplanation.difficulty,
+      whyLearn: defaultExplanation.whyLearn,
+      bestPractices: defaultExplanation.bestPractices,
+      commonPitfalls: defaultExplanation.commonPitfalls,
+      resources: defaultExplanation.resources,
+      subtopics: defaultExplanation.subtopics.map((defaultSt, index) => {
+        const simplifiedSt = simplifiedExplanation.subtopics[index];
+        const storySt = storyExplanation.subtopics[index];
+        
+        return {
+          id: defaultSt.id,
+          title: defaultSt.title,
+          explanationDefault: defaultSt.explanation,
+          explanationSimplified: simplifiedSt?.explanation || defaultSt.explanation,
+          explanationStory: storySt?.explanation || defaultSt.explanation,
+          example: defaultSt.example,
+          exampleExplanation: defaultSt.exampleExplanation,
+          exampleSimplified: simplifiedSt?.example,
+          exampleStory: storySt?.example,
+          keyPoints: defaultSt.keyPoints
+        };
+      })
+    };
+
+    console.log(`✅ Multi-version content generation complete for "${topicName}"`);
+    return mergedExplanation;
+  }
+
+  // Generate default/normal content
+  private async generateDefaultContent(
+    topicName: string,
+    context: string,
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  ): Promise<TopicExplanation> {
     // Build performance guidance for AI
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -392,7 +445,7 @@ ${subtopicPerformance.map(p =>
       2. Why someone learning ${context} should understand ${topicName}
       3. 5-8 key subtopics/concepts within ${topicName}
       4. For EACH subtopic, provide:
-         - A clear explanation ${subtopicPerformance ? '(LENGTH MUST VARY based on performance data above!)' : ''}
+         - A clear, balanced explanation ${subtopicPerformance ? '(LENGTH MUST VARY based on performance data above!)' : ''}
          - A practical code example (if applicable)
          - Explanation of the example
          - 2-3 key points to remember
@@ -448,10 +501,194 @@ ${subtopicPerformance.map(p =>
         throw new Error('Invalid topic explanation structure');
       }
       
+      console.log(`✅ Generated DEFAULT content with ${explanation.subtopics.length} subtopics`);
       return explanation;
     } catch (error) {
-      console.error('Error generating topic explanation:', error);
-      throw new Error(`Failed to generate topic explanation: ${error}`);
+      console.error('Error generating default topic explanation:', error);
+      throw new Error(`Failed to generate default topic explanation: ${error}`);
+    }
+  }
+
+  // Generate simplified content with longer explanations and more examples
+  private async generateSimplifiedContent(
+    topicName: string,
+    context: string,
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  ): Promise<TopicExplanation> {
+    let performanceGuidance = '';
+    if (subtopicPerformance && subtopicPerformance.length > 0) {
+      performanceGuidance = `
+      
+      📊 User Performance Data (use for prioritization):
+${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      
+      Focus MORE examples and simpler language on weak areas, but keep all content accessible.
+      `;
+    }
+
+    const prompt = `
+      Create a SIMPLIFIED, beginner-friendly explanation for the topic "${topicName}" in the context of learning "${context}".
+      ${performanceGuidance}
+      
+      THIS VERSION IS FOR LEARNERS WHO NEED:
+      - Simpler language and clearer explanations
+      - MORE examples (2-3 per subtopic)
+      - Step-by-step breakdowns
+      - Real-world analogies and relatable examples
+      
+      Provide:
+      1. A simple, easy-to-understand overview
+      2. Why this topic matters (in simple terms)
+      3. 5-8 key subtopics/concepts
+      4. For EACH subtopic:
+         - A LONGER, simpler explanation (4-5 paragraphs, break down complex ideas)
+         - 2-3 practical examples with detailed explanations
+         - Real-world analogies when possible
+         - 3-4 key takeaway points in simple language
+      5. Best practices (explained simply)
+      6. Common mistakes and how to avoid them
+      7. Beginner-friendly learning resources
+      
+      Use simple vocabulary, avoid jargon, and explain everything step-by-step.
+      Make examples very concrete and relatable.
+      
+      Return ONLY valid JSON in this exact format:
+      {
+        "topicName": "${topicName}",
+        "overview": "Simple, clear overview",
+        "difficulty": "basic|intermediate|advanced",
+        "whyLearn": "Why this matters (simple explanation)",
+        "subtopics": [
+          {
+            "id": "subtopic-1",
+            "title": "Subtopic name",
+            "explanation": "LONGER, simpler explanation with step-by-step breakdown",
+            "example": "Detailed, relatable example with step-by-step walkthrough",
+            "exampleExplanation": "Clear explanation of what the example shows",
+            "keyPoints": ["Simple point 1", "Simple point 2", "Simple point 3", "Simple point 4"]
+          }
+        ],
+        "bestPractices": ["Simple practice 1", "Simple practice 2"],
+        "commonPitfalls": ["Mistake 1 and how to avoid it", "Mistake 2 and how to avoid it"],
+        "resources": ["Beginner resource 1", "Beginner resource 2"]
+      }
+      
+      Make this version significantly LONGER and SIMPLER than a typical explanation.
+    `;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Invalid JSON response from Gemini');
+      }
+      
+      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      
+      if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
+        throw new Error('Invalid simplified explanation structure');
+      }
+      
+      console.log(`✅ Generated SIMPLIFIED content with ${explanation.subtopics.length} subtopics`);
+      return explanation;
+    } catch (error) {
+      console.error('Error generating simplified topic explanation:', error);
+      throw new Error(`Failed to generate simplified topic explanation: ${error}`);
+    }
+  }
+
+  // Generate story-based content
+  private async generateStoryContent(
+    topicName: string,
+    context: string,
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  ): Promise<TopicExplanation> {
+    let performanceGuidance = '';
+    if (subtopicPerformance && subtopicPerformance.length > 0) {
+      performanceGuidance = `
+      
+      📊 User Performance Data:
+${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      
+      Create more detailed story scenarios for weak areas to help understanding.
+      `;
+    }
+
+    const prompt = `
+      Create a STORY-BASED explanation for the topic "${topicName}" in the context of learning "${context}".
+      ${performanceGuidance}
+      
+      THIS VERSION USES STORYTELLING TO TEACH:
+      - Present concepts through engaging narratives
+      - Use characters, scenarios, and real-world situations
+      - Make abstract concepts concrete through stories
+      - Create memorable learning experiences
+      
+      Provide:
+      1. An engaging story-based overview that introduces the topic
+      2. Why this topic matters (told through a brief scenario)
+      3. 5-8 key subtopics/concepts
+      4. For EACH subtopic:
+         - A STORY or SCENARIO that illustrates the concept
+         - Include characters, setting, and a plot that demonstrates the learning point
+         - Show the concept in action through the story
+         - Example: code within the context of the story
+         - 2-3 key lessons learned from the story
+      5. Best practices (illustrated through story examples)
+      6. Common mistakes (shown through cautionary tales)
+      7. Resources for further exploration
+      
+      Make the stories engaging, relatable, and memorable.
+      Use real-world scenarios that learners can connect with emotionally.
+      
+      Return ONLY valid JSON in this exact format:
+      {
+        "topicName": "${topicName}",
+        "overview": "Story-based introduction to the topic",
+        "difficulty": "basic|intermediate|advanced",
+        "whyLearn": "Why this matters (told as a mini-scenario)",
+        "subtopics": [
+          {
+            "id": "subtopic-1",
+            "title": "Subtopic name",
+            "explanation": "Story or scenario that teaches this concept. Include characters, setting, and demonstrate the learning point through narrative.",
+            "example": "Code or practical example within the story context",
+            "exampleExplanation": "How this example fits into the story and what it teaches",
+            "keyPoints": ["Lesson 1 from the story", "Lesson 2 from the story", "Lesson 3 from the story"]
+          }
+        ],
+        "bestPractices": ["Practice 1 (with story example)", "Practice 2 (with story example)"],
+        "commonPitfalls": ["Cautionary tale 1", "Cautionary tale 2"],
+        "resources": ["Resource 1", "Resource 2"]
+      }
+      
+      Make each subtopic a compelling mini-story that teaches the concept.
+    `;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Invalid JSON response from Gemini');
+      }
+      
+      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      
+      if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
+        throw new Error('Invalid story explanation structure');
+      }
+      
+      console.log(`✅ Generated STORY content with ${explanation.subtopics.length} subtopics`);
+      return explanation;
+    } catch (error) {
+      console.error('Error generating story topic explanation:', error);
+      throw new Error(`Failed to generate story topic explanation: ${error}`);
     }
   }
 

@@ -206,7 +206,7 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
         const subtopicsData = subtopics.map(st => ({
           id: st.id,
           name: st.name,
-          description: st.description || ''
+          description: st.contentDefault || ''
         }));
 
         const questions = await geminiService.generateQuizQuestionsFromSubtopics(
@@ -258,7 +258,7 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
         const subtopicsData = newSubtopics.map(st => ({
           id: st.id,
           name: st.name,
-          description: st.description || ''
+          description: st.contentDefault || ''
         }));
 
         // Generate quiz from newly created subtopics

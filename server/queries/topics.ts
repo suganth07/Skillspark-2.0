@@ -37,7 +37,7 @@ export async function getRoadmapByTopicId(topicId: string, userId: string) {
 
 
 
-// Create subtopics and store them in database
+// Create subtopics and store them in database with three content types
 export async function createSubtopics(
   parentTopicId: string,
   category: string,
@@ -73,7 +73,7 @@ export async function createSubtopics(
         .where(eq(topics.id, parentTopicId));
     }
 
-    // Create each subtopic in subtopics table
+    // Create each subtopic in subtopics table with three content versions
     const errors: Array<{ subtopicId: string; title: string; error: string }> = [];
     
     for (let i = 0; i < explanation.subtopics.length; i++) {
@@ -85,16 +85,20 @@ export async function createSubtopics(
           id: subtopicId,
           parentTopicId: parentTopicId,
           name: subtopic.title,
-          description: subtopic.explanation,
+          contentDefault: subtopic.explanationDefault,
+          contentSimplified: subtopic.explanationSimplified,
+          contentStory: subtopic.explanationStory,
           order: i + 1,
           metadata: JSON.stringify({
             example: subtopic.example,
             exampleExplanation: subtopic.exampleExplanation,
+            exampleSimplified: subtopic.exampleSimplified,
+            exampleStory: subtopic.exampleStory,
             keyPoints: subtopic.keyPoints
           })
         });
 
-        console.log(`✅ Created subtopic: ${subtopic.title}`);
+        console.log(`✅ Created subtopic with 3 content types: ${subtopic.title}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Failed to create subtopic ${subtopic.title}:`, error);
@@ -120,7 +124,9 @@ export async function getSubtopics(parentTopicId: string) {
     .select({
       id: subtopics.id,
       name: subtopics.name,
-      description: subtopics.description,
+      contentDefault: subtopics.contentDefault,
+      contentSimplified: subtopics.contentSimplified,
+      contentStory: subtopics.contentStory,
       metadata: subtopics.metadata,
       order: subtopics.order
     })
@@ -186,28 +192,32 @@ export async function updateSubtopicsContent(
         .where(eq(topics.id, parentTopicId));
     }
 
-    // Update each subtopic with new adaptive content
+    // Update each subtopic with new adaptive content (all three versions)
     for (const subtopic of explanation.subtopics) {
       try {
         await tx
           .update(subtopics)
           .set({
-            description: subtopic.explanation,
+            contentDefault: subtopic.explanationDefault,
+            contentSimplified: subtopic.explanationSimplified,
+            contentStory: subtopic.explanationStory,
             metadata: JSON.stringify({
               example: subtopic.example,
               exampleExplanation: subtopic.exampleExplanation,
+              exampleSimplified: subtopic.exampleSimplified,
+              exampleStory: subtopic.exampleStory,
               keyPoints: subtopic.keyPoints
             })
           })
           .where(eq(subtopics.id, subtopic.id));
 
-        console.log(`✅ Updated subtopic: ${subtopic.title}`);
+        console.log(`✅ Updated subtopic with 3 content types: ${subtopic.title}`);
       } catch (error) {
         console.error(`Failed to update subtopic ${subtopic.title}:`, error);
       }
     }
 
-    console.log(`💾 Updated ${explanation.subtopics.length} subtopics with adaptive content`);
+    console.log(`💾 Updated ${explanation.subtopics.length} subtopics with adaptive content (3 versions each)`);
   });
 }
 

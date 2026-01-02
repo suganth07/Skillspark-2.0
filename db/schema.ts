@@ -90,10 +90,15 @@ export const subtopics = sqliteTable(
     parentTopicId: text("parent_topic_id").references(() => topics.id).notNull(),
     
     name: text("name").notNull(),
-    description: text("description"),
+    
+    // Three types of content for adaptive learning
+    contentDefault: text("content_default"), // Normal default explanation
+    contentSimplified: text("content_simplified"), // Simpler, longer with more examples
+    contentStory: text("content_story"), // Story-based version
+    
     order: integer("order").notNull(), // Display order within parent topic
     
-    // JSON metadata: { example: string, exampleExplanation: string, keyPoints: string[] }
+    // JSON metadata: { example: string, exampleExplanation: string, keyPoints: string[], exampleSimplified: string, exampleStory: string }
     metadata: text("metadata", { mode: "json" }).default("{}"),
     
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),

@@ -18,7 +18,7 @@ import { Inter_400Regular, Inter_600SemiBold, useFonts } from '@expo-google-font
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
-import { useUserStore } from "@/hooks/stores/useUserStoreV2";
+import { useUserStore } from "@/hooks/stores/useUserStore";
 
 // Component to handle user initialization inside DatabaseProvider
 function AppInitializer({ children, onReady }: { children: React.ReactNode; onReady: () => void }) {

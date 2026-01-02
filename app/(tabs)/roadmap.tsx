@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
-import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
+import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useColorScheme } from '@/lib/useColorScheme';
 import { useUserRoadmaps, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';

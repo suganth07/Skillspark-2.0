@@ -8,7 +8,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
-import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
+import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates } from '@/hooks/queries/useRoadmapQueries';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';

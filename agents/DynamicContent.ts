@@ -1,6 +1,6 @@
 // DynamicContent.ts - Agent for parallel content generation (React Native compatible)
 import { geminiService } from "../lib/gemini";
-import type { TopicExplanation, RawTopicExplanation } from "../lib/gemini";
+import type { TopicExplanation, RawTopicExplanation, RawSubtopic } from "../lib/gemini";
 
 // ------------------------------
 // Agent State Type
@@ -64,6 +64,43 @@ function mergeContentVersions(
   simplifiedExplanation: RawTopicExplanation,
   storyExplanation: RawTopicExplanation
 ): TopicExplanation {
+  // Helper to find matching subtopic by title (case-insensitive)
+  const findMatchingSubtopic = (
+    subtopics: RawSubtopic[],
+    title: string
+  ): RawSubtopic | undefined => {
+    return subtopics.find(
+      st => st.title.toLowerCase().trim() === title.toLowerCase().trim()
+    );
+  };
+
+  // Use default as the base, then match simplified and story by title
+  const mergedSubtopics = defaultExplanation.subtopics.map((defaultSt) => {
+    const simplifiedSt = findMatchingSubtopic(simplifiedExplanation.subtopics, defaultSt.title);
+    const storySt = findMatchingSubtopic(storyExplanation.subtopics, defaultSt.title);
+    
+    // Log mismatches for debugging
+    if (!simplifiedSt) {
+      console.warn(`⚠️ No simplified match for subtopic: "${defaultSt.title}"`);
+    }
+    if (!storySt) {
+      console.warn(`⚠️ No story match for subtopic: "${defaultSt.title}"`);
+    }
+    
+    return {
+      id: defaultSt.id,
+      title: defaultSt.title,
+      explanationDefault: defaultSt.explanation,
+      explanationSimplified: simplifiedSt?.explanation || defaultSt.explanation,
+      explanationStory: storySt?.explanation || defaultSt.explanation,
+      example: defaultSt.example,
+      exampleExplanation: defaultSt.exampleExplanation,
+      exampleSimplified: simplifiedSt?.example,
+      exampleStory: storySt?.example,
+      keyPoints: defaultSt.keyPoints
+    };
+  });
+
   return {
     topicName: defaultExplanation.topicName,
     overview: defaultExplanation.overview,
@@ -72,23 +109,7 @@ function mergeContentVersions(
     bestPractices: defaultExplanation.bestPractices,
     commonPitfalls: defaultExplanation.commonPitfalls,
     resources: defaultExplanation.resources,
-    subtopics: defaultExplanation.subtopics.map((defaultSt, index) => {
-      const simplifiedSt = simplifiedExplanation.subtopics[index];
-      const storySt = storyExplanation.subtopics[index];
-      
-      return {
-        id: defaultSt.id,
-        title: defaultSt.title,
-        explanationDefault: defaultSt.explanation,
-        explanationSimplified: simplifiedSt?.explanation || defaultSt.explanation,
-        explanationStory: storySt?.explanation || defaultSt.explanation,
-        example: defaultSt.example,
-        exampleExplanation: defaultSt.exampleExplanation,
-        exampleSimplified: simplifiedSt?.example,
-        exampleStory: storySt?.example,
-        keyPoints: defaultSt.keyPoints
-      };
-    })
+    subtopics: mergedSubtopics
   };
 }
 

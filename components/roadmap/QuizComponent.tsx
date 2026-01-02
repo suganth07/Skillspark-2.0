@@ -7,7 +7,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { useUserManagement } from '@/hooks/stores/useUserStoreV2';
+import { useUserManagement } from '@/hooks/stores/useUserStore';
 import { useQuiz, useSubmitQuiz } from '@/hooks/queries/useRoadmapQueries';
 import { ActivityIndicator } from 'react-native';
 import { Check, X, Clock, Brain } from 'lucide-react-native';

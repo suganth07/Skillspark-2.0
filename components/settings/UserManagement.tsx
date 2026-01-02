@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
-import { useUserManagement } from '@/hooks/stores/useUserStoreV2';
+import { useUserManagement } from '@/hooks/stores/useUserStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';

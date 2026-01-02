@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
-import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
+import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useGenerateRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { RocketLoadingAnimation } from './RocketLoadingAnimation';
 import { ArrowLeft, CheckCircle, X, WandSparkles } from 'lucide-react-native';

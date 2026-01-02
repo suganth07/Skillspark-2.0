@@ -193,6 +193,8 @@ export async function updateSubtopicsContent(
     }
 
     // Update each subtopic with new adaptive content (all three versions)
+    const errors: Array<{ subtopic: string; error: unknown }> = [];
+    
     for (const subtopic of explanation.subtopics) {
       try {
         await tx
@@ -214,7 +216,14 @@ export async function updateSubtopicsContent(
         console.log(`✅ Updated subtopic with 3 content types: ${subtopic.title}`);
       } catch (error) {
         console.error(`Failed to update subtopic ${subtopic.title}:`, error);
+        errors.push({ subtopic: subtopic.title, error });
       }
+    }
+
+    // If any errors occurred, abort transaction
+    if (errors.length > 0) {
+      const errorDetails = errors.map(e => `${e.subtopic}: ${e.error}`).join('; ');
+      throw new Error(`Failed to update ${errors.length} subtopic(s): ${errorDetails}`);
     }
 
     console.log(`💾 Updated ${explanation.subtopics.length} subtopics with adaptive content (3 versions each)`);

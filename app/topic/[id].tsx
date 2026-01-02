@@ -43,35 +43,50 @@ export default function TopicDetailScreen() {
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
 
-  // Persist content to database when it's generated
+  // Persist content to database when it's generated (idempotent via server check)
   useEffect(() => {
-    if (currentTopicDetail && !hasPersistedContent && currentUserId) {
-      const { topic, explanation, subtopicPerformance } = currentTopicDetail;
-      
-      // Check if we need to persist (content was just generated but not saved)
-      const needsPersistence = explanation.subtopics.length > 0;
-      const isRegeneration = subtopicPerformance.size > 0;
-      
-      if (needsPersistence) {
-        console.log('🔄 Persisting generated content to database...');
-        persistContentMutation.mutate({
-          topicId: topic.id,
-          userId: currentUserId,
-          category: topic.category,
-          explanation,
-          isRegeneration,
-        }, {
-          onSuccess: () => {
-            console.log('✅ Content successfully persisted!');
-            setHasPersistedContent(true);
-          },
-          onError: (err) => {
-            console.error('❌ Failed to persist content:', err);
-          }
-        });
-      }
+    if (!currentTopicDetail || !currentUserId) {
+      return;
     }
-  }, [currentTopicDetail, currentUserId, hasPersistedContent]);
+
+    const { topic, explanation, subtopicPerformance } = currentTopicDetail;
+    
+    // Determine if we need to persist by checking if content exists
+    // If subtopics have content (contentDefault), they're already persisted
+    const hasPersistedSubtopics = explanation.subtopics.some(
+      st => st.explanationDefault && st.explanationDefault.length > 0
+    );
+    
+    // Only persist if:
+    // 1. Content was generated (subtopics exist)
+    // 2. NOT already saved locally this session (hasPersistedContent guard)
+    // 3. Content doesn't appear to be from database (no explanationDefault means fresh from AI)
+    const needsPersistence = explanation.subtopics.length > 0 && 
+                             !hasPersistedContent && 
+                             !hasPersistedSubtopics;
+    
+    // Derive regeneration from server state (subtopicPerformance exists = came from quiz)
+    const isRegeneration = subtopicPerformance.size > 0;
+    
+    if (needsPersistence) {
+      console.log('🔄 Persisting generated content to database...');
+      persistContentMutation.mutate({
+        topicId: topic.id,
+        userId: currentUserId,
+        category: topic.category,
+        explanation,
+        isRegeneration,
+      }, {
+        onSuccess: () => {
+          console.log('✅ Content successfully persisted!');
+          setHasPersistedContent(true);
+        },
+        onError: (err) => {
+          console.error('❌ Failed to persist content:', err);
+        }
+      });
+    }
+  }, [currentTopicDetail, currentUserId, hasPersistedContent, persistContentMutation]);
 
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);

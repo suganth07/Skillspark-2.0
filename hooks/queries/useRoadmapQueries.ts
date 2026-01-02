@@ -8,7 +8,8 @@ import {
   createPrerequisiteQuiz,
   deleteRoadmap,
   getQuizWithQuestions,
-  submitQuizAttempt 
+  submitQuizAttempt,
+  updateStepCompletion 
 } from '@/server/queries/roadmaps';
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
@@ -253,6 +254,39 @@ export function useDeleteRoadmap() {
     onSuccess: async ({ userId, roadmapId }) => {
       // Use centralized cache cleanup for comprehensive deletion
       await cacheInvalidation.cleanupDeletedRoadmap(roadmapId, userId);
+    },
+  });
+}
+
+/**
+ * Hook to manually update step completion status
+ */
+export function useUpdateStepCompletion() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      stepId, 
+      userId, 
+      roadmapId, 
+      isCompleted 
+    }: { 
+      stepId: string; 
+      userId: string; 
+      roadmapId: string; 
+      isCompleted: boolean;
+    }) => {
+      await updateStepCompletion(stepId, userId, isCompleted);
+      return { stepId, userId, roadmapId, isCompleted };
+    },
+    onSuccess: async ({ userId, roadmapId }) => {
+      // Invalidate both list and detail queries to update progress
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.roadmaps.list(userId) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.roadmaps.detail(roadmapId, userId) 
+      });
     },
   });
 }

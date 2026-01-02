@@ -982,3 +982,53 @@ export async function deleteRoadmap(userId: string, roadmapId: string): Promise<
     console.log('✅ Deleted roadmap');
   });
 }
+
+/**
+ * Manually update step completion status
+ */
+export async function updateStepCompletion(
+  stepId: string,
+  userId: string,
+  isCompleted: boolean
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    // Update the step completion status
+    await tx
+      .update(roadmapSteps)
+      .set({ isCompleted })
+      .where(eq(roadmapSteps.id, stepId));
+
+    // Get the roadmap ID to update overall progress
+    const step = await tx
+      .select({ roadmapId: roadmapSteps.roadmapId })
+      .from(roadmapSteps)
+      .where(eq(roadmapSteps.id, stepId))
+      .limit(1);
+
+    if (step.length > 0) {
+      const roadmapId = step[0].roadmapId;
+
+      // Update roadmap progress
+      const allSteps = await tx
+        .select({ isCompleted: roadmapSteps.isCompleted })
+        .from(roadmapSteps)
+        .where(eq(roadmapSteps.roadmapId, roadmapId));
+
+      const completedStepsCount = allSteps.filter(step => step.isCompleted).length;
+      const progress = allSteps.length > 0 
+        ? Math.round((completedStepsCount / allSteps.length) * 100) 
+        : 0;
+
+      await tx
+        .update(roadmaps)
+        .set({ 
+          progress,
+          status: progress === 100 ? 'completed' : 'active',
+          updatedAt: new Date()
+        })
+        .where(eq(roadmaps.id, roadmapId));
+
+      console.log(`✅ Updated step ${stepId} completion to ${isCompleted}. Roadmap progress: ${progress}%`);
+    }
+  });
+}

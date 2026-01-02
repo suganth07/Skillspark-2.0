@@ -9,7 +9,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
-import { useRoadmapDetails, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
+import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion } from '@/hooks/queries/useRoadmapQueries';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
@@ -51,6 +51,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   } = useRoadmapDetails(roadmapId, currentUserId || undefined);
   
   const deleteRoadmapMutation = useDeleteRoadmap();
+  const updateStepCompletionMutation = useUpdateStepCompletion();
 
   // Reload roadmap details when returning from quiz
   useFocusEffect(
@@ -116,6 +117,26 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
       onDelete?.();
     } catch (err) {
       console.error('Failed to delete roadmap:', err);
+    }
+  };
+
+  const handleToggleCompletion = async (step: RoadmapStep) => {
+    if (!currentUserId) return;
+
+    try {
+      await updateStepCompletionMutation.mutateAsync({
+        stepId: step.id,
+        userId: currentUserId,
+        roadmapId: roadmapId,
+        isCompleted: !step.isCompleted,
+      });
+    } catch (err) {
+      console.error('Failed to update step completion:', err);
+      Alert.alert(
+        'Error',
+        'Failed to update completion status. Please try again.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -347,6 +368,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
             isLast={index === steps.length - 1}
             onPress={() => handleTopicPress(step)}
             onTakeQuiz={() => handleTakeQuiz(step)}
+            onToggleCompletion={() => handleToggleCompletion(step)}
             onViewResults={
               step.quizId && step.hasAttempt && onViewResults
                 ? () => onViewResults(step.quizId!, step.title)
@@ -366,6 +388,7 @@ interface RoadmapStepItemProps {
   isLast: boolean;
   onPress: () => void;
   onTakeQuiz: () => void;
+  onToggleCompletion: () => void;
   onViewResults?: () => void;
 }
 
@@ -375,6 +398,7 @@ function RoadmapStepItem({
   isLast,
   onPress,
   onTakeQuiz,
+  onToggleCompletion,
   onViewResults,
 }: RoadmapStepItemProps) {
   const isCompleted = step.isCompleted;
@@ -499,12 +523,31 @@ function RoadmapStepItem({
                   </Pressable>
                 )}
 
-                {isCompleted && (
-                  <View className="px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950">
+                {!isCompleted ? (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onToggleCompletion();
+                    }}
+                    className="px-4 py-2 rounded-lg border border-border bg-background active:bg-secondary flex-row items-center gap-2"
+                  >
+                    <CheckCircle size={14} className="text-foreground" />
+                    <Text className="text-sm font-medium text-foreground">
+                      Mark as Completed
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onToggleCompletion();
+                    }}
+                    className="px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950 active:opacity-70"
+                  >
                     <Text className="text-xs font-semibold text-green-700 dark:text-green-400">
                       ✓ Completed
                     </Text>
-                  </View>
+                  </Pressable>
                 )}
               </View>
             </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -47,14 +47,7 @@ export function TopicVideoGenerator({
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isLocalVideo, setIsLocalVideo] = useState<boolean>(false);
 
-  // Load existing video on mount
-  useEffect(() => {
-    if (topicId && userId) {
-      loadExistingVideo();
-    }
-  }, [topicId, userId]);
-
-  const loadExistingVideo = async () => {
+  const loadExistingVideo = useCallback(async () => {
     try {
       setVideoStatus('loading-existing');
       const existingVideo = await getExistingTopicVideo(topicId, userId);
@@ -78,9 +71,16 @@ export function TopicVideoGenerator({
       console.error('Error loading existing video:', err);
       setVideoStatus('idle');
     }
-  };
+  }, [topicId, userId]);
 
-  const handleGenerateVideo = async () => {
+  // Load existing video on mount
+  useEffect(() => {
+    if (topicId && userId) {
+      loadExistingVideo();
+    }
+  }, [topicId, userId, loadExistingVideo]);
+
+  const handleGenerateVideo = useCallback(async () => {
     if (!HEYGEN_API_KEY) {
       const error = 'HeyGen API key not configured';
       setVideoError(error);
@@ -171,9 +171,9 @@ export function TopicVideoGenerator({
       setVideoError(err instanceof Error ? err.message : String(err));
       setVideoStatus('error');
     }
-  };
+  }, [topicId, userId, topicName, subtopics]);
 
-  const handleDeleteVideo = async () => {
+  const handleDeleteVideo = useCallback(async () => {
     try {
       await deleteTopicVideo(topicId, userId);
       setVideoUrl(null);
@@ -183,9 +183,9 @@ export function TopicVideoGenerator({
     } catch (err) {
       console.error('Error deleting video:', err);
     }
-  };
+  }, [topicId, userId]);
 
-  const getVideoStatusMessage = () => {
+  const getVideoStatusMessage = useCallback(() => {
     switch (videoStatus) {
       case 'loading-existing':
         return 'Checking for existing video...';
@@ -204,7 +204,7 @@ export function TopicVideoGenerator({
       default:
         return '';
     }
-  };
+  }, [videoStatus, downloadProgress, isLocalVideo, videoError]);
 
   return (
     <Card>

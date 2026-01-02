@@ -34,7 +34,7 @@ export async function searchTopicUpdates(
   console.log(`🔍 Searching updates for: ${topicName}`);
 
   try {
-    const query = `What are the latest updates, new features, and changes in ${topicName} since ${completedDate?.toLocaleDateString() || '2024'}?`;
+    const query = `What are the latest updates, new features, and changes in ${topicName} since ${completedDate ? completedDate.toISOString().split('T')[0] : '2024'}?`;
     
     // Candidate documents to rerank (in production, these would come from a web search API)
     const candidateDocuments = [
@@ -73,7 +73,9 @@ export async function searchTopicUpdates(
       
       // Handle rate limit specifically
       if (response.status === 429) {
-        throw new Error('RATE_LIMIT_EXCEEDED');
+        const error = new Error('Rate limit exceeded. Please try again later.');
+        error.name = 'RateLimitError';
+        throw error;
       }
       
       throw new Error(`LangSearch API error: ${response.status} - ${errorText}`);
@@ -85,7 +87,9 @@ export async function searchTopicUpdates(
     if (data.code !== 200) {
       // Handle rate limit from response body
       if (data.code === '429' || data.code === 429) {
-        throw new Error('RATE_LIMIT_EXCEEDED');
+        const error = new Error('Rate limit exceeded. Please try again later.');
+        error.name = 'RateLimitError';
+        throw error;
       }
       throw new Error(`LangSearch error: ${data.message || data.msg || 'Unknown error'}`);
     }

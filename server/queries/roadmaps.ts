@@ -995,6 +995,27 @@ export async function updateStepCompletion(
   isCompleted: boolean
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    // Verify ownership before making any updates
+    const stepWithOwnership = await tx
+      .select({ 
+        roadmapId: roadmapSteps.roadmapId,
+        ownerId: roadmaps.userId 
+      })
+      .from(roadmapSteps)
+      .innerJoin(roadmaps, eq(roadmapSteps.roadmapId, roadmaps.id))
+      .where(eq(roadmapSteps.id, stepId))
+      .limit(1);
+
+    if (stepWithOwnership.length === 0) {
+      throw new Error('Step not found');
+    }
+
+    if (stepWithOwnership[0].ownerId !== userId) {
+      throw new Error('Unauthorized: You do not own this roadmap');
+    }
+
+    const roadmapId = stepWithOwnership[0].roadmapId;
+
     // Update the step completion status
     await tx
       .update(roadmapSteps)
@@ -1004,38 +1025,27 @@ export async function updateStepCompletion(
       })
       .where(eq(roadmapSteps.id, stepId));
 
-    // Get the roadmap ID to update overall progress
-    const step = await tx
-      .select({ roadmapId: roadmapSteps.roadmapId })
+    // Update roadmap progress
+    const allSteps = await tx
+      .select({ isCompleted: roadmapSteps.isCompleted })
       .from(roadmapSteps)
-      .where(eq(roadmapSteps.id, stepId))
-      .limit(1);
+      .where(eq(roadmapSteps.roadmapId, roadmapId));
 
-    if (step.length > 0) {
-      const roadmapId = step[0].roadmapId;
+    const completedStepsCount = allSteps.filter(step => step.isCompleted).length;
+    const progress = allSteps.length > 0 
+      ? Math.round((completedStepsCount / allSteps.length) * 100) 
+      : 0;
 
-      // Update roadmap progress
-      const allSteps = await tx
-        .select({ isCompleted: roadmapSteps.isCompleted })
-        .from(roadmapSteps)
-        .where(eq(roadmapSteps.roadmapId, roadmapId));
+    await tx
+      .update(roadmaps)
+      .set({ 
+        progress,
+        status: progress === 100 ? 'completed' : 'active',
+        updatedAt: new Date()
+      })
+      .where(eq(roadmaps.id, roadmapId));
 
-      const completedStepsCount = allSteps.filter(step => step.isCompleted).length;
-      const progress = allSteps.length > 0 
-        ? Math.round((completedStepsCount / allSteps.length) * 100) 
-        : 0;
-
-      await tx
-        .update(roadmaps)
-        .set({ 
-          progress,
-          status: progress === 100 ? 'completed' : 'active',
-          updatedAt: new Date()
-        })
-        .where(eq(roadmaps.id, roadmapId));
-
-      console.log(`✅ Updated step ${stepId} completion to ${isCompleted}. Roadmap progress: ${progress}%`);
-    }
+    console.log(`✅ Updated step ${stepId} completion to ${isCompleted}. Roadmap progress: ${progress}%`);
   });
 }
 
@@ -1046,6 +1056,18 @@ export async function getCompletedTopicsForUpdates(
   roadmapId: string,
   userId: string
 ): Promise<Array<{ id: string; name: string; completedDate: Date }>> {
+  // Verify roadmap ownership before returning data
+  const roadmap = await db
+    .select({ id: roadmaps.id })
+    .from(roadmaps)
+    .where(and(eq(roadmaps.id, roadmapId), eq(roadmaps.userId, userId)))
+    .limit(1);
+
+  if (!roadmap.length) {
+    // Roadmap doesn't exist or doesn't belong to this user
+    return [];
+  }
+
   const steps = await db
     .select({
       topicId: roadmapSteps.topicId,

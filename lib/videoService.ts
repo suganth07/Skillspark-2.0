@@ -4,17 +4,25 @@ import { topicVideos } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
-// Directory for storing downloaded videos
-const VIDEO_DIRECTORY = `${FileSystem.documentDirectory}videos/`;
+/**
+ * Get the video directory path (resolved at runtime)
+ */
+function getVideoDirectory(): string {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('FileSystem.documentDirectory is not available');
+  }
+  return `${FileSystem.documentDirectory}videos/`;
+}
 
 /**
  * Ensure the video directory exists
  */
 async function ensureVideoDirectory(): Promise<void> {
-  const dirInfo = await FileSystem.getInfoAsync(VIDEO_DIRECTORY);
+  const videoDir = getVideoDirectory();
+  const dirInfo = await FileSystem.getInfoAsync(videoDir);
   if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(VIDEO_DIRECTORY, { intermediates: true });
-    console.log('📁 Created video directory:', VIDEO_DIRECTORY);
+    await FileSystem.makeDirectoryAsync(videoDir, { intermediates: true });
+    console.log('📁 Created video directory:', videoDir);
   }
 }
 
@@ -58,33 +66,44 @@ export async function downloadVideo(
 ): Promise<{ localFilePath: string; fileSizeBytes: number }> {
   await ensureVideoDirectory();
 
-  const fileName = `${topicId}_${createId()}.mp4`;
-  const localFilePath = `${VIDEO_DIRECTORY}${fileName}`;
+  // Use deterministic filename to avoid orphaned files on retry
+  const fileName = `${topicId}_${userId}.mp4`;
+  const localFilePath = `${getVideoDirectory()}${fileName}`;
 
   console.log('📥 Downloading video to:', localFilePath);
 
-  // Create or update the video record with downloading status
-  const existing = await getExistingTopicVideo(topicId, userId);
-  
-  if (existing) {
-    await db
-      .update(topicVideos)
-      .set({
-        status: 'downloading',
-        remoteUrl,
-        heygenVideoId,
-      })
-      .where(eq(topicVideos.id, existing.id));
-  } else {
-    await db.insert(topicVideos).values({
+  // Delete any existing partial file from previous failed attempts
+  try {
+    await FileSystem.deleteAsync(localFilePath, { idempotent: true });
+  } catch (e) {
+    // Ignore if file doesn't exist
+  }
+
+  // Upsert the video record with downloading status (atomic to handle concurrent calls)
+  await db
+    .insert(topicVideos)
+    .values({
       id: createId(),
       topicId,
       userId,
       heygenVideoId,
       remoteUrl,
       status: 'downloading',
+      localFilePath: null,
+      fileSizeBytes: null,
+      downloadedAt: null,
+    })
+    .onConflictDoUpdate({
+      target: [topicVideos.topicId, topicVideos.userId],
+      set: {
+        status: 'downloading',
+        remoteUrl,
+        heygenVideoId,
+        localFilePath: null,
+        fileSizeBytes: null,
+        downloadedAt: null,
+      },
     });
-  }
 
   try {
     // Download with progress tracking
@@ -93,7 +112,9 @@ export async function downloadVideo(
       localFilePath,
       {},
       (downloadProgress) => {
-        const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+        const progress = downloadProgress.totalBytesExpectedToWrite > 0
+          ? downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite
+          : 0;
         onProgress?.(progress);
       }
     );
@@ -125,6 +146,13 @@ export async function downloadVideo(
   } catch (error) {
     console.error('❌ Video download failed:', error);
 
+    // Delete partial file if it exists
+    try {
+      await FileSystem.deleteAsync(localFilePath, { idempotent: true });
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+
     // Update record with error
     await db
       .update(topicVideos)
@@ -144,11 +172,13 @@ export async function saveVideoMetadata(
   heygenVideoId: string,
   remoteUrl: string
 ): Promise<string> {
-  const existing = await getExistingTopicVideo(topicId, userId);
+  // const existing = await getExistingTopicVideo(topicId, userId);
 
-  if (existing) {
-    // Delete old local file if it exists
-    if (existing.localFilePath) {
+  // if (existing) {
+  //   // Delete old local file if it exists
+  //   if (existing.localFilePath) {
+  const existing = await getExistingTopicVideo(topicId, userId);
+  if (existing?.localFilePath) {
       try {
         await FileSystem.deleteAsync(existing.localFilePath, { idempotent: true });
         console.log('🗑️ Deleted old video file:', existing.localFilePath);
@@ -157,34 +187,33 @@ export async function saveVideoMetadata(
       }
     }
 
-    // Update existing record
-    await db
-      .update(topicVideos)
-      .set({
-        heygenVideoId,
-        remoteUrl,
-        status: 'pending',
-        localFilePath: null,
-        fileSizeBytes: null,
-        downloadedAt: null,
-      })
-      .where(eq(topicVideos.id, existing.id));
-
-    return existing.id;
-  } else {
-    // Create new record
-    const id = createId();
-    await db.insert(topicVideos).values({
+  const id = existing?.id ?? createId();
+  
+  await db
+    .insert(topicVideos)
+    .values({
       id,
       topicId,
       userId,
       heygenVideoId,
       remoteUrl,
       status: 'pending',
+      localFilePath: null,
+      fileSizeBytes: null,
+      downloadedAt: null,
+    })
+    .onConflictDoUpdate({
+      target: [topicVideos.topicId, topicVideos.userId],
+      set: {
+        heygenVideoId,
+        remoteUrl,
+        status: 'pending',
+        localFilePath: null,
+        fileSizeBytes: null,
+        downloadedAt: null,
+      },
     });
-
-    return id;
-  }
+  return id;
 }
 
 /**
@@ -224,11 +253,16 @@ export async function getTotalVideoStorageSize(): Promise<number> {
 export async function clearAllVideos(): Promise<void> {
   try {
     // Delete all files in video directory
-    const dirInfo = await FileSystem.getInfoAsync(VIDEO_DIRECTORY);
+    const videoDir = getVideoDirectory();
+    const dirInfo = await FileSystem.getInfoAsync(videoDir);
     if (dirInfo.exists) {
-      await FileSystem.deleteAsync(VIDEO_DIRECTORY, { idempotent: true });
+      await FileSystem.deleteAsync(videoDir, { idempotent: true });
       console.log('🗑️ Cleared video directory');
     }
+
+    // Recreate the directory to keep service in usable state
+    await ensureVideoDirectory();
+    console.log('📁 Recreated video directory');
 
     // Reset all video records
     await db.update(topicVideos).set({

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Pressable, ActivityIndicator, Modal, Alert } from 'react-native';
 import Animated, { FadeInDown, FadeIn, ZoomIn, FadeOut } from 'react-native-reanimated';
+import * as WebBrowser from 'expo-web-browser';
 import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +26,65 @@ import {
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
+
+// Component to render markdown text with clickable links
+function MarkdownText({ text }: { text: string }) {
+  const parts: Array<{ text: string; url?: string }> = [];
+  
+  // Parse markdown links: [text](url)
+  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index) });
+    }
+    // Add the link
+    parts.push({ text: match[1], url: match[2] });
+    lastIndex = regex.lastIndex;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex) });
+  }
+  
+  if (parts.length === 0) {
+    parts.push({ text });
+  }
+  
+  return (
+    <View className="flex-row flex-wrap ml-2">
+      <Text className="text-sm text-foreground">• </Text>
+      {parts.map((part, index) => (
+        part.url ? (
+          <Pressable
+            key={index}
+            onPress={async () => {
+              try {
+                await WebBrowser.openBrowserAsync(part.url!);
+              } catch (error) {
+                console.error('Error opening URL:', error);
+                Alert.alert('Error', 'Could not open link');
+              }
+            }}
+            className="active:opacity-70"
+          >
+            <Text className="text-sm text-blue-500 underline">
+              {part.text}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text key={index} className="text-sm text-foreground">
+            {part.text}
+          </Text>
+        )
+      ))}
+    </View>
+  );
+}
 
 interface RoadmapDisplayProps {
   roadmapId: string;
@@ -393,12 +453,12 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                     {update.newSubtopics.length > 0 && (
                       <View>
                         <Text className="text-xs text-muted-foreground mb-2">
-                          New subtopics discovered:
+                          Latest updates:
                         </Text>
                         {update.newSubtopics.slice(0, 5).map((subtopic: string, idx: number) => (
-                          <Text key={idx} className="text-sm text-foreground ml-2 mb-1">
-                            • {subtopic}
-                          </Text>
+                          <View key={idx} className="mb-2">
+                            <MarkdownText text={subtopic} />
+                          </View>
                         ))}
                       </View>
                     )}

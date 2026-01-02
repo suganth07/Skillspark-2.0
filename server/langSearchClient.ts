@@ -1,6 +1,7 @@
 import { LANG_SEARCH_API_KEY } from '@/lib/constants';
 
-const LANG_SEARCH_API_URL = 'https://api.langsearch.com/v1/rerank';
+const LANG_SEARCH_WEB_SEARCH_URL = 'https://api.langsearch.com/v1/web-search';
+const LANG_SEARCH_RERANK_URL = 'https://api.langsearch.com/v1/rerank';
 
 /* =======================
    Types
@@ -9,6 +10,7 @@ const LANG_SEARCH_API_URL = 'https://api.langsearch.com/v1/rerank';
 export interface LangSearchResult {
   title: string;
   snippet: string;
+  url?: string;
   relevance_score: number;
 }
 
@@ -34,79 +36,81 @@ export async function searchTopicUpdates(
   console.log(`🔍 Searching updates for: ${topicName}`);
 
   try {
-    const query = `What are the latest updates, new features, and changes in ${topicName} since ${completedDate ? completedDate.toISOString().split('T')[0] : '2024'}?`;
+    const formattedDate = completedDate ? completedDate.toISOString().split('T')[0] : '2024';
+    const query = `${topicName} latest updates new features changes breaking changes since ${formattedDate}`;
     
-    // Candidate documents to rerank (in production, these would come from a web search API)
-    const candidateDocuments = [
-      `${topicName} has received major updates in 2025-2026 including new features, performance improvements, and breaking changes that developers should be aware of.`,
-      `Latest ${topicName} release notes show significant enhancements to core functionality, new APIs, and deprecation of older features.`,
-      `${topicName} ecosystem updates: new libraries, tools, and best practices have emerged in the past year.`,
-      `Breaking changes in ${topicName}: migration guide for latest version with new syntax and updated patterns.`,
-      `${topicName} performance improvements and optimization techniques introduced in recent releases.`,
-      `Security updates and patches for ${topicName} addressing critical vulnerabilities.`,
-      `New ${topicName} features announced at conferences and in official documentation.`,
-      `${topicName} community adoption of modern patterns and architectural changes.`,
-      `${topicName} integration improvements with popular frameworks and tools.`,
-      `${topicName} developer experience enhancements and tooling updates.`,
-    ];
+    console.log(`📡 Calling LangSearch Web Search API for: "${query}"`);
 
-    console.log(`📡 Calling LangSearch Rerank API for ${topicName}...`);
-
-    const response = await fetch(LANG_SEARCH_API_URL, {
+    // Step 1: Perform web search to get real documents
+    const searchResponse = await fetch(LANG_SEARCH_WEB_SEARCH_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LANG_SEARCH_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'langsearch-reranker-v1',
         query: query,
-        documents: candidateDocuments,
-        top_n: 5,
-        return_documents: true,
+        freshness: 'onLimit', // Prioritize recent content
+        summary: true, // Get full summaries
+        count: 10, // Get top 10 results
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ API Error Response: ${errorText}`);
+    if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      console.error(`❌ Web Search API Error: ${errorText}`);
       
-      // Handle rate limit specifically
-      if (response.status === 429) {
+      if (searchResponse.status === 429) {
         const error = new Error('Rate limit exceeded. Please try again later.');
         error.name = 'RateLimitError';
         throw error;
       }
       
-      throw new Error(`LangSearch API error: ${response.status} - ${errorText}`);
+      throw new Error(`LangSearch Web Search API error: ${searchResponse.status} - ${errorText}`);
     }
 
-    const data = await response.json();
-    console.log(`✅ LangSearch rerank complete for ${topicName}`);
+    const searchData = await searchResponse.json();
+    console.log(`✅ Web search complete for ${topicName}, found ${searchData.data?.webPages?.value?.length || 0} results`);
 
-    if (data.code !== 200) {
-      // Handle rate limit from response body
-      if (data.code === '429' || data.code === 429) {
+    if (searchData.code !== 200) {
+      if (searchData.code === '429' || searchData.code === 429) {
         const error = new Error('Rate limit exceeded. Please try again later.');
         error.name = 'RateLimitError';
         throw error;
       }
-      throw new Error(`LangSearch error: ${data.message || data.msg || 'Unknown error'}`);
+      throw new Error(`LangSearch error: ${searchData.message || searchData.msg || 'Unknown error'}`);
     }
 
-    const results: LangSearchResult[] = data.results.map((result: any) => ({
-      title: `Update: ${topicName}`,
-      snippet: result.document.text,
-      relevance_score: result.relevance_score,
+    // Extract web pages from response
+    const webPages = searchData.data?.webPages?.value || [];
+    
+    if (webPages.length === 0) {
+      console.log(`⚠️ No web results found for ${topicName}`);
+      return {
+        topicName,
+        newSubtopics: [],
+        sources: [],
+        hasUpdates: false,
+      };
+    }
+
+    // Convert web pages to our format with URLs
+    const results: LangSearchResult[] = webPages.map((page: any) => ({
+      title: page.name || `Update: ${topicName}`,
+      snippet: page.summary || page.snippet || '',
+      url: page.url || page.displayUrl,
+      relevance_score: 1.0, // Web search results are already relevant
     }));
 
-    // Extract subtopics from high-relevance results
-    const newSubtopics = extractSubtopicsFromRerankedResults(topicName, results);
+    console.log(`✅ Processed ${results.length} web search results for ${topicName}`);
+
+    // Extract actual specific updates as subtopics from web results
+    const newSubtopics = extractActualUpdatesFromResults(topicName, results);
 
     return {
       topicName,
       newSubtopics,
-      sources: results,
+      sources: results.slice(0, 5), // Return top 5 sources
       hasUpdates: newSubtopics.length > 0,
     };
   } catch (error) {
@@ -115,45 +119,104 @@ export async function searchTopicUpdates(
   }
 }
 
-function extractSubtopicsFromRerankedResults(
+function extractActualUpdatesFromResults(
   topicName: string,
   results: LangSearchResult[]
 ): string[] {
-  const subtopics = new Set<string>();
+  const updates: string[] = [];
 
-  // Only use highly relevant results (score > 0.5)
-  const relevantResults = results.filter(r => r.relevance_score > 0.5);
-
-  if (relevantResults.length === 0) {
+  if (results.length === 0) {
     return [];
   }
 
-  // Extract key phrases from relevant results
-  for (const result of relevantResults) {
-    const text = result.snippet.toLowerCase();
+  // Extract actual specific content from top results
+  for (let i = 0; i < Math.min(results.length, 5); i++) {
+    const result = results[i];
+    const title = result.title;
+    const snippet = result.snippet;
+    const url = result.url;
+    
+    // Extract the most relevant sentence or key update from the snippet
+    const sentences = snippet.split(/[.!?]\s+/).filter(s => s.trim().length > 20);
+    
+    // Find sentences that mention updates, changes, features, etc.
+    const relevantSentences = sentences.filter(sentence => {
+      const lower = sentence.toLowerCase();
+      return (
+        lower.includes('new') ||
+        lower.includes('update') ||
+        lower.includes('feature') ||
+        lower.includes('release') ||
+        lower.includes('version') ||
+        lower.includes('change') ||
+        lower.includes('improve') ||
+        lower.includes('add') ||
+        lower.includes('introduce') ||
+        lower.includes('announce') ||
+        lower.includes('launch')
+      );
+    });
 
-    // Look for update indicators
-    if (text.includes('new features') || text.includes('updates')) {
-      subtopics.add(`New Features in ${topicName}`);
-    }
-    if (text.includes('breaking changes') || text.includes('migration')) {
-      subtopics.add(`Breaking Changes & Migration`);
-    }
-    if (text.includes('performance') || text.includes('optimization')) {
-      subtopics.add(`Performance Improvements`);
-    }
-    if (text.includes('security') || text.includes('vulnerabilities')) {
-      subtopics.add(`Security Updates`);
-    }
-    if (text.includes('best practices') || text.includes('patterns')) {
-      subtopics.add(`Modern Best Practices`);
-    }
-    if (text.includes('tools') || text.includes('ecosystem')) {
-      subtopics.add(`Ecosystem & Tooling`);
+    if (relevantSentences.length > 0) {
+      // Take the first relevant sentence and clean it up
+      let update = relevantSentences[0].trim();
+      
+      // Limit length to keep it concise
+      if (update.length > 100) {
+        update = update.substring(0, 100).trim() + '...';
+      }
+      
+      // Format as Markdown with clickable link
+      if (url) {
+        try {
+          const domain = new URL(url).hostname.replace('www.', '');
+          // Markdown format: text [link text](url)
+          updates.push(`${update} [Read more](${url})`);
+        } catch {
+          updates.push(update);
+        }
+      } else {
+        updates.push(update);
+      }
+    } else if (title && title.toLowerCase() !== topicName.toLowerCase()) {
+      // If no relevant sentences, use the title if it's informative
+      let update = title;
+      if (update.length > 100) {
+        update = update.substring(0, 100).trim() + '...';
+      }
+      
+      if (url) {
+        try {
+          const domain = new URL(url).hostname.replace('www.', '');
+          updates.push(`${update} [Read more](${url})`);
+        } catch {
+          updates.push(update);
+        }
+      } else {
+        updates.push(update);
+      }
     }
   }
 
-  return Array.from(subtopics);
+  // If we couldn't extract specific updates, provide at least the titles with sources
+  if (updates.length === 0 && results.length > 0) {
+    for (let i = 0; i < Math.min(results.length, 4); i++) {
+      const result = results[i];
+      let update = result.title;
+      
+      if (result.url) {
+        try {
+          updates.push(`${update} [Read more](${result.url})`);
+        } catch {
+          updates.push(update);
+        }
+      } else {
+        updates.push(update);
+      }
+    }
+  }
+
+  return updates;
 }
 
 /* =======================

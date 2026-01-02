@@ -923,14 +923,17 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
   // Resize plugin (native)
   const { resize } = useResizePlugin();
 
-  // TFLite model
+  // TFLite model - call hook unconditionally to follow Rules of Hooks
   const modelAsset = useMemo(
     () => (isTfliteAvailable ? require('@/assets/model/engagement6_fp16.tflite') : null),
     []
   );
-  const tflite =
-    isTfliteAvailable && useTensorflowModel && modelAsset ? useTensorflowModel(modelAsset) : null;
-  const model = tflite?.state === 'loaded' ? tflite.model : undefined;
+  
+  // Always call the hook, but pass null if not available
+  const tflite = useTensorflowModel && modelAsset ? useTensorflowModel(modelAsset) : null;
+  
+  // Only use the model if TFLite is available and model is loaded
+  const model = isTfliteAvailable && tflite?.state === 'loaded' ? tflite.model : undefined;
 
   // Request permission on mount
   useEffect(() => {

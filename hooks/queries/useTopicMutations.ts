@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import { cacheInvalidation } from '@/lib/cacheInvalidation';
 import { createSubtopics } from '@/server/queries/topics';
+import type { TopicExplanation } from '@/lib/gemini';
 
 /**
  * Mutation for updating subtopic performance
@@ -53,7 +54,7 @@ export function useCreateSubtopics() {
     }: { 
       topicId: string; 
       category: string; 
-      explanation: any;
+      explanation: TopicExplanation;
     }) => {
       await createSubtopics(topicId, category, explanation);
       return { topicId };

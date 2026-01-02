@@ -39,7 +39,8 @@ export const queryKeys = {
   // Topics
   topics: {
     all: ['topics'] as const,
-    detail: (topicId: string) => ['topics', 'detail', topicId] as const,
+    detail: (topicId: string, userId?: string) => 
+      userId ? ['topics', 'detail', topicId, userId] as const : ['topics', 'detail', topicId] as const,
     subtopics: (topicId: string) => ['topics', 'subtopics', topicId] as const,
     performance: (userId: string, topicId: string) => ['topics', 'performance', userId, topicId] as const,
   },

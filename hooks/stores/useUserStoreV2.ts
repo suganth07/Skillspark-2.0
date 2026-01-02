@@ -126,15 +126,18 @@ export const useUserStore = create<UserStoreState>()(
           
           // If still no users, we'll need to create one via the UI
           if (targetUserId) {
+            // Capture userId in local const to avoid closure issues
+            const userId = targetUserId;
+            
             // Prefetch the current user's details using queryClient directly
             await queryClient.prefetchQuery({
-              queryKey: queryKeys.users.detail(targetUserId),
-              queryFn: () => getUserById(targetUserId),
+              queryKey: queryKeys.users.detail(userId),
+              queryFn: () => getUserById(userId),
               staleTime: 10 * 60 * 1000,
             });
             
             // Update stats from user data
-            const userData = queryClient.getQueryData(queryKeys.users.detail(targetUserId)) as User | undefined;
+            const userData = queryClient.getQueryData(queryKeys.users.detail(userId)) as User | undefined;
             if (userData) {
               set({ 
                 cachedUserStats: {
@@ -300,7 +303,7 @@ export function useUserManagement() {
     // Delete user with proper cleanup
     deleteUser: async (userId: string) => {
       const { currentUserId } = useUserStore.getState();
-      
+
       // If deleting current user, switch to another user first
       if (userId === currentUserId) {
         const users = usersQuery.data || [];
@@ -311,7 +314,7 @@ export function useUserManagement() {
           logout(); // No users left
         }
       }
-      
+
       return deleteUserMutation.mutateAsync(userId);
     },
     

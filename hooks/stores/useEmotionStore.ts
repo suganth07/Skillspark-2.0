@@ -12,20 +12,30 @@ interface EmotionStoreState {
 }
 
 // Custom storage adapter for Zustand persist
+// Note: createJSONStorage handles JSON serialization, so this adapter only handles raw strings
 const zustandStorage = {
-  getItem: (name: string) => {
+  getItem: (name: string): string | null => {
     try {
       const value = storage.getString(name);
-      return value ? JSON.parse(value) : null;
-    } catch {
+      return value ?? null;
+    } catch (error) {
+      console.error(`Failed to get item '${name}' from storage:`, error);
       return null;
     }
   },
-  setItem: (name: string, value: any) => {
-    storage.set(name, JSON.stringify(value));
+  setItem: (name: string, value: string) => {
+    try {
+      storage.set(name, value);
+    } catch (error) {
+      console.error(`Failed to set item '${name}' in storage:`, error);
+    }
   },
   removeItem: (name: string) => {
-    storage.delete(name);
+    try {
+      storage.delete(name);
+    } catch (error) {
+      console.error(`Failed to remove item '${name}' from storage:`, error);
+    }
   },
 };
 

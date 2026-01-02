@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import { 
   getTopicById, 
@@ -49,8 +49,7 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
   const queryClient = useQueryClient();
   
   return useQuery({
-    // queryKey: queryKeys.topics.detail(topicId || ''),
-    queryKey: ['topics', 'detail', topicId || '', userId || ''],
+    queryKey: queryKeys.topics.detail(topicId || '', userId || ''),
     queryFn: async (): Promise<TopicDetail> => {
       if (!topicId || !userId) {
         throw new Error('Topic ID and User ID are required');
@@ -139,20 +138,22 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
             };
           });
           
-          // Save the adaptive content back to database
-          console.log(`💾 Saving regenerated adaptive content to database...`);
-          await updateSubtopicsContent(topicId, explanation);
-          
-          // Reset the regeneration flag to prevent unnecessary regeneration next time
-          await setNeedsRegeneration(userId, topicId, false);
-          
-          console.log(`✅ Content regenerated and cached. Regeneration flag reset to FALSE.`);
+          // Note: Side effects (updateSubtopicsContent, setNeedsRegeneration) should be
+          // handled by calling usePersistTopicContent mutation after data is fetched
+          console.log(`✅ Content regenerated - ready to persist`);
           return { topic, explanation, subtopicPerformance: performanceMap };
         }
         
         // SCENARIO 2: Content exists, no regeneration needed - Load from database
         console.log(`💾 Loading cached content from database (regeneration not needed)`);
-        const topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        
+        let topicMetadata: Record<string, any> = {};
+        try {
+          topicMetadata = JSON.parse(topic.metadata as string || '{}');
+        } catch (error) {
+          console.error(`Failed to parse topic metadata for topic ${topicId}:`, error);
+          topicMetadata = {};
+        }
         
         const explanation: TopicExplanation = {
           topicName: topic.name,
@@ -202,10 +203,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
           subtopicGuidance
         );
         
-        console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
-        await createSubtopics(topicId, topic.category, explanation);
-        
-        console.log(`✅ New adaptive content generated and cached`);
+        // Note: createSubtopics side effect should be handled by usePersistTopicContent mutation
+        console.log(`✅ New adaptive content generated`);
         return { topic, explanation, subtopicPerformance: performanceMap };
       }
       
@@ -217,11 +216,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
         context
       );
 
-      // Store generated subtopics in database for future use
-      console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
-      await createSubtopics(topicId, topic.category, explanation);
-
-      console.log(`✅ New content generated and cached with ${explanation.subtopics.length} subtopics`);
+      // Note: createSubtopics side effect should be handled by usePersistTopicContent mutation
+      console.log(`✅ New content generated with ${explanation.subtopics.length} subtopics`);
       
       return { topic, explanation, subtopicPerformance: performanceMap };
     },
@@ -252,5 +248,56 @@ export function useSubtopicPerformance(userId: string | undefined, topicId: stri
     queryFn: () => getUserSubtopicPerformance(userId!, topicId!),
     enabled: !!userId && !!topicId,
     staleTime: 2 * 60 * 1000, // Fresh for 2 minutes (performance data changes with quizzes)
+  });
+}
+
+/**
+ * Mutation to persist generated topic content to database
+ * Handles both initial content creation and regeneration scenarios
+ */
+export function usePersistTopicContent() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      topicId,
+      userId,
+      category,
+      explanation,
+      isRegeneration,
+    }: {
+      topicId: string;
+      userId: string;
+      category: string;
+      explanation: TopicExplanation;
+      isRegeneration: boolean;
+    }) => {
+      if (isRegeneration) {
+        // Update existing content
+        console.log(`💾 Saving regenerated adaptive content to database...`);
+        await updateSubtopicsContent(topicId, explanation);
+        
+        // Reset the regeneration flag
+        await setNeedsRegeneration(userId, topicId, false);
+        console.log(`✅ Content regenerated and cached. Regeneration flag reset to FALSE.`);
+      } else {
+        // Create new content
+        console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
+        await createSubtopics(topicId, category, explanation);
+        console.log(`✅ New content cached in database`);
+      }
+      
+      return { topicId, userId };
+    },
+    onSuccess: ({ topicId, userId }) => {
+      // Invalidate the topic detail query to refetch with persisted data
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.detail(topicId, userId) 
+      });
+      // Also invalidate subtopics query
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.subtopics(topicId) 
+      });
+    },
   });
 }

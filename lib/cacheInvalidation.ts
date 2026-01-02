@@ -87,10 +87,15 @@ export class CacheInvalidationService {
    * Includes subtopics and any roadmaps containing this topic
    */
   static invalidateTopicData(topicId: string, userId?: string) {
-    // Topic-specific caches
-    queryClient.invalidateQueries({ 
-      queryKey: queryKeys.topics.detail(topicId) 
+    // Topic detail caches - matches both ['topics','detail',topicId] and ['topics','detail',topicId,userId]
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        return query.queryKey[0] === 'topics' && 
+               query.queryKey[1] === 'detail' &&
+               query.queryKey[2] === topicId;
+      }
     });
+    
     queryClient.invalidateQueries({ 
       queryKey: queryKeys.topics.subtopics(topicId) 
     });

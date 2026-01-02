@@ -11,9 +11,27 @@ const run = async () => {
   const dbPath = path.resolve(".", "public/database.sqlite");
   let filebuffer: Buffer | undefined;
   
-  // Check if database file exists
-  if (fs.existsSync(dbPath)) {
+  // Safe filesystem access with proper error handling
+  try {
+    const stats = fs.statSync(dbPath);
+    if (!stats.isFile()) {
+      throw new Error(`EISDIR: Path exists but is not a file: ${dbPath}`);
+    }
     filebuffer = fs.readFileSync(dbPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // File doesn't exist - this is expected for first run
+      console.log(`Database file not found at ${dbPath}, creating new database`);
+    } else if ((error as NodeJS.ErrnoException).code === 'EACCES') {
+      console.error(`Permission denied accessing database file: ${dbPath}`);
+      throw error;
+    } else if ((error as NodeJS.ErrnoException).code === 'EISDIR') {
+      console.error(`Path is a directory, not a file: ${dbPath}`);
+      throw error;
+    } else {
+      console.error(`Unexpected error reading database file: ${error}`);
+      throw error;
+    }
   }
   
   const SQL = await initSqlJs();

@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateContentBundle } from '../agents/DynamicContent';
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
@@ -67,6 +68,27 @@ export interface QuizQuestion {
     explanation?: string;
     codeSnippet?: string;
   };
+}
+
+// Raw type for individual content versions (before merging)
+export interface RawSubtopic {
+  id: string;
+  title: string;
+  explanation: string;  // Will be mapped to explanationDefault/Simplified/Story
+  example?: string;
+  exampleExplanation?: string;
+  keyPoints?: string[];
+}
+
+export interface RawTopicExplanation {
+  topicName: string;
+  overview: string;
+  difficulty: 'basic' | 'intermediate' | 'advanced';
+  whyLearn?: string;
+  subtopics: RawSubtopic[];
+  bestPractices?: string[];
+  commonPitfalls?: string[];
+  resources?: string[];
 }
 
 export interface TopicSubtopic {
@@ -366,53 +388,21 @@ export class GeminiService {
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
   ): Promise<TopicExplanation> {
-    console.log(`🎯 Starting multi-version content generation for "${topicName}"`);
+    console.log(`🎯 [Content Agent] Delegating content generation to agent for "${topicName}"`);
     
-    // Generate all three versions in parallel for efficiency
-    const [defaultExplanation, simplifiedExplanation, storyExplanation] = await Promise.all([
-      this.generateDefaultContent(topicName, context, subtopicPerformance),
-      this.generateSimplifiedContent(topicName, context, subtopicPerformance),
-      this.generateStoryContent(topicName, context, subtopicPerformance)
-    ]);
-
-    // Merge the three versions into a single TopicExplanation structure
-    const mergedExplanation: TopicExplanation = {
-      topicName: defaultExplanation.topicName,
-      overview: defaultExplanation.overview,
-      difficulty: defaultExplanation.difficulty,
-      whyLearn: defaultExplanation.whyLearn,
-      bestPractices: defaultExplanation.bestPractices,
-      commonPitfalls: defaultExplanation.commonPitfalls,
-      resources: defaultExplanation.resources,
-      subtopics: defaultExplanation.subtopics.map((defaultSt, index) => {
-        const simplifiedSt = simplifiedExplanation.subtopics[index];
-        const storySt = storyExplanation.subtopics[index];
-        
-        return {
-          id: defaultSt.id,
-          title: defaultSt.title,
-          explanationDefault: defaultSt.explanation,
-          explanationSimplified: simplifiedSt?.explanation || defaultSt.explanation,
-          explanationStory: storySt?.explanation || defaultSt.explanation,
-          example: defaultSt.example,
-          exampleExplanation: defaultSt.exampleExplanation,
-          exampleSimplified: simplifiedSt?.example,
-          exampleStory: storySt?.example,
-          keyPoints: defaultSt.keyPoints
-        };
-      })
-    };
-
-    console.log(`✅ Multi-version content generation complete for "${topicName}"`);
-    return mergedExplanation;
+    // Use the content agent to orchestrate parallel content generation
+    const result = await generateContentBundle(topicName, context, subtopicPerformance);
+    
+    console.log(`✅ [Content Agent] Content generation complete via agent for "${topicName}"`);
+    return result;
   }
 
   // Generate default/normal content
-  private async generateDefaultContent(
+  async generateDefaultContent(
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
-  ): Promise<TopicExplanation> {
+  ): Promise<RawTopicExplanation> {
     // Build performance guidance for AI
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -494,7 +484,7 @@ ${subtopicPerformance.map(p =>
         throw new Error('Invalid JSON response from Gemini');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
       
       // Validate response structure
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
@@ -510,11 +500,11 @@ ${subtopicPerformance.map(p =>
   }
 
   // Generate simplified content with longer explanations and more examples
-  private async generateSimplifiedContent(
+  async generateSimplifiedContent(
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
-  ): Promise<TopicExplanation> {
+  ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
       performanceGuidance = `
@@ -586,7 +576,7 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
         throw new Error('Invalid JSON response from Gemini');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
       
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
         throw new Error('Invalid simplified explanation structure');
@@ -601,11 +591,11 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
   }
 
   // Generate story-based content
-  private async generateStoryContent(
+  async generateStoryContent(
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
-  ): Promise<TopicExplanation> {
+  ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
       performanceGuidance = `
@@ -678,7 +668,7 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
         throw new Error('Invalid JSON response from Gemini');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as TopicExplanation;
+      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
       
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
         throw new Error('Invalid story explanation structure');

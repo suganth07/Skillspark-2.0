@@ -49,6 +49,7 @@ export const roadmapSteps = sqliteTable(
     durationMinutes: integer("duration_minutes"),
 
     isCompleted: integer("is_completed", { mode: "boolean" }).default(false),
+    lastCompletedAt: integer("last_completed_at", { mode: "timestamp" }),
 
     // Link to graph (optional)
     topicId: text("topic_id"), // keep loose coupling (no FK) as you intended

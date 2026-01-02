@@ -9,7 +9,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
-import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion } from '@/hooks/queries/useRoadmapQueries';
+import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates } from '@/hooks/queries/useRoadmapQueries';
 import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Trash2,
   Rocket,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,8 @@ interface RoadmapDisplayProps {
 export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete }: RoadmapDisplayProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
   const router = useRouter();
@@ -52,6 +55,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   
   const deleteRoadmapMutation = useDeleteRoadmap();
   const updateStepCompletionMutation = useUpdateStepCompletion();
+  const checkTopicUpdatesMutation = useCheckTopicUpdates();
 
   // Reload roadmap details when returning from quiz
   useFocusEffect(
@@ -137,6 +141,45 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         'Failed to update completion status. Please try again.',
         [{ text: 'OK' }]
       );
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    if (!currentUserId) return;
+
+    try {
+      const result = await checkTopicUpdatesMutation.mutateAsync({
+        roadmapId,
+        userId: currentUserId,
+      });
+
+      if (result.hasUpdates) {
+        setTopicUpdates(result.updates);
+        setShowUpdatesModal(true);
+      } else {
+        Alert.alert(
+          'No Updates',
+          'All your completed topics are up to date! 🎉',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err) {
+      console.error('Failed to check updates:', err);
+      
+      // Handle rate limit error specifically
+      if (err instanceof Error && err.message === 'RATE_LIMIT_EXCEEDED') {
+        Alert.alert(
+          'Rate Limit Reached',
+          'You\'ve reached the API request limit. Please try again later or upgrade your plan.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          'Failed to check for updates. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
     }
   };
 
@@ -292,6 +335,98 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         </Animated.View>
       </Modal>
 
+      {/* Topic Updates Modal */}
+      <Modal
+        transparent
+        visible={showUpdatesModal}
+        animationType="none"
+        onRequestClose={() => setShowUpdatesModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowUpdatesModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden max-h-[80%]"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Sparkles size={24} className="text-primary" />
+                <Text className="text-xl font-bold text-foreground">
+                  New Updates Found!
+                </Text>
+              </View>
+              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                These topics have new updates since you completed them. Would you like to explore what's new?
+              </Text>
+
+              <ScrollView className="max-h-64 mb-6" showsVerticalScrollIndicator={false}>
+                {topicUpdates.map((update, index) => (
+                  <View key={index} className="mb-4 p-4 bg-secondary/50 rounded-lg">
+                    <Text className="text-base font-semibold text-foreground mb-2">
+                      {update.topicName}
+                    </Text>
+                    {update.newSubtopics.length > 0 && (
+                      <View>
+                        <Text className="text-xs text-muted-foreground mb-2">
+                          New subtopics discovered:
+                        </Text>
+                        {update.newSubtopics.slice(0, 5).map((subtopic: string, idx: number) => (
+                          <Text key={idx} className="text-sm text-foreground ml-2 mb-1">
+                            • {subtopic}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+
+              <Pressable
+                onPress={() => {
+                  setShowUpdatesModal(false);
+                  Alert.alert(
+                    'Coming Soon',
+                    'Content generation for new topics will be available soon!',
+                    [{ text: 'OK' }]
+                  );
+                }}
+                className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90 mb-3"
+              >
+                <Text className="text-base font-semibold text-primary-foreground">
+                  Generate Content
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setShowUpdatesModal(false)}
+                className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
+              >
+                <Text className="text-base font-medium text-muted-foreground">
+                  Maybe Later
+                </Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
       <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
@@ -305,12 +440,28 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
               </Text>
             )}
           </View>
-          <Pressable
-            onPress={() => setShowDeleteDialog(true)}
-            className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
-          >
-            <Trash2 size={20} className="text-red-600 dark:text-red-400" />
-          </Pressable>
+          
+          <View className="flex-row gap-2">
+            {completedSteps > 0 && (
+              <Pressable
+                onPress={handleCheckUpdates}
+                disabled={checkTopicUpdatesMutation.isPending}
+                className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
+              >
+                {checkTopicUpdatesMutation.isPending ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <RefreshCw size={20} className="text-primary" />
+                )}
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => setShowDeleteDialog(true)}
+              className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
+            >
+              <Trash2 size={20} className="text-red-600 dark:text-red-400" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Progress Card */}

@@ -7,6 +7,9 @@ export const HEYGEN_API_KEY = process.env.EXPO_PUBLIC_HEYGEN_API_KEY || null;
 export const HEYGEN_AVATAR_ID = process.env.EXPO_PUBLIC_HEYGEN_AVATAR_ID || "Angela-inblackskirt-20220820";
 export const HEYGEN_VOICE_ID = process.env.EXPO_PUBLIC_HEYGEN_VOICE_ID || "1bd001e7e50f421d891986aad5158bc8";
 
+// Lang Search API Configuration
+export const LANG_SEARCH_API_KEY = process.env.EXPO_PUBLIC_LANG_SEARCH_API_KEY || null;
+
 export const NAV_THEME = {
   light: {
     background: "hsl(0 0% 100%)", // background

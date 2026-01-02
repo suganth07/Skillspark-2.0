@@ -35,6 +35,7 @@ export interface RoadmapStep {
   content: string | null;
   durationMinutes: number | null;
   isCompleted: boolean;
+  lastCompletedAt: Date | null;
   topicId: string | null;
   prerequisiteName?: string;
   difficulty?: 'basic' | 'intermediate' | 'advanced';
@@ -309,6 +310,7 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
       content: roadmapSteps.content,
       durationMinutes: roadmapSteps.durationMinutes,
       isCompleted: roadmapSteps.isCompleted,
+      lastCompletedAt: roadmapSteps.lastCompletedAt,
       topicId: roadmapSteps.topicId,
       topicName: topics.name,
       topicMetadata: topics.metadata
@@ -373,6 +375,7 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
       content: step.content,
       durationMinutes: step.durationMinutes,
       isCompleted: step.isCompleted,
+      lastCompletedAt: step.lastCompletedAt,
       topicId: step.topicId,
       prerequisiteName: step.topicName,
       difficulty: metadata.difficulty,
@@ -995,7 +998,10 @@ export async function updateStepCompletion(
     // Update the step completion status
     await tx
       .update(roadmapSteps)
-      .set({ isCompleted })
+      .set({ 
+        isCompleted,
+        lastCompletedAt: isCompleted ? new Date() : null 
+      })
       .where(eq(roadmapSteps.id, stepId));
 
     // Get the roadmap ID to update overall progress
@@ -1031,4 +1037,35 @@ export async function updateStepCompletion(
       console.log(`✅ Updated step ${stepId} completion to ${isCompleted}. Roadmap progress: ${progress}%`);
     }
   });
+}
+
+/**
+ * Get completed topics from a roadmap for update checking
+ */
+export async function getCompletedTopicsForUpdates(
+  roadmapId: string,
+  userId: string
+): Promise<Array<{ id: string; name: string; completedDate: Date }>> {
+  const steps = await db
+    .select({
+      topicId: roadmapSteps.topicId,
+      topicName: topics.name,
+      lastCompletedAt: roadmapSteps.lastCompletedAt,
+    })
+    .from(roadmapSteps)
+    .leftJoin(topics, eq(roadmapSteps.topicId, topics.id))
+    .where(
+      and(
+        eq(roadmapSteps.roadmapId, roadmapId),
+        eq(roadmapSteps.isCompleted, true)
+      )
+    );
+
+  return steps
+    .filter(step => step.topicId && step.topicName && step.lastCompletedAt)
+    .map(step => ({
+      id: step.topicId!,
+      name: step.topicName!,
+      completedDate: step.lastCompletedAt!,
+    }));
 }

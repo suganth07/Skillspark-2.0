@@ -9,10 +9,12 @@ import {
   deleteRoadmap,
   getQuizWithQuestions,
   submitQuizAttempt,
-  updateStepCompletion 
+  updateStepCompletion,
+  getCompletedTopicsForUpdates 
 } from '@/server/queries/roadmaps';
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
+import { checkMultipleTopicsForUpdates } from '@/server/langSearchClient';
 import type { RoadmapWithProgress, RoadmapStep } from '@/server/queries/roadmaps';
 
 // ============================================
@@ -287,6 +289,46 @@ export function useUpdateStepCompletion() {
       queryClient.invalidateQueries({ 
         queryKey: queryKeys.roadmaps.detail(roadmapId, userId) 
       });
+    },
+  });
+}
+
+/**
+ * Hook to check for updates on completed topics
+ */
+export function useCheckTopicUpdates() {
+  return useMutation({
+    mutationFn: async ({ 
+      roadmapId, 
+      userId 
+    }: { 
+      roadmapId: string; 
+      userId: string;
+    }) => {
+      console.log('🔍 Checking for topic updates...');
+      
+      // Get completed topics
+      const completedTopics = await getCompletedTopicsForUpdates(roadmapId, userId);
+      
+      if (completedTopics.length === 0) {
+        return { hasUpdates: false, updates: [] };
+      }
+
+      // Check for updates using Lang Search
+      const updates = await checkMultipleTopicsForUpdates(
+        completedTopics.map(topic => ({
+          name: topic.name,
+          completedDate: topic.completedDate,
+        }))
+      );
+
+      return {
+        hasUpdates: updates.length > 0,
+        updates,
+      };
+    },
+    onError: (error) => {
+      console.error('❌ Failed to check topic updates:', error);
     },
   });
 }

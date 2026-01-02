@@ -56,11 +56,99 @@ async function withRetry<T>(
 // ------------------------------
 // Main Agent: Generate Career Path Topics
 // ------------------------------
-export async function generateCareerPath(roleName: string): Promise<CareerPathResult> {
+export interface CareerPathGenerationOptions {
+  roleName: string;
+  currentLevel?: string;      // e.g., "Junior Developer", "SE2", "Mid-level"
+  targetLevel?: string;       // e.g., "Senior Developer", "SE3", "Staff Engineer"
+  preferences?: string;       // User's specific requests/preferences
+}
+
+export async function generateCareerPath(options: CareerPathGenerationOptions): Promise<CareerPathResult> {
+  const { roleName, currentLevel, targetLevel, preferences } = options;
   console.log("🎯 Career Path Agent: Starting topic generation for:", roleName);
+  
+  // Build context for level transition
+  let levelContext = '';
+  if (currentLevel && targetLevel) {
+    levelContext = `
+    
+    🎯 LEVEL TRANSITION:
+    The user is currently at: "${currentLevel}"
+    The user wants to reach: "${targetLevel}"
+    
+    Focus on the GAP between these levels:
+    - What skills differentiate ${currentLevel} from ${targetLevel}?
+    - What responsibilities increase at ${targetLevel}?
+    - What knowledge gaps typically exist when transitioning between these levels?
+    - Prioritize topics that will help them grow from their current level to the target level.
+    `;
+  } else if (currentLevel) {
+    levelContext = `
+    
+    📍 CURRENT LEVEL: "${currentLevel}"
+    The user is already at this level and wants to advance. Focus on skills for promotion and growth.
+    `;
+  } else if (targetLevel) {
+    levelContext = `
+    
+    🎯 TARGET LEVEL: "${targetLevel}"
+    Focus on skills required to achieve this specific level/seniority.
+    `;
+  }
+
+  // Build preferences context with stronger emphasis
+  let preferencesContext = '';
+  if (preferences && preferences.trim()) {
+    const lowerPrefs = preferences.toLowerCase();
+    const skipBasics = lowerPrefs.includes('skip basic') || lowerPrefs.includes('skip the basic') || 
+                       lowerPrefs.includes('already know') || lowerPrefs.includes('skip fundamentals');
+    const focusAreas = lowerPrefs.match(/focus on ([^,\.]+)/i);
+    const skipAreas = lowerPrefs.match(/skip ([^,\.]+)/i);
+    
+    let specificInstructions = '';
+    if (skipBasics) {
+      specificInstructions += `
+      🚨 CRITICAL: User wants to SKIP BASICS.
+      - DO NOT include introductory/fundamental topics they likely already know
+      - Start from intermediate level topics
+      - Focus on advanced concepts, patterns, and specialized knowledge
+      `;
+    }
+    if (focusAreas) {
+      specificInstructions += `
+      🎯 FOCUS PRIORITY: "${focusAreas[1].trim()}"
+      - Make this the PRIMARY focus (60-70% of topics)
+      - Include deep, specialized topics in this area
+      - Prioritize these topics in the learning sequence
+      `;
+    }
+    if (skipAreas) {
+      specificInstructions += `
+      ⛔ EXCLUDE: "${skipAreas[1].trim()}"
+      - Completely omit topics in this area
+      - The user either knows this or doesn't need it
+      `;
+    }
+    
+    preferencesContext = `
+    
+    📝 USER PREFERENCES & INSTRUCTIONS (ABSOLUTE PRIORITY):
+    "${preferences}"
+    ${specificInstructions}
+    
+    MANDATORY - Follow user preferences strictly:
+    - If they mention specific technologies → Include ONLY those and directly related topics
+    - If they mention areas to focus on → Make those 60-80% of the learning path
+    - If they mention areas to skip/already know → COMPLETELY EXCLUDE those topics
+    - If they want advanced only → Exclude all basic/introductory topics
+    - Preferences override standard curriculum - be aggressive in customization
+    `;
+  }
 
   const prompt = `
     You are an expert career advisor and curriculum designer. Generate a comprehensive learning path for someone who wants to become a "${roleName}".
+    ${levelContext}
+    ${preferencesContext}
 
     Analyze this role and provide:
     1. A clear description of what this role entails
@@ -78,6 +166,7 @@ export async function generateCareerPath(roleName: string): Promise<CareerPathRe
     - Balance between theoretical knowledge and hands-on skills
     - Soft skills and professional development
     - Tools and technologies commonly used in this role
+    ${currentLevel && targetLevel ? `- Specific skills needed to transition from ${currentLevel} to ${targetLevel}` : ''}
 
     Return ONLY valid JSON in this exact format:
     {
@@ -119,6 +208,7 @@ export async function generateCareerPath(roleName: string): Promise<CareerPathRe
     - Estimated hours are realistic
     - Mix technical and non-technical topics
     - Include 12-20 topics total
+    ${preferences ? '- Incorporate user preferences where applicable' : ''}
   `;
 
   try {

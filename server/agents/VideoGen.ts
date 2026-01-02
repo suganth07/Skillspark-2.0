@@ -85,7 +85,8 @@ async function generateHeygenVideoNode(
 ): Promise<{ videoId: string; remoteUrl: string }> {
   console.log(`🎥 Generating HeyGen video...`);
   
-  return await withRetry(
+  // Step 1: Create video with retry (cheap operation)
+  const videoId = await withRetry(
     async () => {
       // Build HeyGen payload
       const payload = {
@@ -117,21 +118,24 @@ async function generateHeygenVideoNode(
       }
 
       console.log(`📹 HeyGen video ID:`, videoId);
-
-      // Poll for completion
-      const remoteUrl = await waitForHeygenVideoUrl(state.apiKey, videoId, {
-        intervalMs: 3000,
-        timeoutMs: 10 * 60 * 1000, // 10 minutes timeout
-      });
-
-      console.log(`📹 Video URL:`, remoteUrl);
-      
-      return { videoId, remoteUrl };
+      return videoId;
     },
-    2, // Only retry twice for HeyGen as it's expensive
+    2, // Only retry twice for video creation
     2000,
-    'HeyGen Video Generation'
+    'HeyGen Video Creation'
   );
+
+  // Step 2: Poll for completion WITHOUT retry to avoid duplicate videos
+  // If polling times out, the videoId is already created and won't be duplicated
+  console.log(`📹 Polling for video completion...`);
+  const remoteUrl = await waitForHeygenVideoUrl(state.apiKey, videoId, {
+    intervalMs: 3000,
+    timeoutMs: 10 * 60 * 1000, // 10 minutes timeout
+  });
+
+  console.log(`📹 Video URL:`, remoteUrl);
+  
+  return { videoId, remoteUrl };
 }
 
 // ------------------------------

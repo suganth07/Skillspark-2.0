@@ -14,13 +14,56 @@ export async function getTopicById(topicId: string) {
   return result[0] || null;
 }
 
+export async function getTopicByName(topicName: string) {
+  const result = await db
+    .select()
+    .from(topics)
+    .where(eq(topics.name, topicName))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+// Get topic by ID or name (for career path navigation)
+export async function getTopicByIdOrName(identifier: string) {
+  // Check if it's a CUID (24-25 chars starting with 'c')
+  const isCUID = identifier.length >= 24 && /^c[a-z0-9]+$/.test(identifier);
+  
+  if (isCUID) {
+    // It's an ID, search by ID
+    return await getTopicById(identifier);
+  } else {
+    // It's a name, search by name
+    const existingTopic = await getTopicByName(identifier);
+    
+    if (existingTopic) {
+      return existingTopic;
+    }
+    
+    // Topic doesn't exist, create it
+    console.log(`📝 Creating new topic for name: "${identifier}"`);
+    const topicId = createId();
+    await db.insert(topics).values({
+      id: topicId,
+      name: identifier,
+      description: `Learn ${identifier}`,
+      category: identifier, // Use the topic name as category for now
+      metadata: JSON.stringify({ difficulty: 'intermediate' }),
+    });
+    
+    // Fetch the newly created topic
+    return await getTopicById(topicId);
+  }
+}
+
 export async function getRoadmapByTopicId(topicId: string, userId: string) {
   // Find roadmap that contains this topic
   const result = await db
     .select({
       id: roadmaps.id,
       title: roadmaps.title,
-      description: roadmaps.description
+      description: roadmaps.description,
+      preferences: roadmaps.preferences
     })
     .from(roadmapSteps)
     .innerJoin(roadmaps, eq(roadmapSteps.roadmapId, roadmaps.id))

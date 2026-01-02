@@ -71,15 +71,18 @@ export function useGenerateRoadmap() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ userId, topic }: { userId: string; topic: string }) => {
+    mutationFn: async ({ userId, topic, preferences }: { userId: string; topic: string; preferences?: string }) => {
       console.log(`🚀 Starting roadmap generation for topic: ${topic}`);
+      if (preferences) {
+        console.log(`📝 User preferences: ${preferences}`);
+      }
       
       // Step 1: Generate knowledge graph using Gemini
-      const knowledgeGraph = await geminiService.generateKnowledgeGraph(topic);
+      const knowledgeGraph = await geminiService.generateKnowledgeGraph(topic, preferences);
       console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
       
-      // Step 2: Create roadmap and store in database
-      const roadmapId = await createRoadmap(userId, knowledgeGraph);
+      // Step 2: Create roadmap and store in database (with preferences)
+      const roadmapId = await createRoadmap(userId, knowledgeGraph, preferences);
       console.log(`📚 Roadmap creation complete for topic: ${topic}`);
       
       return roadmapId;

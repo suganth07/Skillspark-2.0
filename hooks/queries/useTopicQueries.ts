@@ -2,6 +2,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import { 
   getTopicById, 
+  getTopicByIdOrName,
   getRoadmapByTopicId, 
   getSubtopics, 
   getUserSubtopicPerformance,
@@ -58,8 +59,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
         throw new Error('Topic ID and User ID are required');
       }
 
-      // Get topic from database
-      const topic = await getTopicById(topicId);
+      // Get topic from database (supports both ID and name for career paths)
+      const topic = await getTopicByIdOrName(topicId);
       
       if (!topic) {
         throw new Error('Topic not found');
@@ -68,6 +69,22 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
       // Get roadmap context for better explanation
       const roadmap = await getRoadmapByTopicId(topicId, userId);
       const context = roadmap?.title || topic.category;
+
+      // Extract user preferences from roadmap if available
+      let userPreferences: string | undefined;
+      if (roadmap?.preferences) {
+        try {
+          const prefs = typeof roadmap.preferences === 'string' 
+            ? JSON.parse(roadmap.preferences) 
+            : roadmap.preferences;
+          userPreferences = prefs?.userPreferences || undefined;
+          if (userPreferences) {
+            console.log(`📝 Found user preferences: ${userPreferences}`);
+          }
+        } catch (e) {
+          console.warn('Failed to parse roadmap preferences:', e);
+        }
+      }
 
       // Get user's performance for subtopics
       const performanceData = await getUserSubtopicPerformance(userId, topicId);
@@ -126,7 +143,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
           const explanation = await geminiService.generateTopicExplanation(
             topic.name,
             context,
-            subtopicGuidance
+            subtopicGuidance,
+            userPreferences
           );
           
           // Map AI-generated subtopics back to database IDs to preserve references
@@ -224,7 +242,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
         const explanation = await geminiService.generateTopicExplanation(
           topic.name,
           context,
-          subtopicGuidance
+          subtopicGuidance,
+          userPreferences
         );
         
         // Note: createSubtopics side effect should be handled by usePersistTopicContent mutation
@@ -237,7 +256,9 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
       
       const explanation = await geminiService.generateTopicExplanation(
         topic.name,
-        context
+        context,
+        undefined,
+        userPreferences
       );
 
       // Note: createSubtopics side effect should be handled by usePersistTopicContent mutation

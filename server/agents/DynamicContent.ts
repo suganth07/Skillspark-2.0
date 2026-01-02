@@ -21,6 +21,7 @@ interface ContentAgentState {
   topic: string;
   context: string;
   subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>;
+  userPreferences?: string;
   defaultContent: RawTopicExplanation | null;
   simplifiedContent: RawTopicExplanation | null;
   storyContent: RawTopicExplanation | null;
@@ -68,7 +69,8 @@ async function generateDefaultNode(state: ContentAgentState): Promise<RawTopicEx
       return await geminiService.generateDefaultContent(
         state.topic,
         state.context,
-        state.subtopicPerformance
+        state.subtopicPerformance,
+        state.userPreferences
       );
     },
     3,
@@ -91,7 +93,8 @@ async function generateSimplifiedNode(state: ContentAgentState, canonicalTitles:
         state.topic,
         state.context,
         state.subtopicPerformance,
-        canonicalTitles // Pass canonical titles
+        canonicalTitles, // Pass canonical titles
+        state.userPreferences
       );
     },
     3,
@@ -114,7 +117,8 @@ async function generateStoryNode(state: ContentAgentState, canonicalTitles: stri
         state.topic,
         state.context,
         state.subtopicPerformance,
-        canonicalTitles // Pass canonical titles
+        canonicalTitles, // Pass canonical titles
+        state.userPreferences
       );
     },
     3,
@@ -250,15 +254,20 @@ function mergeContentVersions(
 export async function generateContentBundle(
   topicName: string,
   context: string,
-  subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+  userPreferences?: string
 ): Promise<TopicExplanation | null> {
   console.log("🚀 Content Agent: Starting content generation for:", topicName);
+  if (userPreferences) {
+    console.log("📝 User preferences:", userPreferences);
+  }
   
   // Initialize agent state
   const state: ContentAgentState = {
     topic: topicName,
     context,
     subtopicPerformance,
+    userPreferences,
     defaultContent: null,
     simplifiedContent: null,
     storyContent: null,
@@ -313,7 +322,8 @@ export async function regenerateSingleContent(
   topicName: string,
   context: string,
   canonicalTitles?: string[],
-  subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+  subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+  userPreferences?: string
 ): Promise<RawTopicExplanation | null> {
   console.log(`🔄 Regenerating ${tone.toUpperCase()} content only...`);
   
@@ -321,6 +331,7 @@ export async function regenerateSingleContent(
     topic: topicName,
     context,
     subtopicPerformance,
+    userPreferences,
     defaultContent: null,
     simplifiedContent: null,
     storyContent: null,

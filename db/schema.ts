@@ -275,6 +275,9 @@ export const careerTopics = sqliteTable(
     // Link to actual topic if it exists
     linkedTopicId: text("linked_topic_id").references(() => topics.id),
     
+    // Link to generated roadmap for this career topic
+    linkedRoadmapId: text("linked_roadmap_id").references(() => roadmaps.id),
+    
     isCompleted: integer("is_completed", { mode: "boolean" }).default(false),
     completedAt: integer("completed_at", { mode: "timestamp" }),
     
@@ -283,6 +286,7 @@ export const careerTopics = sqliteTable(
   (t) => [
     index("career_topics_career_path_idx").on(t.careerPathId),
     index("career_topics_linked_topic_idx").on(t.linkedTopicId),
+    index("career_topics_linked_roadmap_idx").on(t.linkedRoadmapId),
   ]
 );
 
@@ -350,6 +354,10 @@ export const careerTopicsRelations = relations(careerTopics, ({ one }) => ({
   linkedTopic: one(topics, {
     fields: [careerTopics.linkedTopicId],
     references: [topics.id],
+  }),
+  linkedRoadmap: one(roadmaps, {
+    fields: [careerTopics.linkedRoadmapId],
+    references: [roadmaps.id],
   }),
 }));
 

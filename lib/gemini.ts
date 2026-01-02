@@ -125,16 +125,68 @@ export interface TopicExplanation {
 }
 
 export class GeminiService {
-  async generateKnowledgeGraph(topic: string): Promise<KnowledgeGraph> {
-    const prompt = `
-      Create a comprehensive knowledge graph and learning roadmap for "${topic}".
+  async generateKnowledgeGraph(topic: string, preferences?: string): Promise<KnowledgeGraph> {
+    // Build preferences context with stronger emphasis
+    let preferencesContext = '';
+    let skipBasicsInstruction = '';
+    
+    if (preferences && preferences.trim()) {
+      const lowerPrefs = preferences.toLowerCase();
+      const skipBasics = lowerPrefs.includes('skip basic') || lowerPrefs.includes('skip the basic') || 
+                         lowerPrefs.includes('already know') || lowerPrefs.includes('go advanced') ||
+                         lowerPrefs.includes('skip fundamentals');
+      const focusAdvanced = lowerPrefs.includes('advanced') || lowerPrefs.includes('complex') ||
+                            lowerPrefs.includes('expert') || lowerPrefs.includes('deep dive');
       
-      Analyze the topic and provide:
-      1. A clear description of what "${topic}" is
-      2. All prerequisites needed to learn this topic effectively
-      3. Organize prerequisites by difficulty levels (basic, intermediate, advanced)
-      4. Estimate learning hours for each prerequisite
-      5. Create a logical learning path progression
+      if (skipBasics || focusAdvanced) {
+        skipBasicsInstruction = `
+        
+        🚨 CRITICAL INSTRUCTION:
+        The user wants to SKIP BASICS and focus on ${focusAdvanced ? 'ADVANCED/COMPLEX' : 'INTERMEDIATE TO ADVANCED'} topics.
+        
+        DO NOT INCLUDE:
+        - Basic fundamentals (e.g., for React: skip HTML, CSS, basic JavaScript)
+        - Introductory concepts the user likely already knows
+        - Elementary prerequisites that are too foundational
+        
+        INSTEAD, INCLUDE:
+        - Intermediate to advanced prerequisites only
+        - Specialized, in-depth topics
+        - Advanced patterns, architectures, and techniques
+        - Expert-level concepts and best practices
+        
+        Start from an intermediate baseline - assume the user has foundational knowledge.
+        `;
+      }
+      
+      preferencesContext = `
+      
+      📝 USER PREFERENCES & INSTRUCTIONS (HIGHEST PRIORITY):
+      "${preferences}"
+      ${skipBasicsInstruction}
+      
+      MANDATORY - Follow these preferences strictly:
+      - If they say "skip basics" or "go advanced" → EXCLUDE all basic/fundamental prerequisites
+      - If they mention specific technologies → Include only those and related advanced topics
+      - If they mention areas to focus on → Make those the PRIMARY focus, 80% of content
+      - If they mention areas they know → COMPLETELY EXCLUDE those from prerequisites
+      - If they want advanced content → Start from intermediate level, focus on expert topics
+      - Tailor the entire learning path to their exact stated goals and preferences
+      `;
+    }
+
+    const prompt = `
+      Create a knowledge graph and learning roadmap for "${topic}".
+      ${preferencesContext}
+      
+      Generate a learning path that:
+      1. Provides a clear description of what "${topic}" is
+      2. Lists prerequisites needed to learn this topic effectively
+      3. Organizes prerequisites by difficulty (basic, intermediate, advanced)
+      4. Estimates learning hours for each prerequisite
+      5. Creates a logical progression
+      
+      ${preferences ? '⚠️ CRITICAL: User preferences OVERRIDE default recommendations. If they want advanced content only, DO NOT include basic prerequisites.' : 'Include all prerequisites from basic to advanced for a comprehensive learning path.'}
 
       Return ONLY valid JSON in this exact format:
       {
@@ -157,9 +209,7 @@ export class GeminiService {
         }
       }
 
-      Make sure prerequisites are comprehensive and cover all foundational knowledge needed.
-      For programming topics, include relevant languages, concepts, and tools.
-      Order prerequisites logically - simpler concepts first, building complexity.
+      ${preferences ? '🎯 Remember: User preferences are ABSOLUTE. Respect their stated goals completely.' : 'Make prerequisites comprehensive and cover all foundational knowledge.'}
     `;
 
     try {
@@ -383,12 +433,16 @@ export class GeminiService {
   async generateTopicExplanation(
     topicName: string, 
     context: string,
-    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+    userPreferences?: string
   ): Promise<TopicExplanation> {
     console.log(`🎯 [Content Agent] Delegating content generation to agent for "${topicName}"`);
+    if (userPreferences) {
+      console.log(`📝 [Content Agent] User preferences: ${userPreferences}`);
+    }
     
     // Use the content agent to orchestrate parallel content generation
-    const result = await generateContentBundle(topicName, context, subtopicPerformance);
+    const result = await generateContentBundle(topicName, context, subtopicPerformance, userPreferences);
     
     console.log(`✅ [Content Agent] Content generation complete via agent for "${topicName}"`);
     return result;
@@ -398,7 +452,8 @@ export class GeminiService {
   async generateDefaultContent(
     topicName: string,
     context: string,
-    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+    userPreferences?: string
   ): Promise<RawTopicExplanation> {
     // Build performance guidance for AI
     let performanceGuidance = '';
@@ -422,10 +477,23 @@ ${subtopicPerformance.map(p =>
       - Match subtopic titles EXACTLY to names above to apply correct depth
       `;
     }
+
+    // Build preferences guidance for AI
+    let preferencesGuidance = '';
+    if (userPreferences && userPreferences.trim()) {
+      preferencesGuidance = `
+      
+      📝 USER LEARNING PREFERENCES (Important - incorporate these into content):
+      ${userPreferences}
+      
+      Adapt the content to align with these preferences where applicable.
+      `;
+    }
     
     const prompt = `
       Create a comprehensive, educational explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
+      ${preferencesGuidance}
       
       Provide:
       1. A clear overview of what ${topicName} is
@@ -502,7 +570,8 @@ ${subtopicPerformance.map(p =>
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
-    canonicalTitles?: string[]
+    canonicalTitles?: string[],
+    userPreferences?: string
   ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -528,10 +597,23 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
       `;
     }
 
+    // Build preferences guidance for AI
+    let preferencesGuidance = '';
+    if (userPreferences && userPreferences.trim()) {
+      preferencesGuidance = `
+      
+      📝 USER LEARNING PREFERENCES (Important - incorporate these into content):
+      ${userPreferences}
+      
+      Adapt the simplified content to align with these preferences where applicable.
+      `;
+    }
+
     const prompt = `
       Create a SIMPLIFIED, beginner-friendly explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
       ${titlesGuidance}
+      ${preferencesGuidance}
       
       THIS VERSION IS FOR LEARNERS WHO NEED:
       - Simpler language and clearer explanations
@@ -612,7 +694,8 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
-    canonicalTitles?: string[]
+    canonicalTitles?: string[],
+    userPreferences?: string
   ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -639,10 +722,23 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
       `;
     }
 
+    // Build preferences guidance for AI
+    let preferencesGuidance = '';
+    if (userPreferences && userPreferences.trim()) {
+      preferencesGuidance = `
+      
+      📝 USER LEARNING PREFERENCES (Important - incorporate these into stories):
+      ${userPreferences}
+      
+      Adapt the story-based content to align with these preferences where applicable.
+      `;
+    }
+
     const prompt = `
       Create a STORY-BASED explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
       ${titlesGuidance}
+      ${preferencesGuidance}
       
       THIS VERSION USES STORYTELLING TO TEACH:
       - Present concepts through engaging narratives

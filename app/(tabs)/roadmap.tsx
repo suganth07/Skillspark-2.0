@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +11,6 @@ import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useColorScheme } from '@/lib/useColorScheme';
 import { useUserRoadmaps, useDeleteRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { RoadmapCreation } from '@/components/roadmap/RoadmapCreation';
-import { RoadmapDisplay } from '@/components/roadmap/RoadmapDisplay';
-import { QuizComponent } from '@/components/roadmap/QuizComponent';
-import { QuizResults } from '@/components/roadmap/QuizResults';
 import { RoadmapCard } from '@/components/roadmap/RoadmapCard';
 import { RoadmapSkeleton } from '@/components/roadmap/RoadmapSkeleton';
 import { RoadmapEmptyState } from '@/components/roadmap/RoadmapEmptyState';
@@ -21,13 +19,11 @@ import { Plus, ArrowLeft, Search, Rocket } from 'lucide-react-native';
 
 type ScreenState = 
   | { type: 'dashboard' }
-  | { type: 'create' }
-  | { type: 'roadmap'; roadmapId: string }
-  | { type: 'quiz'; quizId: string; stepTitle: string; roadmapId?: string }
-  | { type: 'results'; quizId: string; stepTitle: string; roadmapId?: string };
+  | { type: 'create' };
 
 export default function RoadmapScreen() {
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'dashboard' });
+  const router = useRouter();
   const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -45,35 +41,8 @@ export default function RoadmapScreen() {
   const deleteRoadmapMutation = useDeleteRoadmap();
 
   const handleRoadmapCreated = (roadmapId: string) => {
-    setScreenState({ type: 'roadmap', roadmapId });
-    // TanStack Query automatically refetches due to cache invalidation
-  };
-
-  const handleTakeQuiz = (quizId: string, stepTitle: string, roadmapId?: string) => {
-    setScreenState({ type: 'quiz', quizId, stepTitle, roadmapId });
-  };
-
-  const handleViewResults = (quizId: string, stepTitle: string, roadmapId?: string) => {
-    setScreenState({ type: 'results', quizId, stepTitle, roadmapId });
-  };
-
-  const handleQuizComplete = () => {
-    // Return to roadmap after quiz completion
-    if (screenState.type === 'quiz' && screenState.roadmapId) {
-      setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
-    } else {
-      setScreenState({ type: 'dashboard' });
-    }
-    // TanStack Query automatically refetches due to cache invalidation in useSubmitQuiz
-  };
-
-  const handleCloseResults = () => {
-    // Return to roadmap after viewing results
-    if (screenState.type === 'results' && screenState.roadmapId) {
-      setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
-    } else {
-      setScreenState({ type: 'dashboard' });
-    }
+    // Navigate to the roadmap route
+    router.push(`/roadmap/${roadmapId}` as any);
   };
 
   const handleDeleteRoadmap = async (roadmapId: string, roadmapTitle: string) => {
@@ -109,8 +78,6 @@ export default function RoadmapScreen() {
       ]
     );
   };
-
-
 
   // Show loading state while no user is available
   if (!currentUserId) {
@@ -243,7 +210,7 @@ export default function RoadmapScreen() {
                       <RoadmapCard
                         roadmap={roadmap}
                         index={index}
-                        onPress={() => setScreenState({ type: 'roadmap', roadmapId: roadmap.id })}
+                        onPress={() => router.push(`/roadmap/${roadmap.id}` as any)}
                         onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
                         isDeleting={deletingRoadmapId === roadmap.id}
                       />
@@ -259,101 +226,16 @@ export default function RoadmapScreen() {
   );
 
   // Render based on current screen state
-  switch (screenState.type) {
-    case 'create':
-      return (
-        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-          <RoadmapCreation 
-            onRoadmapCreated={handleRoadmapCreated}
-            onBack={() => setScreenState({ type: 'dashboard' })}
-          />
-        </SafeAreaView>
-      );
-
-    case 'roadmap':
-      return (
-        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-          <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
-            <Pressable 
-              onPress={() => setScreenState({ type: 'dashboard' })}
-              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
-            >
-              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
-            </Pressable>
-          </View>
-          <RoadmapDisplay 
-            roadmapId={screenState.roadmapId}
-            onTakeQuiz={(quizId, stepTitle) => handleTakeQuiz(quizId, stepTitle, screenState.roadmapId)}
-            onViewResults={(quizId, stepTitle) => handleViewResults(quizId, stepTitle, screenState.roadmapId)}
-            onDelete={() => setScreenState({ type: 'dashboard' })}
-          />
-        </SafeAreaView>
-      );
-
-    case 'quiz':
-      return (
-        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-          <View className="flex-1">
-            <View className="flex-row items-center px-4 py-3 border-b border-border">
-            <Pressable 
-              onPress={() => {
-                if (screenState.roadmapId) {
-                  setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
-                } else {
-                  setScreenState({ type: 'dashboard' });
-                }
-              }}
-              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
-            >
-              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
-            </Pressable>
-            <Text className="text-lg font-semibold flex-1 ml-3" numberOfLines={1}>
-              {screenState.stepTitle} Quiz
-            </Text>
-          </View>
-          <QuizComponent
-            quizId={screenState.quizId}
-            roadmapId={screenState.roadmapId}
-            onQuizComplete={handleQuizComplete}
-            onBack={() => {
-              if (screenState.roadmapId) {
-                setScreenState({ type: 'roadmap', roadmapId: screenState.roadmapId });
-              } else {
-                setScreenState({ type: 'dashboard' });
-              }
-            }}
-          />
-          </View>
-        </SafeAreaView>
-      );
-
-    case 'results':
-      if (!currentUserId) {
-        return null;
-      }
-      return (
-        <View className="flex-1">
-          <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
-            <Pressable 
-              onPress={handleCloseResults}
-              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
-            >
-              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
-            </Pressable>
-            <Text className="text-lg font-semibold flex-1 ml-3" numberOfLines={1}>
-              {screenState.stepTitle} Results
-            </Text>
-          </View>
-          <QuizResults
-            userId={currentUserId}
-            quizId={screenState.quizId}
-            stepTitle={screenState.stepTitle}
-            onClose={handleCloseResults}
-          />
-        </View>
-      );
-
-    default:
-      return renderDashboard();
+  if (screenState.type === 'create') {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+        <RoadmapCreation 
+          onRoadmapCreated={handleRoadmapCreated}
+          onBack={() => setScreenState({ type: 'dashboard' })}
+        />
+      </SafeAreaView>
+    );
   }
+
+  return renderDashboard();
 }

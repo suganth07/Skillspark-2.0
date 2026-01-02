@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Text } from '@/components/ui/text';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useCreateCareerPath } from '@/hooks/queries/useCareerQueries';
-import { Briefcase, Sparkles, ArrowRight } from 'lucide-react-native';
+import { Briefcase, Sparkles, ArrowRight, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react-native';
 
 interface CareerPathCreationProps {
   onCareerPathCreated: (careerPathId: string) => void;
@@ -16,14 +16,31 @@ interface CareerPathCreationProps {
 
 export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCreationProps) {
   const [roleInput, setRoleInput] = useState('');
+  const [currentLevel, setCurrentLevel] = useState('');
+  const [targetLevel, setTargetLevel] = useState('');
+  const [preferences, setPreferences] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const currentUserId = useCurrentUserId();
   const createCareerPath = useCreateCareerPath();
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
-    if (!roleInput.trim() || !currentUserId) return;
+    if (!currentUserId) {
+      setAuthError('Please sign in to generate a career path');
+      Alert.alert('Authentication Required', 'Please sign in to generate a career path.');
+      return;
+    }
+    if (!roleInput.trim()) return;
+    setAuthError(null);
 
     createCareerPath.mutate(
-      { userId: currentUserId, roleName: roleInput.trim() },
+      { 
+        userId: currentUserId, 
+        roleName: roleInput.trim(),
+        currentLevel: currentLevel.trim() || undefined,
+        targetLevel: targetLevel.trim() || undefined,
+        preferences: preferences.trim() || undefined,
+      },
       {
         onSuccess: (data) => {
           onCareerPathCreated(data.careerPathId);
@@ -46,7 +63,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
           <CardHeader>
             <View className="flex-row items-center space-x-3 mb-2">
               <View className="bg-primary/10 rounded-full p-3">
-                <Briefcase size={24} className="text-primary" />
+                <Briefcase size={24} color="#7c3aed" />
               </View>
               <CardTitle className="flex-1">Create Career Path</CardTitle>
             </View>
@@ -76,6 +93,80 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                   autoFocus
                 />
               </View>
+
+              {/* Advanced Options Toggle */}
+              <Pressable 
+                onPress={() => setShowAdvanced(!showAdvanced)}
+                className="flex-row items-center justify-between py-2 active:opacity-70"
+              >
+                <View className="flex-row items-center gap-2">
+                  <TrendingUp size={16} color="#7c3aed" />
+                  <Text className="text-sm font-medium text-primary">
+                    Customize Your Path (Optional)
+                  </Text>
+                </View>
+                {showAdvanced ? (
+                  <ChevronUp size={18} color="#7c3aed" />
+                ) : (
+                  <ChevronDown size={18} color="#7c3aed" />
+                )}
+              </Pressable>
+
+              {/* Advanced Options */}
+              {showAdvanced && (
+                <View className="space-y-4 pt-2 border-t border-border">
+                  {/* Level Transition */}
+                  <View>
+                    <Text className="text-sm font-semibold text-foreground mb-2">
+                      📈 Level Transition (Optional)
+                    </Text>
+                    <Text className="text-xs text-muted-foreground mb-3">
+                      Going from one level to another? We'll focus on the skills gap.
+                    </Text>
+                    <View className="flex-row items-center gap-2">
+                      <View className="flex-1">
+                        <Input
+                          placeholder="Current level (e.g., Junior, SE2)"
+                          value={currentLevel}
+                          onChangeText={setCurrentLevel}
+                          editable={!isGenerating}
+                          className="h-11"
+                        />
+                      </View>
+                      <ArrowRight size={18} color="#737373" />
+                      <View className="flex-1">
+                        <Input
+                          placeholder="Target level (e.g., Senior, SE3)"
+                          value={targetLevel}
+                          onChangeText={setTargetLevel}
+                          editable={!isGenerating}
+                          className="h-11"
+                        />
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Preferences */}
+                  <View>
+                    <Text className="text-sm font-semibold text-foreground mb-2">
+                      📝 Preferences & Focus Areas (Optional)
+                    </Text>
+                    <Text className="text-xs text-muted-foreground mb-3">
+                      Tell us what you'd like to focus on, skip, or any specific interests.
+                    </Text>
+                    <Input
+                      placeholder="e.g., Focus on system design, skip frontend, interested in distributed systems..."
+                      value={preferences}
+                      onChangeText={setPreferences}
+                      editable={!isGenerating}
+                      className="h-20"
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                </View>
+              )}
 
               {/* Examples */}
               <View className="bg-muted/50 rounded-lg p-4">
@@ -110,7 +201,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
             <CardContent className="pt-6">
               <View className="items-center space-y-4">
                 <View className="bg-primary/10 rounded-full p-4">
-                  <Sparkles size={32} className="text-primary" />
+                  <Sparkles size={32} color="#7c3aed" />
                 </View>
                 <ActivityIndicator size="large" className="text-primary" />
                 <View className="items-center">
@@ -118,7 +209,10 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                     Crafting Your Career Path
                   </Text>
                   <Text className="text-sm text-muted-foreground text-center mt-2 leading-relaxed">
-                    AI is analyzing {roleInput} and generating a comprehensive learning roadmap with topics, timelines, and prerequisites...
+                    AI is analyzing {roleInput}
+                    {currentLevel && targetLevel && ` (${currentLevel} → ${targetLevel})`}
+                    {preferences && ' with your preferences'}
+                    {' '}and generating a comprehensive learning roadmap...
                   </Text>
                 </View>
               </View>
@@ -127,13 +221,13 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
         )}
 
         {/* Error Display */}
-        {createCareerPath.isError && (
+        {(createCareerPath.isError || authError) && (
           <Card className="bg-destructive/10 border-destructive/20">
             <CardContent className="pt-6">
               <Text className="text-sm text-destructive text-center">
-                {createCareerPath.error instanceof Error
+                {authError || (createCareerPath.error instanceof Error
                   ? createCareerPath.error.message
-                  : 'Failed to generate career path'}
+                  : 'Failed to generate career path')}
               </Text>
             </CardContent>
           </Card>
@@ -143,16 +237,16 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
         <View className="space-y-3">
           <Button
             onPress={handleGenerate}
-            disabled={!roleInput.trim() || isGenerating}
+            disabled={!currentUserId || !roleInput.trim() || isGenerating}
             className="h-12"
             size="lg"
           >
             <View className="flex-row items-center space-x-2">
-              <Sparkles size={18} className="text-primary-foreground" />
+              <Sparkles size={18} color="#ffffff" />
               <Text className="text-white font-semibold text-base">
                 {isGenerating ? 'Generating...' : 'Generate Career Path'}
               </Text>
-              {!isGenerating && <ArrowRight size={18} className="text-primary-foreground" />}
+              {!isGenerating && <ArrowRight size={18} color="#ffffff" />}
             </View>
           </Button>
 

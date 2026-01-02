@@ -11,6 +11,7 @@ import { useUserCareerPaths, useDeleteCareerPath } from '@/hooks/queries/useCare
 import { RoadmapSkeleton } from '@/components/roadmap/RoadmapSkeleton';
 import { RoadmapEmptyState } from '@/components/roadmap/RoadmapEmptyState';
 import { CareerPathCreation } from '@/components/career/CareerPathCreation';
+import { CareerPathCard } from '@/components/career/CareerPathCard';
 import { Plus, Search, Briefcase, ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -191,60 +192,26 @@ export default function CareerScreen() {
               
               {careerPaths
                 .filter(path => path.roleName.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map((path) => (
-                <Pressable
+                .map((path, index) => (
+                <CareerPathCard
                   key={path.id}
+                  careerPath={{
+                    id: path.id,
+                    roleName: path.roleName,
+                    roleDescription: path.roleDescription,
+                    totalEstimatedHours: path.totalEstimatedHours ?? 0,
+                    progress: path.progress ?? 0,
+                    topicsCount: path.topicsCount,
+                    completedTopics: path.completedTopics,
+                    categories: path.categories,
+                    createdAt: path.createdAt,
+                    status: (path.status as 'active' | 'completed' | 'archived') ?? 'active',
+                  }}
                   onPress={() => router.push(`/career/${path.id}` as any)}
-                  className="py-2"
-                >
-                  {/* Purple glow container */}
-                  <View className="relative">
-                    {/* Glow effect */}
-                    <View 
-                      className="absolute -inset-[1px] rounded-xl" 
-                      style={{ 
-                        backgroundColor: 'rgba(124, 58, 237, 0.08)',
-                        shadowColor: '#7c3aed',
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: 0.4,
-                        shadowRadius: 16,
-                        elevation: 10,
-                      }}
-                    />
-                    {/* Card */}
-                    <View style={{ position: 'relative', zIndex: 1 }} className="bg-card rounded-xl border border-border p-4">
-                      <View className="flex-row items-center justify-between mb-2">
-                        <Text className="text-lg font-bold text-foreground flex-1">
-                          {path.roleName}
-                        </Text>
-                        <Pressable
-                          onPress={() => handleDeleteCareerPath(path.id, path.roleName)}
-                          disabled={deletingCareerPathId === path.id}
-                          className="p-2"
-                        >
-                          {deletingCareerPathId === path.id ? (
-                            <ActivityIndicator size="small" />
-                          ) : (
-                            <Text className="text-destructive">Delete</Text>
-                          )}
-                        </Pressable>
-                      </View>
-                      {path.roleDescription && (
-                        <Text className="text-sm text-muted-foreground mb-3">
-                          {path.roleDescription}
-                        </Text>
-                      )}
-                      <View className="flex-row items-center gap-3">
-                        <Text className="text-xs text-muted-foreground">
-                          {path.totalEstimatedHours}h total
-                        </Text>
-                        <Text className="text-xs text-primary font-semibold">
-                          {path.progress}% complete
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
+                  onDelete={() => handleDeleteCareerPath(path.id, path.roleName)}
+                  isDeleting={deletingCareerPathId === path.id}
+                  index={index}
+                />
               ))}
             </View>
           )}

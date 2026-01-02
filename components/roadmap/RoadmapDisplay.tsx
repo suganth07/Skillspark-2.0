@@ -101,11 +101,19 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const handleTopicPress = (step: RoadmapStep) => {
     if (!step.topicId) return;
 
+    // If content already exists, go directly to content page (skip knowledge assessment)
+    if (step.hasContent) {
+      router.push(`/topic/${step.topicId}`);
+      return;
+    }
+
+    // If user has attempted quiz, go directly to content
     if (step.hasAttempt) {
       router.push(`/topic/${step.topicId}`);
       return;
     }
 
+    // Otherwise, show knowledge assessment modal for new topics
     setSelectedStep(step);
     setShowKnowledgeModal(true);
   };
@@ -469,7 +477,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
           <View className="p-4">
             <View className="flex-row items-center justify-between mb-3">
               <View className="flex-row items-center gap-2">
-                <Trophy size={18} className="text-primary" />
                 <Text className="text-sm font-semibold text-foreground">Your Progress</Text>
               </View>
               <Text className="text-sm font-bold text-primary">

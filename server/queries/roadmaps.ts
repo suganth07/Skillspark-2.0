@@ -41,6 +41,7 @@ export interface RoadmapStep {
   difficulty?: 'basic' | 'intermediate' | 'advanced';
   quizId?: string;
   hasAttempt?: boolean; // Whether user has attempted this quiz
+  hasContent?: boolean; // Whether topic has generated content (subtopics)
   canStart: boolean; // Based on prerequisites completion
 }
 
@@ -66,7 +67,8 @@ export interface UserProgress {
 // Create a new roadmap from Gemini-generated knowledge graph
 export async function createRoadmap(
   userId: string,
-  knowledgeGraph: KnowledgeGraph
+  knowledgeGraph: KnowledgeGraph,
+  userPreferences?: string
 ): Promise<string> {
   return await db.transaction(async (tx) => {
     // 1. Create the roadmap
@@ -79,7 +81,8 @@ export async function createRoadmap(
       status: 'active',
       preferences: JSON.stringify({ 
         topic: knowledgeGraph.mainTopic,
-        totalPrerequisites: knowledgeGraph.prerequisites.length 
+        totalPrerequisites: knowledgeGraph.prerequisites.length,
+        userPreferences: userPreferences || null
       })
     });
 
@@ -353,16 +356,39 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
     attemptedQuizIds = new Set(userAttempts.map(a => a.quizId));
   }
 
+  // Fetch subtopic counts for each topic (to check if content exists)
+  const topicIds = steps.map(s => s.topicId).filter(Boolean) as string[];
+  let topicsWithContent = new Set<string>();
+  
+  if (topicIds.length > 0) {
+    const subtopicCounts = await db
+      .select({ 
+        parentTopicId: subtopics.parentTopicId,
+        count: sql<number>`COUNT(*)`.as('count')
+      })
+      .from(subtopics)
+      .where(inArray(subtopics.parentTopicId, topicIds))
+      .groupBy(subtopics.parentTopicId);
+    
+    topicsWithContent = new Set(
+      subtopicCounts
+        .filter(sc => sc.count > 0)
+        .map(sc => sc.parentTopicId)
+    );
+  }
+
   // Map steps to RoadmapStep objects using in-memory structures
   const stepsWithProgress = steps.map((step) => {
     let quizId: string | undefined;
     let hasAttempt = false;
+    let hasContent = false;
 
     if (step.topicId) {
       quizId = topicToQuizMap.get(step.topicId);
       if (quizId) {
         hasAttempt = attemptedQuizIds.has(quizId);
       }
+      hasContent = topicsWithContent.has(step.topicId);
     }
 
     const metadata = step.topicMetadata ? JSON.parse(step.topicMetadata as string) : {};
@@ -381,6 +407,7 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
       difficulty: metadata.difficulty,
       quizId,
       hasAttempt,
+      hasContent,
       canStart: true // All steps are always available now
     } as RoadmapStep;
   });

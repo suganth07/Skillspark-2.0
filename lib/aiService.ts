@@ -1,4 +1,12 @@
 // aiService.ts - Unified AI service abstraction layer
+// 
+// ⚠️ SECURITY WARNING: This file currently uses EXPO_PUBLIC_ environment variables
+// which are bundled into the client. For production deployments:
+// 1. Create server-side API endpoints that handle AI requests
+// 2. Move API keys to server-only environment variables (without EXPO_PUBLIC_ prefix)
+// 3. Have this client call those endpoints instead of AI providers directly
+// 4. Rotate or revoke any exposed API keys before going to production
+//
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import { useAIProviderStore } from '@/hooks/stores/useAIProviderStore';
@@ -35,6 +43,7 @@ async function withRetry<T>(
 }
 
 // Initialize AI clients
+// TODO: Move these to server-side environment variables for production security
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
 
@@ -43,7 +52,12 @@ if (!GEMINI_API_KEY && !GROQ_API_KEY) {
 }
 
 const geminiClient = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-const groqClient = GROQ_API_KEY ? new Groq({ apiKey: GROQ_API_KEY, dangerouslyAllowBrowser: true }) : null;
+// Note: dangerouslyAllowBrowser is required for client-side usage but exposes keys
+// For production, move to server-side endpoints
+const groqClient = GROQ_API_KEY ? new Groq({ 
+  apiKey: GROQ_API_KEY, 
+  dangerouslyAllowBrowser: true // TODO: Remove when migrating to server-side
+}) : null;
 
 // Unified AI Service Interface
 export interface AIGenerateOptions {
@@ -80,8 +94,9 @@ class AIService {
       throw new Error('Gemini API key not configured');
     }
 
+    const modelName = 'gemini-1.5-flash';
     const model = geminiClient.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: modelName,
       generationConfig: {
         temperature: options.temperature ?? 0.7,
         maxOutputTokens: options.maxTokens ?? 8192,
@@ -90,7 +105,20 @@ class AIService {
 
     const result = await model.generateContent(options.prompt);
     const response = await result.response;
-    return response.text();
+    const content = response.text();
+    
+    if (!content || content.trim() === '') {
+      const errorDetails = {
+        model: modelName,
+        promptPreview: options.prompt.substring(0, 100) + (options.prompt.length > 100 ? '...' : ''),
+      };
+      throw new Error(
+        `Gemini API returned empty content. Model: ${errorDetails.model}. ` +
+        `Prompt preview: "${errorDetails.promptPreview}"`
+      );
+    }
+
+    return content;
   }
 
   private async generateWithGroq(options: AIGenerateOptions): Promise<string> {
@@ -98,16 +126,33 @@ class AIService {
       throw new Error('Groq API key not configured');
     }
 
+    const model = 'llama-3.3-70b-versatile';
     const completion = await groqClient.chat.completions.create({
       messages: [
         { role: 'user', content: options.prompt }
       ],
-      model: 'llama-3.3-70b-versatile', // Fast and capable model
+      model,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens ?? 8192,
     });
 
-    return completion.choices[0]?.message?.content || '';
+    const content = completion.choices[0]?.message?.content;
+    
+    if (!content || content.trim() === '') {
+      const errorDetails = {
+        model,
+        choicesCount: completion.choices?.length ?? 0,
+        finishReason: completion.choices[0]?.finish_reason ?? 'unknown',
+        promptPreview: options.prompt.substring(0, 100) + (options.prompt.length > 100 ? '...' : ''),
+      };
+      throw new Error(
+        `Groq API returned empty content. Model: ${errorDetails.model}, ` +
+        `Finish reason: ${errorDetails.finishReason}, Choices: ${errorDetails.choicesCount}. ` +
+        `Prompt preview: "${errorDetails.promptPreview}"`
+      );
+    }
+
+    return content;
   }
 
   // Check if current provider is available

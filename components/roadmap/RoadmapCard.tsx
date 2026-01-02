@@ -88,7 +88,7 @@ export function RoadmapCard({ roadmap, onPress, onDelete, isDeleting, index = 0 
 
         <CardContent className="pt-0 space-y-4">
           {/* Progress Section */}
-          <View className="space-y-2">
+          <View className="flex gap-1 space-y-2">
             <View className="flex-row items-center justify-between">
               <Text className="text-xs font-medium text-muted-foreground">
                 Progress

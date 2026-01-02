@@ -9,7 +9,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useGenerateRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { RocketLoadingAnimation } from './RocketLoadingAnimation';
-import { ArrowLeft, CheckCircle, X, WandSparkles } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, X, WandSparkles, ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
 
 interface RoadmapCreationProps {
@@ -19,6 +19,8 @@ interface RoadmapCreationProps {
 
 export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationProps) {
   const [topic, setTopic] = useState('');
+  const [preferences, setPreferences] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdRoadmapId, setCreatedRoadmapId] = useState<string | null>(null);
   const [createdTopic, setCreatedTopic] = useState('');
@@ -51,13 +53,15 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
     try {
       const roadmapId = await generateRoadmapMutation.mutateAsync({ 
         userId: currentUserId, 
-        topic: topic.trim() 
+        topic: topic.trim(),
+        preferences: preferences.trim() || undefined
       });
       
       setCreatedRoadmapId(roadmapId);
       setCreatedTopic(topic.trim());
       setShowSuccessModal(true);
       setTopic('');
+      setPreferences('');
       
     } catch (err) {
       console.error('Failed to generate roadmap:', err);
@@ -232,6 +236,48 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                 />
               </CardHeader>
               <CardContent>
+                {/* Customization Section */}
+                <Pressable
+                  onPress={() => setShowAdvanced(!showAdvanced)}
+                  className="flex-row items-center justify-between py-2 mb-3"
+                >
+                  <View className="flex-row items-center gap-2">
+                    <Settings2 size={16} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
+                    <Text className="text-sm font-medium text-muted-foreground">
+                      Customize Your Roadmap
+                    </Text>
+                  </View>
+                  {showAdvanced ? (
+                    <ChevronUp size={18} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
+                  ) : (
+                    <ChevronDown size={18} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
+                  )}
+                </Pressable>
+
+                {showAdvanced && (
+                  <Animated.View 
+                    entering={FadeIn.duration(200)}
+                    className="mb-4 p-3 bg-secondary/50 rounded-lg"
+                  >
+                    <Text className="text-sm font-medium text-foreground mb-2">
+                      Learning Preferences (Optional)
+                    </Text>
+                    <Input
+                      value={preferences}
+                      onChangeText={setPreferences}
+                      placeholder="e.g., Focus on practical projects, Include interview prep, Skip basics..."
+                      className="text-sm min-h-[80px]"
+                      editable={!isGenerating}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                    <Text className="text-xs text-muted-foreground mt-2">
+                      Tell us what you want to focus on, skip, or prioritize in your learning path.
+                    </Text>
+                  </Animated.View>
+                )}
+
                 {validationError && (
                   <View className="mb-4">
                     <ErrorDisplay

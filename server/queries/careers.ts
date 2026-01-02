@@ -6,6 +6,25 @@ import { createId } from '@paralleldrive/cuid2';
 import type { CareerPathResult, CareerTopic } from '@/server/agents/CareerPath';
 
 /**
+ * Safely parse JSON string to array with fallback
+ */
+function safeParseJsonArray(value: unknown, defaultValue: string[] = []): string[] {
+  if (typeof value !== 'string') return defaultValue;
+  
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    console.warn('JSON parsed successfully but result is not an array:', parsed);
+    return defaultValue;
+  } catch (error) {
+    console.error('Failed to parse JSON array:', error instanceof Error ? error.message : String(error), 'Value:', value);
+    return defaultValue;
+  }
+}
+
+/**
  * Create a new career path with topics
  */
 export async function createCareerPath(
@@ -49,7 +68,7 @@ export async function createCareerPath(
 }
 
 /**
- * Get all career paths for a user
+ * Get all career paths for a user with topic counts
  */
 export async function getUserCareerPaths(userId: string) {
   const paths = await db
@@ -58,7 +77,26 @@ export async function getUserCareerPaths(userId: string) {
     .where(eq(careerPaths.userId, userId))
     .orderBy(desc(careerPaths.createdAt));
 
-  return paths;
+  // Get topic counts for each path
+  const pathsWithCounts = await Promise.all(
+    paths.map(async (path) => {
+      const topics = await db
+        .select()
+        .from(careerTopics)
+        .where(eq(careerTopics.careerPathId, path.id));
+
+      const completedCount = topics.filter(t => t.isCompleted).length;
+
+      return {
+        ...path,
+        categories: safeParseJsonArray(path.categories, []),
+        topicsCount: topics.length,
+        completedTopics: completedCount,
+      };
+    })
+  );
+
+  return pathsWithCounts;
 }
 
 /**
@@ -89,10 +127,10 @@ export async function getCareerPathWithTopics(careerPathId: string, userId: stri
 
   return {
     ...path,
-    categories: JSON.parse(path.categories as string) as string[],
+    categories: safeParseJsonArray(path.categories, []),
     topics: topics.map(topic => ({
       ...topic,
-      prerequisites: JSON.parse(topic.prerequisites as string) as string[],
+      prerequisites: safeParseJsonArray(topic.prerequisites, []),
     })),
   };
 }
@@ -135,4 +173,40 @@ export async function updateCareerTopicCompletion(
     .where(eq(careerTopics.id, topicId));
 
   console.log(`✅ Updated topic ${topicId} completion:`, isCompleted);
+}
+
+/**
+ * Link a roadmap to a career topic
+ */
+export async function linkRoadmapToCareerTopic(
+  careerTopicId: string,
+  roadmapId: string
+) {
+  await db
+    .update(careerTopics)
+    .set({
+      linkedRoadmapId: roadmapId,
+    })
+    .where(eq(careerTopics.id, careerTopicId));
+
+  console.log(`🔗 Linked roadmap ${roadmapId} to career topic ${careerTopicId}`);
+}
+
+/**
+ * Get a career topic by ID
+ */
+export async function getCareerTopicById(topicId: string) {
+  const [topic] = await db
+    .select()
+    .from(careerTopics)
+    .where(eq(careerTopics.id, topicId));
+
+  if (!topic) {
+    return null;
+  }
+
+  return {
+    ...topic,
+    prerequisites: JSON.parse(topic.prerequisites as string) as string[],
+  };
 }

@@ -48,5 +48,3 @@ android/app/src/main/java/com/expostarter/base/MainActivity.kt
 .github/copilot-instructions.md
 rebuild.bat
 db/migrations/migrations.js
-predict.py
-train.py

@@ -189,13 +189,30 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
       if (performanceMap.size > 0) {
         console.log(`🤖 First time content generation WITH performance data`);
         
-        // This shouldn't normally happen, but handle it gracefully
-        // Generate adaptive content based on performance
-        const subtopicGuidance = Array.from(performanceMap.values()).map(perf => ({
-          subtopicName: perf.subtopicId, // We'll use ID as placeholder
-          status: perf.status,
-          accuracy: perf.accuracy
-        }));
+        // Fetch subtopics to resolve IDs to names for performance guidance
+        const subtopicsForPerf = await getSubtopics(topicId);
+        const subtopicIdToName = new Map(subtopicsForPerf.map(st => [st.id, st.name]));
+        
+        // Resolve subtopic names from performance IDs
+        const subtopicGuidance = Array.from(performanceMap.values())
+          .map(perf => {
+            const subtopicName = subtopicIdToName.get(perf.subtopicId);
+            if (!subtopicName) {
+              console.error(`Cannot resolve subtopic name for ID: ${perf.subtopicId}`);
+              return null;
+            }
+            return {
+              subtopicName,
+              status: perf.status,
+              accuracy: perf.accuracy
+            };
+          })
+          .filter((item): item is { subtopicName: string; status: string; accuracy: number } => item !== null);
+        
+        if (subtopicGuidance.length === 0) {
+          console.error(`No valid subtopic names resolved from performance data`);
+          throw new Error('Cannot generate adaptive content: subtopic names could not be resolved');
+        }
         
         const explanation = await geminiService.generateTopicExplanation(
           topic.name,
@@ -204,7 +221,7 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
         );
         
         // Note: createSubtopics side effect should be handled by usePersistTopicContent mutation
-        console.log(`✅ New adaptive content generated`);
+        console.log(`✅ New adaptive content generated with ${subtopicGuidance.length} resolved subtopics`);
         return { topic, explanation, subtopicPerformance: performanceMap };
       }
       

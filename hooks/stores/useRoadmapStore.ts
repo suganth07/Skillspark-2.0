@@ -246,9 +246,8 @@ export const useRoadmapStore = create<RoadmapState>((set, get) => ({
           roadmap.title
         );
 
-        // Get topic category (use roadmap title as category fallback)
-        const topicCategory = roadmap.title.split(' ')[0] || 'General';
-
+        // Use roadmap title as topic category
+        const topicCategory = roadmap.title || 'General';
         // Store subtopics in database
         await createSubtopics(step.topicId, topicCategory, topicExplanation);
         console.log(`✅ Generated ${topicExplanation.subtopics.length} subtopics for ${prerequisiteName}`);

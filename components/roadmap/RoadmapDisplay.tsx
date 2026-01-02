@@ -9,8 +9,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
-import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates } from '@/hooks/queries/useRoadmapQueries';
-import { useRoadmapStore } from '@/hooks/stores/useRoadmapStore';
+import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -43,7 +42,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
   const router = useRouter();
   const currentUserId = useCurrentUserId();
-  const { generateQuizForPrerequisite } = useRoadmapStore();
 
   // TanStack Query hooks - automatic caching and refetching
   const { 
@@ -56,6 +54,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const deleteRoadmapMutation = useDeleteRoadmap();
   const updateStepCompletionMutation = useUpdateStepCompletion();
   const checkTopicUpdatesMutation = useCheckTopicUpdates();
+  const generateQuizMutation = useGenerateQuiz();
 
   // Reload roadmap details when returning from quiz
   useFocusEffect(
@@ -75,12 +74,13 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
       // If no quiz exists, generate one
       if (!quizId) {
         setGeneratingQuizForStep(step.id);
-        quizId = await generateQuizForPrerequisite(
-          currentUserId,
+        const result = await generateQuizMutation.mutateAsync({
+          userId: currentUserId,
           roadmapId,
-          step.id,
-          step.title
-        );
+          stepId: step.id,
+          prerequisiteName: step.title
+        });
+        quizId = result.quizId;
         setGeneratingQuizForStep(null);
       }
       

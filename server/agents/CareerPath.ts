@@ -224,14 +224,45 @@ export async function generateCareerPath(options: CareerPathGenerationOptions): 
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error('Invalid JSON response from Gemini');
+      throw new Error(
+        `Invalid JSON response from AI service. Response does not contain valid JSON.\n` +
+        `Raw response: ${text.substring(0, 500)}...`
+      );
     }
 
     const careerPath = JSON.parse(jsonMatch[0]) as CareerPathResult;
 
-    // Validate response structure
-    if (!careerPath.roleName || !careerPath.topics || careerPath.topics.length === 0) {
-      throw new Error('Invalid career path structure');
+    // Comprehensive validation of response structure
+    const validationErrors: string[] = [];
+
+    if (!careerPath.roleName || typeof careerPath.roleName !== 'string') {
+      validationErrors.push('roleName is missing or invalid');
+    }
+
+    if (!careerPath.roleDescription || typeof careerPath.roleDescription !== 'string') {
+      validationErrors.push('roleDescription is missing or invalid');
+    }
+
+    if (!Array.isArray(careerPath.categories) || careerPath.categories.length === 0) {
+      validationErrors.push('categories must be a non-empty array');
+    }
+
+    if (typeof careerPath.totalEstimatedHours !== 'number' || 
+        !Number.isFinite(careerPath.totalEstimatedHours) || 
+        careerPath.totalEstimatedHours <= 0) {
+      validationErrors.push('totalEstimatedHours must be a finite number greater than 0');
+    }
+
+    if (!Array.isArray(careerPath.topics) || careerPath.topics.length === 0) {
+      validationErrors.push('topics must be a non-empty array');
+    }
+
+    if (validationErrors.length > 0) {
+      throw new Error(
+        `Invalid career path structure from AI service:\n` +
+        validationErrors.map(err => `  - ${err}`).join('\n') +
+        `\n\nRaw response:\n${jsonMatch[0].substring(0, 1000)}...`
+      );
     }
 
     console.log(`✅ Career Path Agent: Generated ${careerPath.topics.length} topics for ${roleName}`);

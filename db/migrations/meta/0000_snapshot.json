@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c0aa8efa-ea8f-458f-b141-7a896081ccfb",
+  "id": "bad64656-7830-49cf-ac86-c25c417974ed",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "career_paths": {
@@ -179,8 +179,8 @@
           "autoincrement": false,
           "default": true
         },
-        "prerequisites": {
-          "name": "prerequisites",
+        "prerequisite_ids": {
+          "name": "prerequisite_ids",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -259,7 +259,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "career_topics_linked_topic_id_topics_id_fk": {

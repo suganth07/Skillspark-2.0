@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db/drizzle';
 import { topics, roadmapSteps, roadmaps, subtopics, userSubtopicPerformance, userKnowledge } from '@/db/schema';
-import { createId } from '@paralleldrive/cuid2';
+import { createId, isCuid } from '@paralleldrive/cuid2';
 import type { TopicExplanation } from '@/lib/gemini';
 
 export async function getTopicById(topicId: string) {
@@ -26,8 +26,8 @@ export async function getTopicByName(topicName: string) {
 
 // Get topic by ID or name (for career path navigation)
 export async function getTopicByIdOrName(identifier: string) {
-  // Check if it's a CUID (24-25 chars starting with 'c')
-  const isCUID = identifier.length >= 24 && /^c[a-z0-9]+$/.test(identifier);
+  // Check if it's a CUID using the official validator
+  const isCUID = isCuid(identifier);
   
   if (isCUID) {
     // It's an ID, search by ID

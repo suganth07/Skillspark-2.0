@@ -56,7 +56,7 @@ export async function createCareerPath(
     estimatedHours: topic.estimatedHours,
     order: topic.order,
     isCore: topic.isCore,
-    prerequisites: JSON.stringify(topic.prerequisites),
+    prerequisiteIds: JSON.stringify(topic.prerequisites),
     linkedTopicId: null, // Will be linked later when topics are created
     isCompleted: false,
   }));
@@ -130,7 +130,7 @@ export async function getCareerPathWithTopics(careerPathId: string, userId: stri
     categories: safeParseJsonArray(path.categories, []),
     topics: topics.map(topic => ({
       ...topic,
-      prerequisites: safeParseJsonArray(topic.prerequisites, []),
+      prerequisites: safeParseJsonArray(topic.prerequisiteIds, []),
     })),
   };
 }
@@ -207,6 +207,6 @@ export async function getCareerTopicById(topicId: string) {
 
   return {
     ...topic,
-    prerequisites: JSON.parse(topic.prerequisites as string) as string[],
+    prerequisites: safeParseJsonArray(topic.prerequisiteIds, []),
   };
 }

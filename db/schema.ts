@@ -259,7 +259,9 @@ export const careerTopics = sqliteTable(
   "career_topics",
   {
     id: text("id").primaryKey().$defaultFn(() => createId()),
-    careerPathId: text("career_path_id").references(() => careerPaths.id).notNull(),
+    careerPathId: text("career_path_id")
+      .references(() => careerPaths.id, { onDelete: 'cascade' })
+      .notNull(),
     
     name: text("name").notNull(),
     description: text("description"),
@@ -269,8 +271,8 @@ export const careerTopics = sqliteTable(
     order: integer("order").notNull(),
     isCore: integer("is_core", { mode: "boolean" }).default(true),
     
-    // JSON array of prerequisite topic names
-    prerequisites: text("prerequisites", { mode: "json" }).default("[]"),
+    // JSON array of prerequisite topic IDs (career_topic IDs)
+    prerequisiteIds: text("prerequisite_ids", { mode: "json" }).default("[]"),
     
     // Link to actual topic if it exists
     linkedTopicId: text("linked_topic_id").references(() => topics.id),

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { RocketLoadingAnimation } from '@/components/roadmap/RocketLoadingAnimation';
 import { useCareerPathDetail, useGenerateCareerTopicRoadmap } from '@/hooks/queries/useCareerQueries';
+import { useUserRoadmaps } from '@/hooks/queries/useRoadmapQueries';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { ArrowLeft, CheckCircle2, Circle, Lock, MapIcon, ChevronRight, Sparkles, X } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
@@ -45,6 +46,9 @@ export default function CareerPathDetailScreen() {
     refetch 
   } = useCareerPathDetail(id, currentUserId || undefined);
 
+  // Fetch user's roadmaps to check for existing roadmaps
+  const { data: userRoadmaps } = useUserRoadmaps(currentUserId);
+
   // Mutation for generating roadmap from career topic
   const generateRoadmapMutation = useGenerateCareerTopicRoadmap();
 
@@ -71,12 +75,23 @@ export default function CareerPathDetailScreen() {
 
   const handleTopicPress = (topic: CareerTopic) => {
     if (topic.linkedRoadmapId) {
-      // Roadmap already exists, navigate to it
+      // Roadmap already exists and is linked, navigate to it
       router.push(`/roadmap/${topic.linkedRoadmapId}` as any);
     } else {
-      // No roadmap yet, show generation modal
-      setSelectedTopic(topic);
-      setShowGenerateModal(true);
+      // Check if a roadmap for this topic name already exists (but not linked)
+      const existingRoadmap = userRoadmaps?.find(roadmap => 
+        roadmap.title.toLowerCase().includes(topic.name.toLowerCase()) ||
+        topic.name.toLowerCase().includes(roadmap.title.replace(' Learning Path', '').toLowerCase())
+      );
+
+      if (existingRoadmap) {
+        // Roadmap exists, navigate directly without showing modal
+        router.push(`/roadmap/${existingRoadmap.id}` as any);
+      } else {
+        // No roadmap yet, show generation modal
+        setSelectedTopic(topic);
+        setShowGenerateModal(true);
+      }
     }
   };
 

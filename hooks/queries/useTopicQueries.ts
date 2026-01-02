@@ -49,7 +49,8 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
   const queryClient = useQueryClient();
   
   return useQuery({
-    queryKey: queryKeys.topics.detail(topicId || '', userId || ''),
+    queryKey: queryKeys.
+    topics.detail(topicId || '', userId || ''),
     queryFn: async (): Promise<TopicDetail> => {
       if (!topicId || !userId) {
         throw new Error('Topic ID and User ID are required');

@@ -8,6 +8,7 @@ import List, {ListHeader} from "@/components/ui/list";
 import {ThemeSettingItem} from '@/components/settings/ThemeItem';
 import {UserManagement} from '@/components/settings/UserManagement';
 import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
+import {GeneratedVideosItem} from '@/components/settings/GeneratedVideosItem';
 
 export default function Settings() {
   return (
@@ -41,6 +42,7 @@ export default function Settings() {
               <Muted>Learning Features</Muted>
             </ListHeader>
             <EmotionDetectionItem />
+            <GeneratedVideosItem />
           </List>
         </View>
       </ScrollView>

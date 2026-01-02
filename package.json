@@ -44,6 +44,7 @@
     "drizzle-orm": "^0.43.1",
     "drizzle-zod": "^0.5.1",
     "expo": "^54.0.0",
+    "expo-av": "~16.0.8",
     "expo-camera": "^17.0.10",
     "expo-constants": "~18.0.9",
     "expo-dev-client": "~6.0.20",

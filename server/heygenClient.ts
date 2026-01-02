@@ -8,6 +8,16 @@ export type HeyGenStatusResponse = {
     status?: "pending" | "waiting" | "processing" | "completed" | "failed";
     video_url?: string;
     thumbnail_url?: string;
+    error?: {
+      code?: string;
+      message?: string;
+      detail?: string;
+    };
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    detail?: string;
   };
 };
 
@@ -29,6 +39,8 @@ async function safeJson(r: Response) {
 export async function heygenGenerateVideo(apiKey: string | null, payload: unknown) {
   assertKey(apiKey);
 
+  console.log('📹 Sending HeyGen request with payload:', JSON.stringify(payload, null, 2));
+
   const r = await fetch(`${BASE}/v2/video/generate`, {
     method: "POST",
     headers: {
@@ -39,7 +51,13 @@ export async function heygenGenerateVideo(apiKey: string | null, payload: unknow
   });
 
   const json = (await safeJson(r)) as HeyGenGenerateResponse;
-  if (!r.ok) throw new Error(JSON.stringify(json));
+  
+  if (!r.ok) {
+    console.error('📹 HeyGen generation failed:', r.status, JSON.stringify(json, null, 2));
+    throw new Error(`HeyGen API error (${r.status}): ${JSON.stringify(json)}`);
+  }
+  
+  console.log('📹 HeyGen response:', JSON.stringify(json, null, 2));
   return json;
 }
 
@@ -75,12 +93,23 @@ export async function waitForHeygenVideoUrl(apiKey: string | null, videoId: stri
     const s = await heygenVideoStatus(apiKey, videoId);
     const status = s?.data?.status;
 
+    console.log(`📹 Video status: ${status}`);
+
     if (status === "completed") {
       const url = s?.data?.video_url;
       if (!url) throw new Error("Completed but no video_url returned");
       return url;
     }
-    if (status === "failed") throw new Error("HeyGen video generation failed");
+    
+    if (status === "failed") {
+      const errorInfo = s?.data?.error || s?.error;
+      const errorMessage = errorInfo 
+        ? `HeyGen video generation failed: ${errorInfo.code || 'Unknown'} - ${errorInfo.message || errorInfo.detail || 'No details provided'}`
+        : 'HeyGen video generation failed with no error details';
+      
+      console.error('📹 HeyGen failure details:', JSON.stringify(s, null, 2));
+      throw new Error(errorMessage);
+    }
 
     await new Promise((r) => setTimeout(r, intervalMs));
   }

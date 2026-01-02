@@ -1,0 +1,329 @@
+import React, { useState, useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/ui/text';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Video, Trash2 } from 'lucide-react-native';
+import { Video as ExpoVideo, ResizeMode } from 'expo-av';
+import { geminiService } from '@/lib/gemini';
+import { heygenGenerateVideo, waitForHeygenVideoUrl } from '@/server/heygenClient';
+import { HEYGEN_API_KEY, HEYGEN_AVATAR_ID, HEYGEN_VOICE_ID } from '@/lib/constants';
+import {
+  getExistingTopicVideo,
+  isLocalVideoValid,
+  downloadVideo,
+  saveVideoMetadata,
+  deleteTopicVideo,
+} from '@/lib/videoService';
+import type { TopicSubtopic } from '@/lib/gemini';
+
+type VideoGenerationStatus =
+  | 'idle'
+  | 'loading-existing'
+  | 'generating-script'
+  | 'sending-to-heygen'
+  | 'rendering'
+  | 'downloading'
+  | 'completed'
+  | 'error';
+
+interface TopicVideoGeneratorProps {
+  topicId: string;
+  topicName: string;
+  userId: string;
+  subtopics: TopicSubtopic[];
+}
+
+export function TopicVideoGenerator({
+  topicId,
+  topicName,
+  userId,
+  subtopics,
+}: TopicVideoGeneratorProps) {
+  const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>('idle');
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [isLocalVideo, setIsLocalVideo] = useState<boolean>(false);
+
+  // Load existing video on mount
+  useEffect(() => {
+    if (topicId && userId) {
+      loadExistingVideo();
+    }
+  }, [topicId, userId]);
+
+  const loadExistingVideo = async () => {
+    try {
+      setVideoStatus('loading-existing');
+      const existingVideo = await getExistingTopicVideo(topicId, userId);
+
+      if (existingVideo) {
+        // Check if local file exists and is valid
+        if (existingVideo.localFilePath && (await isLocalVideoValid(existingVideo.localFilePath))) {
+          console.log('📹 Loading existing local video:', existingVideo.localFilePath);
+          setVideoUrl(existingVideo.localFilePath);
+          setIsLocalVideo(true);
+          setVideoStatus('completed');
+          return;
+        }
+
+        // If we have a remote URL but no local file, just show idle state
+        console.log('📹 Existing video found but local file missing');
+      }
+
+      setVideoStatus('idle');
+    } catch (err) {
+      console.error('Error loading existing video:', err);
+      setVideoStatus('idle');
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!HEYGEN_API_KEY) {
+      const error = 'HeyGen API key not configured';
+      setVideoError(error);
+      setVideoStatus('error');
+      console.error('📹 Cannot generate video:', error);
+      return;
+    }
+
+    try {
+      setVideoStatus('generating-script');
+      setVideoError(null);
+      setIsLocalVideo(false);
+
+      console.log('📹 Starting video generation for topic:', topicName);
+      console.log('📹 Using Avatar ID:', HEYGEN_AVATAR_ID);
+      console.log('📹 Using Voice ID:', HEYGEN_VOICE_ID);
+
+      // Generate video script using Gemini
+      const script = await geminiService.generateVideoScript(topicName, topicName, subtopics);
+
+      console.log('📹 Generated video script:', script);
+      console.log('📹 Script length:', script.length, 'characters');
+
+      setVideoStatus('sending-to-heygen');
+
+      // Build HeyGen payload
+      const payload = {
+        video_inputs: [
+          {
+            character: {
+              type: 'avatar',
+              avatar_id: HEYGEN_AVATAR_ID,
+            },
+            voice: {
+              type: 'text',
+              voice_id: HEYGEN_VOICE_ID,
+              input_text: script,
+            },
+          },
+        ],
+        dimension: {
+          width: 1280,
+          height: 720,
+        },
+      };
+
+      // Send to HeyGen
+      const generateResponse = await heygenGenerateVideo(HEYGEN_API_KEY, payload);
+      const videoId = generateResponse?.data?.video_id || generateResponse?.video_id;
+
+      if (!videoId) {
+        throw new Error('No video ID returned from HeyGen');
+      }
+
+      console.log('📹 HeyGen video ID:', videoId);
+
+      setVideoStatus('rendering');
+
+      // Poll for completion
+      const remoteUrl = await waitForHeygenVideoUrl(HEYGEN_API_KEY, videoId, {
+        intervalMs: 3000,
+        timeoutMs: 10 * 60 * 1000, // 10 minutes timeout
+      });
+
+      console.log('📹 Video URL:', remoteUrl);
+
+      // Save metadata to database
+      await saveVideoMetadata(topicId, userId, videoId, remoteUrl);
+
+      // Download video to local storage
+      setVideoStatus('downloading');
+      setDownloadProgress(0);
+
+      const { localFilePath } = await downloadVideo(
+        remoteUrl,
+        topicId,
+        userId,
+        videoId,
+        (progress) => setDownloadProgress(progress)
+      );
+
+      console.log('📹 Video downloaded to:', localFilePath);
+      setVideoUrl(localFilePath);
+      setIsLocalVideo(true);
+      setVideoStatus('completed');
+    } catch (err) {
+      console.error('📹 Video generation error:', err);
+      setVideoError(err instanceof Error ? err.message : String(err));
+      setVideoStatus('error');
+    }
+  };
+
+  const handleDeleteVideo = async () => {
+    try {
+      await deleteTopicVideo(topicId, userId);
+      setVideoUrl(null);
+      setVideoStatus('idle');
+      setIsLocalVideo(false);
+      console.log('🗑️ Video deleted successfully');
+    } catch (err) {
+      console.error('Error deleting video:', err);
+    }
+  };
+
+  const getVideoStatusMessage = () => {
+    switch (videoStatus) {
+      case 'loading-existing':
+        return 'Checking for existing video...';
+      case 'generating-script':
+        return 'Generating 10-second script...';
+      case 'sending-to-heygen':
+        return 'Sending to HeyGen...';
+      case 'rendering':
+        return 'Rendering video (typically 30-60 seconds)...';
+      case 'downloading':
+        return `Downloading video... ${Math.round(downloadProgress * 100)}%`;
+      case 'completed':
+        return isLocalVideo ? 'Video ready (saved locally)' : 'Video ready!';
+      case 'error':
+        return videoError || 'An error occurred';
+      default:
+        return '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <View className="flex-row items-center space-x-2 mb-2">
+          <Video className="h-5 w-5 text-blue-600" />
+          <CardTitle>AI Video Explanation</CardTitle>
+        </View>
+        <Text className="text-sm text-muted-foreground">
+          Generate a short AI video (~10 seconds) explaining this topic
+        </Text>
+      </CardHeader>
+      <CardContent>
+        {videoStatus === 'loading-existing' && (
+          <View className="items-center py-4">
+            <ActivityIndicator size="small" className="mb-2" />
+            <Text className="text-sm text-muted-foreground text-center">
+              Checking for existing video...
+            </Text>
+          </View>
+        )}
+
+        {videoStatus === 'idle' && !videoUrl && (
+          <Button
+            onPress={handleGenerateVideo}
+            className="w-full flex-row items-center justify-center space-x-2"
+          >
+            <Video className="h-4 w-4 text-white" />
+            <Text className="text-white font-medium">Generate Video</Text>
+          </Button>
+        )}
+
+        {(videoStatus === 'generating-script' ||
+          videoStatus === 'sending-to-heygen' ||
+          videoStatus === 'rendering') && (
+          <View className="items-center py-4">
+            <ActivityIndicator size="large" className="mb-3" />
+            <Text className="text-sm text-muted-foreground text-center">
+              {getVideoStatusMessage()}
+            </Text>
+            {videoStatus === 'rendering' && (
+              <Text className="text-xs text-muted-foreground text-center mt-2">
+                Short videos render quickly
+              </Text>
+            )}
+          </View>
+        )}
+
+        {videoStatus === 'downloading' && (
+          <View className="items-center py-4">
+            <ActivityIndicator size="large" className="mb-3" />
+            <Text className="text-sm text-muted-foreground text-center">
+              {getVideoStatusMessage()}
+            </Text>
+            <View className="w-full h-2 bg-gray-200 rounded-full mt-3 overflow-hidden">
+              <View
+                className="h-full bg-blue-500 rounded-full"
+                style={{ width: `${downloadProgress * 100}%` }}
+              />
+            </View>
+          </View>
+        )}
+
+        {videoStatus === 'error' && (
+          <View className="items-center py-4">
+            <View className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg mb-3">
+              <Text className="text-sm font-semibold text-red-700 dark:text-red-400 mb-2">
+                Video Generation Error
+              </Text>
+              <Text className="text-xs text-red-600 dark:text-red-300">
+                {videoError || 'Failed to generate video'}
+              </Text>
+            </View>
+            <Button
+              onPress={handleGenerateVideo}
+              variant="outline"
+              className="flex-row items-center space-x-2"
+            >
+              <Text>Try Again</Text>
+            </Button>
+          </View>
+        )}
+
+        {videoStatus === 'completed' && videoUrl && (
+          <View className="space-y-3">
+            {isLocalVideo && (
+              <Badge className="bg-green-100 self-start mb-2">
+                <Text className="text-xs text-green-700">Saved locally</Text>
+              </Badge>
+            )}
+            <View className="rounded-lg overflow-hidden bg-black">
+              <ExpoVideo
+                source={{ uri: videoUrl }}
+                style={{ width: '100%', aspectRatio: 16 / 9 }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                isLooping={false}
+              />
+            </View>
+            <View className="flex-row justify-between">
+              <Button
+                variant="destructive"
+                onPress={handleDeleteVideo}
+                className="flex-row items-center space-x-1"
+              >
+                <Trash2 className="h-4 w-4 text-white" />
+                <Text className="text-white">Delete</Text>
+              </Button>
+              <Button
+                onPress={handleGenerateVideo}
+                className="flex-row items-center space-x-1"
+              >
+                <Video className="h-4 w-4 text-white" />
+                <Text className="text-white">Regenerate</Text>
+              </Button>
+            </View>
+          </View>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

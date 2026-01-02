@@ -8,8 +8,10 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStoreV2';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
+import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
+import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
@@ -18,6 +20,7 @@ export default function TopicDetailScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
+  const isGeneratedVideosEnabled = useIsGeneratedVideosEnabled();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   // TanStack Query hook - automatic caching, loading, and error states
@@ -196,7 +199,15 @@ export default function TopicDetailScreen() {
             </CardHeader>
           </Card>
 
-        
+          {/* Video Generation Section */}
+          {isGeneratedVideosEnabled && currentUserId && (
+            <TopicVideoGenerator
+              topicId={id!}
+              topicName={topic.name}
+              userId={currentUserId}
+              subtopics={explanation.subtopics}
+            />
+          )}
 
           {/* Subtopics */}
           <Card>

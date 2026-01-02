@@ -15,6 +15,13 @@
       "when": 1767175475806,
       "tag": "0001_talented_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1767340011620,
+      "tag": "0002_loving_the_fallen",
+      "breakpoints": true
     }
   ]
 }

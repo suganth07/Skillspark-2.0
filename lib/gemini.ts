@@ -454,6 +454,55 @@ ${subtopicPerformance.map(p =>
       throw new Error(`Failed to generate topic explanation: ${error}`);
     }
   }
+
+  /**
+   * Generate a video script for HeyGen based on topic subtopics
+   * Creates a ~10 second educational video script for testing
+   */
+  async generateVideoScript(
+    topicName: string,
+    context: string,
+    subtopics: TopicSubtopic[]
+  ): Promise<string> {
+    const prompt = `
+Create a very brief, concise script for a ~10 second video introducing the topic "${topicName}".
+
+Provide ONLY:
+1. A single sentence introducing ${topicName}
+2. One key point about why it's important
+
+Use this subtopic information for context:
+${JSON.stringify(subtopics.slice(0, 2).map(s => ({ title: s.title })), null, 2)}
+
+Output ONLY the script text. Do NOT include JSON, markdown, bullets, or extra metadata.
+Keep overall length suitable for ~10 seconds (~30-40 words maximum).
+Write in a friendly, conversational tone as if speaking directly to the learner.
+    `;
+
+    try {
+      const result = await withRetry(async () => {
+        return await this.model.generateContent(prompt);
+      });
+      const response = await result.response;
+      const text = response.text();
+
+      // Clean up the script text (remove any markdown artifacts)
+      const cleanedScript = text
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/#{1,6}\s/g, '')
+        .trim();
+
+      if (!cleanedScript || cleanedScript.length < 20) {
+        throw new Error('Generated script is too short or empty');
+      }
+
+      return cleanedScript;
+    } catch (error) {
+      console.error('Error generating video script:', error);
+      throw new Error(`Failed to generate video script: ${error}`);
+    }
+  }
 }
 
 export const geminiService = new GeminiService();

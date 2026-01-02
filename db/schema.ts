@@ -190,6 +190,40 @@ export const userSubtopicPerformance = sqliteTable(
   ]
 );
 
+// --- Topic Videos ---
+// Stores metadata for AI-generated videos (file stored locally, only metadata in DB)
+export const topicVideos = sqliteTable(
+  "topic_videos",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    topicId: text("topic_id").references(() => topics.id).notNull(),
+    userId: text("user_id").references(() => users.id).notNull(),
+    
+    // HeyGen video ID
+    heygenVideoId: text("heygen_video_id").notNull(),
+    
+    // Remote URL (expires after ~7 days)
+    remoteUrl: text("remote_url").notNull(),
+    
+    // Local file path (persistent)
+    localFilePath: text("local_file_path"),
+    
+    // Status of video
+    status: text("status", { enum: ["pending", "downloading", "ready", "error"] }).default("pending"),
+    
+    // File size in bytes (for storage management)
+    fileSizeBytes: integer("file_size_bytes"),
+    
+    // Timestamps
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
+    downloadedAt: integer("downloaded_at", { mode: "timestamp" }),
+  },
+  (t) => [
+    uniqueIndex("topic_videos_topic_user_idx").on(t.topicId, t.userId),
+    index("topic_videos_topic_idx").on(t.topicId),
+  ]
+);
+
 // ---------------- Relations ----------------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -226,6 +260,17 @@ export const subtopicsRelations = relations(subtopics, ({ one }) => ({
   }),
 }));
 
+export const topicVideosRelations = relations(topicVideos, ({ one }) => ({
+  topic: one(topics, {
+    fields: [topicVideos.topicId],
+    references: [topics.id],
+  }),
+  user: one(users, {
+    fields: [topicVideos.userId],
+    references: [users.id],
+  }),
+}));
+
 // ---------------- Zod Schemas ----------------
 
 export const UserSchema = createSelectSchema(users);
@@ -233,4 +278,6 @@ export const InsertUserSchema = createInsertSchema(users);
 
 export const RoadmapSchema = createSelectSchema(roadmaps);
 export const TopicSchema = createSelectSchema(topics);
+export const TopicVideoSchema = createSelectSchema(topicVideos);
+export const InsertTopicVideoSchema = createInsertSchema(topicVideos);
   

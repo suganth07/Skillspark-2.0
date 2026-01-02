@@ -43,6 +43,9 @@ export async function createSubtopics(
   category: string,
   explanation: TopicExplanation
 ) {
+  console.log(`🗄️ [DB] createSubtopics called for topic: ${parentTopicId}`);
+  console.log(`🗄️ [DB] Subtopics to insert: ${explanation.subtopics.length}`);
+  
   return await db.transaction(async (tx) => {
     // Update parent topic with metadata
     const parentTopic = await tx
@@ -50,6 +53,8 @@ export async function createSubtopics(
       .from(topics)
       .where(eq(topics.id, parentTopicId))
       .limit(1);
+
+    console.log(`🗄️ [DB] Parent topic found: ${parentTopic.length > 0}`);
 
     if (parentTopic[0]) {
       let existingMetadata = {};
@@ -71,14 +76,21 @@ export async function createSubtopics(
           })
         })
         .where(eq(topics.id, parentTopicId));
+        
+      console.log(`🗄️ [DB] Parent topic metadata updated`);
     }
 
     // Create each subtopic in subtopics table with three content versions
     const errors: Array<{ subtopicId: string; title: string; error: string }> = [];
     
+    console.log(`🗄️ [DB] Starting subtopic insertion loop...`);
+    
     for (let i = 0; i < explanation.subtopics.length; i++) {
       const subtopic = explanation.subtopics[i];
       const subtopicId = createId();
+      
+      console.log(`🗄️ [DB] Inserting subtopic ${i + 1}/${explanation.subtopics.length}: "${subtopic.title}"`);
+      console.log(`🗄️ [DB] Content lengths - Default: ${subtopic.explanationDefault?.length || 0}, Simplified: ${subtopic.explanationSimplified?.length || 0}, Story: ${subtopic.explanationStory?.length || 0}`);
       
       try {
         await tx.insert(subtopics).values({
@@ -98,7 +110,7 @@ export async function createSubtopics(
           })
         });
 
-        console.log(`✅ Created subtopic with 3 content types: ${subtopic.title}`);
+        console.log(`✅ [DB] Created subtopic with 3 content types: ${subtopic.title}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Failed to create subtopic ${subtopic.title}:`, error);
@@ -228,6 +240,77 @@ export async function updateSubtopicsContent(
 
     console.log(`💾 Updated ${explanation.subtopics.length} subtopics with adaptive content (3 versions each)`);
   });
+}
+
+// Update a single content tone for all subtopics (used when regenerating failed tone)
+export async function updateSingleToneContent(
+  parentTopicId: string,
+  tone: 'default' | 'simplified' | 'story',
+  rawContent: {
+    subtopics: Array<{
+      id?: string;
+      title: string;
+      explanation: string;
+      example?: string;
+      exampleExplanation?: string;
+      keyPoints?: string[];
+    }>;
+  }
+) {
+  console.log(`🔄 Updating ${tone} content for topic ${parentTopicId}`);
+  
+  // Get existing subtopics to match by title
+  const existingSubtopics = await db
+    .select({ id: subtopics.id, name: subtopics.name, metadata: subtopics.metadata })
+    .from(subtopics)
+    .where(eq(subtopics.parentTopicId, parentTopicId));
+
+  const subtopicByTitle = new Map(
+    existingSubtopics.map(st => [st.name.toLowerCase().trim(), st])
+  );
+
+  let updated = 0;
+  for (const newSubtopic of rawContent.subtopics) {
+    const existing = subtopicByTitle.get(newSubtopic.title.toLowerCase().trim());
+    if (!existing) {
+      console.warn(`⚠️ No matching subtopic for "${newSubtopic.title}"`);
+      continue;
+    }
+
+    // Parse existing metadata
+    let metadata: Record<string, any> = {};
+    try {
+      metadata = JSON.parse(existing.metadata as string || '{}');
+    } catch {
+      metadata = {};
+    }
+
+    // Update only the specific tone
+    const updateData: Record<string, any> = {};
+    if (tone === 'default') {
+      updateData.contentDefault = newSubtopic.explanation;
+      metadata.example = newSubtopic.example;
+      metadata.exampleExplanation = newSubtopic.exampleExplanation;
+      metadata.keyPoints = newSubtopic.keyPoints;
+    } else if (tone === 'simplified') {
+      updateData.contentSimplified = newSubtopic.explanation;
+      metadata.exampleSimplified = newSubtopic.example;
+    } else {
+      updateData.contentStory = newSubtopic.explanation;
+      metadata.exampleStory = newSubtopic.example;
+    }
+    updateData.metadata = JSON.stringify(metadata);
+
+    await db
+      .update(subtopics)
+      .set(updateData)
+      .where(eq(subtopics.id, existing.id));
+    
+    updated++;
+  }
+
+  console.log(`✅ Updated ${updated}/${rawContent.subtopics.length} subtopics with ${tone} content`);
+  return updated;
 }
 
 // Check if user needs content regeneration for a topic

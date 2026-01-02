@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
-import { useTopicDetail, usePersistTopicContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2 } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type ContentVersion = 'default' | 'simplified' | 'story';
@@ -38,6 +38,9 @@ export default function TopicDetailScreen() {
 
   // Mutation to persist content to database
   const persistContentMutation = usePersistTopicContent();
+  
+  // Mutation to regenerate a single failed tone
+  const regenerateToneMutation = useRegenerateSingleTone();
 
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
@@ -45,30 +48,55 @@ export default function TopicDetailScreen() {
   // Persist content to database when it's generated (idempotent via server check)
   useEffect(() => {
     if (!currentTopicDetail || !currentUserId) {
+      console.log('⏭️ Skipping persistence: missing topicDetail or userId');
       return;
     }
 
     const { topic, explanation, subtopicPerformance } = currentTopicDetail;
     
-    // Determine if we need to persist by checking if content exists
-    // If subtopics have content (contentDefault), they're already persisted
-    const hasPersistedSubtopics = explanation.subtopics.some(
-      st => st.explanationDefault && st.explanationDefault.length > 0
-    );
+    // Log subtopic IDs for debugging
+    console.log('🔍 Checking subtopic IDs:', explanation.subtopics.map(st => ({ id: st.id, title: st.title })));
+    
+    // Check if content was loaded from database vs freshly generated
+    // Database content has CUID IDs (from createId()) which are 24-25 chars starting with 'c'
+    // Fresh AI content has slugified IDs like "variables-and-expressions" or "subtopic-1"
+    const isCUID = (id: string): boolean => {
+      // CUIDs are 24-25 characters long and start with 'c' followed by alphanumeric
+      return id.length >= 24 && /^c[a-z0-9]+$/.test(id);
+    };
+    
+    const isFromDatabase = explanation.subtopics.some(st => st.id && isCUID(st.id));
+    
+    console.log(`🔍 Persistence check:
+      - Subtopics count: ${explanation.subtopics.length}
+      - Has persisted already: ${hasPersistedContent}
+      - Is from database: ${isFromDatabase}
+      - Sample ID: ${explanation.subtopics[0]?.id}
+    `);
     
     // Only persist if:
     // 1. Content was generated (subtopics exist)
     // 2. NOT already saved locally this session (hasPersistedContent guard)
-    // 3. Content doesn't appear to be from database (no explanationDefault means fresh from AI)
+    // 3. Content is freshly generated from AI (not from database)
     const needsPersistence = explanation.subtopics.length > 0 && 
                              !hasPersistedContent && 
-                             !hasPersistedSubtopics;
+                             !isFromDatabase;
     
     // Derive regeneration from server state (subtopicPerformance exists = came from quiz)
     const isRegeneration = subtopicPerformance.size > 0;
     
+    console.log(`🎯 Persistence decision: ${needsPersistence ? 'YES - will persist' : 'NO - skipping'}`);
+    
     if (needsPersistence) {
       console.log('🔄 Persisting generated content to database...');
+      console.log('📦 Payload:', {
+        topicId: topic.id,
+        userId: currentUserId,
+        category: topic.category,
+        subtopicsCount: explanation.subtopics.length,
+        isRegeneration,
+      });
+      
       persistContentMutation.mutate({
         topicId: topic.id,
         userId: currentUserId,
@@ -77,11 +105,12 @@ export default function TopicDetailScreen() {
         isRegeneration,
       }, {
         onSuccess: () => {
-          console.log('✅ Content successfully persisted!');
+          console.log('✅ Content successfully persisted to database!');
           setHasPersistedContent(true);
         },
         onError: (err) => {
           console.error('❌ Failed to persist content:', err);
+          console.error('Error details:', JSON.stringify(err, null, 2));
         }
       });
     }
@@ -212,6 +241,40 @@ export default function TopicDetailScreen() {
     }
   };
 
+  // Check if a specific content tone failed to generate
+  const isContentFailed = (version: ContentVersion): boolean => {
+    if (!explanation.failedTones) return false;
+    return explanation.failedTones[version] || false;
+  };
+
+  // Check if a specific tone is currently being regenerated
+  const isRegeneratingTone = (tone: ContentVersion): boolean => {
+    return regenerateToneMutation.isPending && 
+           regenerateToneMutation.variables?.tone === tone;
+  };
+
+  // Handler for regenerating a specific content tone
+  const handleRegenerateContent = async (tone: ContentVersion) => {
+    if (!currentUserId || !currentTopicDetail) return;
+    
+    console.log(`🔄 Regenerating ${tone} content...`);
+    
+    // Get canonical titles from existing subtopics
+    const canonicalTitles = explanation.subtopics.map(st => st.title);
+    
+    // Get context from roadmap or category
+    const context = topic.category;
+    
+    regenerateToneMutation.mutate({
+      topicId: topic.id,
+      userId: currentUserId,
+      topicName: topic.name,
+      context,
+      tone,
+      canonicalTitles,
+    });
+  };
+
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen 
@@ -256,6 +319,95 @@ export default function TopicDetailScreen() {
       
       <ScrollView className="flex-1">
         <View className="p-6 space-y-6">
+          {/* Content Generation Warning Banner */}
+          {explanation.failedTones && (explanation.failedTones.default || explanation.failedTones.simplified || explanation.failedTones.story) && (
+            <Card className="bg-yellow-50 border-yellow-200">
+              <CardContent className="p-4">
+                <View className="flex-row items-start space-x-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-yellow-900 mb-2">
+                      Some content failed to generate
+                    </Text>
+                    
+                    {/* Regenerate buttons for each failed tone */}
+                    <View className="space-y-2">
+                      {explanation.failedTones.default && (
+                        <View className="flex-row items-center justify-between bg-yellow-100 rounded-lg p-2">
+                          <Text className="text-xs text-yellow-800">Default content failed</Text>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-7 px-2"
+                            onPress={() => handleRegenerateContent('default')}
+                            disabled={isRegeneratingTone('default')}
+                          >
+                            {isRegeneratingTone('default') ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            <Text className="text-xs">
+                              {isRegeneratingTone('default') ? 'Regenerating...' : 'Regenerate'}
+                            </Text>
+                          </Button>
+                        </View>
+                      )}
+                      
+                      {explanation.failedTones.simplified && (
+                        <View className="flex-row items-center justify-between bg-yellow-100 rounded-lg p-2">
+                          <Text className="text-xs text-yellow-800">Simplified content failed</Text>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-7 px-2"
+                            onPress={() => handleRegenerateContent('simplified')}
+                            disabled={isRegeneratingTone('simplified')}
+                          >
+                            {isRegeneratingTone('simplified') ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            <Text className="text-xs">
+                              {isRegeneratingTone('simplified') ? 'Regenerating...' : 'Regenerate'}
+                            </Text>
+                          </Button>
+                        </View>
+                      )}
+                      
+                      {explanation.failedTones.story && (
+                        <View className="flex-row items-center justify-between bg-yellow-100 rounded-lg p-2">
+                          <Text className="text-xs text-yellow-800">Story content failed</Text>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-7 px-2"
+                            onPress={() => handleRegenerateContent('story')}
+                            disabled={isRegeneratingTone('story')}
+                          >
+                            {isRegeneratingTone('story') ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            <Text className="text-xs">
+                              {isRegeneratingTone('story') ? 'Regenerating...' : 'Regenerate'}
+                            </Text>
+                          </Button>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <Text className="text-xs text-yellow-600 mt-2">
+                      Switch to working styles or regenerate failed content above.
+                    </Text>
+                  </View>
+                </View>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Emotion Detection Card */}
           {isEmotionDetectionEnabled && (
             <TopicEmotionDetector 
@@ -402,44 +554,76 @@ export default function TopicDetailScreen() {
                             entering={FadeIn.duration(300)}
                             className="px-4 pb-4"
                           >
-                            <Text className="text-muted-foreground leading-6 mb-4">
-                              {content.explanation}
-                            </Text>
-
-                            {content.example && (
-                              <View className="mt-3">
-                                <View className="flex-row items-center space-x-2 mb-2">
-                                  <Code className="h-4 w-4 text-green-600" />
-                                  <Text className="text-sm font-semibold text-green-600">
-                                    Example:
-                                  </Text>
-                                </View>
-                                <View className="bg-slate-900 rounded-lg p-4">
-                                  <Text className="text-slate-100 font-mono text-sm leading-6">
-                                    {content.example}
-                                  </Text>
-                                </View>
-                                
-                                {subtopic.exampleExplanation && (
-                                  <Text className="text-sm text-muted-foreground mt-2 italic">
-                                    💡 {subtopic.exampleExplanation}
-                                  </Text>
-                                )}
-                              </View>
-                            )}
-
-                            {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
-                              <View className="mt-3">
-                                <Text className="text-sm font-semibold mb-2">Key Points:</Text>
-                                {subtopic.keyPoints.map((point, idx) => (
-                                  <View key={idx} className="flex-row items-start space-x-2 mb-1">
-                                    <Text className="text-muted-foreground">•</Text>
-                                    <Text className="flex-1 text-sm text-muted-foreground">
-                                      {point}
+                            {/* Show error if this specific tone failed */}
+                            {isContentFailed(currentVersion) ? (
+                              <View className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                                <View className="flex-row items-start space-x-3">
+                                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                                  <View className="flex-1">
+                                    <Text className="text-sm font-semibold text-red-900 mb-1">
+                                      Failed to generate {currentVersion} content
                                     </Text>
+                                    <Text className="text-xs text-red-700 mb-3">
+                                      An error occurred while generating this learning style. Try regenerating or switch to another style.
+                                    </Text>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onPress={() => handleRegenerateContent(currentVersion)}
+                                      className="border-red-300 self-start"
+                                    >
+                                      <View className="flex-row items-center space-x-2">
+                                        <RefreshCw className="h-4 w-4 text-red-700" />
+                                        <Text className="text-red-700 text-xs font-medium">
+                                          Regenerate {currentVersion} content
+                                        </Text>
+                                      </View>
+                                    </Button>
                                   </View>
-                                ))}
+                                </View>
                               </View>
+                            ) : (
+                              <>
+                                <Text className="text-muted-foreground leading-6 mb-4">
+                                  {content.explanation}
+                                </Text>
+
+                                {content.example && (
+                                  <View className="mt-3">
+                                    <View className="flex-row items-center space-x-2 mb-2">
+                                      <Code className="h-4 w-4 text-green-600" />
+                                      <Text className="text-sm font-semibold text-green-600">
+                                        Example:
+                                      </Text>
+                                    </View>
+                                    <View className="bg-slate-900 rounded-lg p-4">
+                                      <Text className="text-slate-100 font-mono text-sm leading-6">
+                                        {content.example}
+                                      </Text>
+                                    </View>
+                                    
+                                    {subtopic.exampleExplanation && (
+                                      <Text className="text-sm text-muted-foreground mt-2 italic">
+                                        💡 {subtopic.exampleExplanation}
+                                      </Text>
+                                    )}
+                                  </View>
+                                )}
+
+                                {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
+                                  <View className="mt-3">
+                                    <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                    {subtopic.keyPoints.map((point, idx) => (
+                                      <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                        <Text className="text-muted-foreground">•</Text>
+                                        <Text className="flex-1 text-sm text-muted-foreground">
+                                          {point}
+                                        </Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                )}
+                              </>
                             )}
                           </Animated.View>
                         </View>

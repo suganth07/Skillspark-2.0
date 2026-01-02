@@ -65,6 +65,7 @@
     "expo-system-ui": "~6.0.7",
     "expo-web-browser": "~15.0.8",
     "gh-pages": "^6.3.0",
+    "groq-sdk": "^0.37.0",
     "jpeg-js": "^0.4.4",
     "lucide-react-native": "^0.514.0",
     "nativewind": "^4.1.23",

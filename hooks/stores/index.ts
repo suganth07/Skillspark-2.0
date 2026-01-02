@@ -12,3 +12,12 @@ export {
   useEmotionStore,
   useIsEmotionDetectionEnabled,
 } from './useEmotionStore';
+
+// AI Provider selection
+export {
+  useAIProviderStore,
+  useAIProvider,
+  useSetAIProvider,
+  useIsProviderAvailable,
+  type AIProvider,
+} from './useAIProviderStore';

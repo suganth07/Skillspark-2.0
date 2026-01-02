@@ -7,10 +7,12 @@ import {
   getUserSubtopicPerformance,
   createSubtopics,
   updateSubtopicsContent,
+  updateSingleToneContent,
   checkNeedsRegeneration,
   setNeedsRegeneration
 } from '@/server/queries/topics';
 import { geminiService, type TopicExplanation } from '@/lib/gemini';
+import { regenerateSingleContent, type ContentTone } from '@/server/agents/DynamicContent';
 
 // ============================================
 // TYPES
@@ -294,19 +296,30 @@ export function usePersistTopicContent() {
       explanation: TopicExplanation;
       isRegeneration: boolean;
     }) => {
+      console.log(`💾 [Mutation] Starting persistence for topic: ${topicId}`);
+      console.log(`💾 [Mutation] Subtopics to save: ${explanation.subtopics.length}`);
+      console.log(`💾 [Mutation] Is regeneration: ${isRegeneration}`);
+      console.log(`💾 [Mutation] First subtopic sample:`, {
+        id: explanation.subtopics[0]?.id,
+        title: explanation.subtopics[0]?.title,
+        hasDefault: !!explanation.subtopics[0]?.explanationDefault,
+        hasSimplified: !!explanation.subtopics[0]?.explanationSimplified,
+        hasStory: !!explanation.subtopics[0]?.explanationStory,
+      });
+      
       if (isRegeneration) {
         // Update existing content
-        console.log(`💾 Saving regenerated adaptive content to database...`);
+        console.log(`💾 [Mutation] Calling updateSubtopicsContent...`);
         await updateSubtopicsContent(topicId, explanation);
         
         // Reset the regeneration flag
         await setNeedsRegeneration(userId, topicId, false);
-        console.log(`✅ Content regenerated and cached. Regeneration flag reset to FALSE.`);
+        console.log(`✅ [Mutation] Content regenerated and cached. Regeneration flag reset to FALSE.`);
       } else {
         // Create new content
-        console.log(`💾 Caching ${explanation.subtopics.length} subtopics in database...`);
+        console.log(`💾 [Mutation] Calling createSubtopics...`);
         await createSubtopics(topicId, category, explanation);
-        console.log(`✅ New content cached in database`);
+        console.log(`✅ [Mutation] New content cached in database`);
       }
       
       return { topicId, userId };
@@ -320,6 +333,67 @@ export function usePersistTopicContent() {
       queryClient.invalidateQueries({ 
         queryKey: queryKeys.topics.subtopics(topicId) 
       });
+    },
+  });
+}
+
+/**
+ * Mutation to regenerate a single content tone (default, simplified, or story)
+ * Used when one tone fails during initial generation
+ */
+export function useRegenerateSingleTone() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      topicId,
+      userId,
+      topicName,
+      context,
+      tone,
+      canonicalTitles,
+    }: {
+      topicId: string;
+      userId: string;
+      topicName: string;
+      context: string;
+      tone: ContentTone;
+      canonicalTitles: string[];
+    }) => {
+      console.log(`🔄 [Regenerate] Starting ${tone} content regeneration for "${topicName}"`);
+      
+      // Generate the single tone content
+      const content = await regenerateSingleContent(
+        tone,
+        topicName,
+        context,
+        canonicalTitles
+      );
+      
+      if (!content) {
+        throw new Error(`Failed to regenerate ${tone} content after retries`);
+      }
+      
+      console.log(`✅ [Regenerate] ${tone} content generated with ${content.subtopics.length} subtopics`);
+      
+      // Update only this tone in the database
+      await updateSingleToneContent(topicId, tone, content);
+      
+      return { topicId, userId, tone, content };
+    },
+    onSuccess: ({ topicId, userId, tone }) => {
+      console.log(`✅ [Regenerate] ${tone} content saved, invalidating queries...`);
+      
+      // Invalidate queries to refetch updated content
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.detail(topicId, userId) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.subtopics(topicId) 
+      });
+    },
+    onError: (error, { tone }) => {
+      console.error(`❌ [Regenerate] Failed to regenerate ${tone} content:`, error);
     },
   });
 }

@@ -1,18 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { generateContentBundle } from '@/server/agents/DynamicContent';
+import { aiService } from '@/lib/aiService';
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
 if (!API_KEY) {
-  console.error('⚠️ EXPO_PUBLIC_GEMINI_API_KEY is not set. Gemini features will not work.');
+  console.warn('⚠️ EXPO_PUBLIC_GEMINI_API_KEY not set. Will use alternate AI provider if configured.');
 }
-const genAI = new GoogleGenerativeAI(API_KEY || '');
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
-// Helper function to retry API calls
+// Legacy retry function (now handled by aiService)
 async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
-  delayMs: number = 1000
+  delayMs: number = 2000
 ): Promise<T> {
   let lastError: Error | null = null;
   
@@ -24,14 +25,14 @@ async function withRetry<T>(
       console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed:`, lastError.message);
       
       if (attempt < maxRetries) {
-        console.log(`⏳ Retrying in ${delayMs}ms...`);
+        console.log(`⏳ Waiting ${delayMs}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
-        delayMs *= 1.5; // Exponential backoff
+        delayMs = Math.floor(delayMs * 1.5); // Exponential backoff
       }
     }
   }
   
-  throw lastError;
+  throw lastError || new Error('Operation failed after retries');
 }
 
 export interface Prerequisite {
@@ -115,11 +116,15 @@ export interface TopicExplanation {
   bestPractices?: string[];
   commonPitfalls?: string[];
   resources?: string[];
+  // Track which content generation failed
+  failedTones?: {
+    default: boolean;
+    simplified: boolean;
+    story: boolean;
+  };
 }
 
 export class GeminiService {
-  private model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
   async generateKnowledgeGraph(topic: string): Promise<KnowledgeGraph> {
     const prompt = `
       Create a comprehensive knowledge graph and learning roadmap for "${topic}".
@@ -158,14 +163,12 @@ export class GeminiService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       // Parse JSON response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
       
       const knowledgeGraph = JSON.parse(jsonMatch[0]) as KnowledgeGraph;
@@ -219,14 +222,12 @@ export class GeminiService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       // Parse JSON response
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
       
       const questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
@@ -290,22 +291,20 @@ export class GeminiService {
 
     // Use retry wrapper for resilience
     return withRetry(async () => {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       // Log raw response for debugging
-      console.log('📝 Gemini raw response length:', text.length);
-      console.log('📝 Gemini response first 200 chars:', text.substring(0, 200));
+      console.log('📝 AI raw response length:', text.length);
+      console.log('📝 AI response first 200 chars:', text.substring(0, 200));
       
       // Check if response is empty or starts with error indicators
       if (!text || text.trim().length === 0) {
-        throw new Error('Empty response from Gemini API');
+        throw new Error('Empty response from AI');
       }
       
       // Check for common error patterns
       if (text.startsWith('Unable') || text.startsWith('Unavailable') || text.startsWith('Unfortunately')) {
-        throw new Error(`Gemini API error: ${text.substring(0, 100)}`);
+        throw new Error(`AI error: ${text.substring(0, 100)}`);
       }
       
       // Try to extract JSON - handle markdown code blocks too
@@ -321,7 +320,7 @@ export class GeminiService {
       const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
         console.error('📛 Failed to find JSON array in response:', text.substring(0, 500));
-        throw new Error('Invalid JSON response from Gemini - no array found');
+        throw new Error('Invalid JSON response from AI - no array found');
       }
       
       let questions: QuizQuestion[];
@@ -374,9 +373,7 @@ export class GeminiService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+      return await aiService.generateContent({ prompt });
     } catch (error) {
       console.error('Error generating feedback:', error);
       return 'Keep up the great work! Focus on practicing the fundamentals and you\'ll master this topic.';
@@ -470,18 +467,19 @@ ${subtopicPerformance.map(p =>
         "resources": ["Resource suggestion 1", "Resource suggestion 2"]
       }
       
+      CRITICAL: Use sequential IDs starting from "subtopic-1", "subtopic-2", "subtopic-3", etc.
+      Do NOT use slugified titles as IDs.
+      
       Make content educational, accurate, and engaging.
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       // Parse JSON response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
       
       const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
@@ -503,7 +501,8 @@ ${subtopicPerformance.map(p =>
   async generateSimplifiedContent(
     topicName: string,
     context: string,
-    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+    canonicalTitles?: string[]
   ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -516,9 +515,23 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
       `;
     }
 
+    // Add canonical titles guidance if provided
+    let titlesGuidance = '';
+    if (canonicalTitles && canonicalTitles.length > 0) {
+      titlesGuidance = `
+      
+      🎯 CRITICAL - USE THESE EXACT SUBTOPIC TITLES (in this exact order):
+${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')}
+      
+      You MUST use these exact titles for your ${canonicalTitles.length} subtopics.
+      Do NOT create different titles or add/remove subtopics.
+      `;
+    }
+
     const prompt = `
       Create a SIMPLIFIED, beginner-friendly explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
+      ${titlesGuidance}
       
       THIS VERSION IS FOR LEARNERS WHO NEED:
       - Simpler language and clearer explanations
@@ -529,7 +542,7 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
       Provide:
       1. A simple, easy-to-understand overview
       2. Why this topic matters (in simple terms)
-      3. 5-8 key subtopics/concepts
+      3. ${canonicalTitles ? `EXACTLY ${canonicalTitles.length}` : '5-8'} key subtopics/concepts ${canonicalTitles ? '(using the exact titles provided above)' : ''}
       4. For EACH subtopic:
          - A LONGER, simpler explanation (4-5 paragraphs, break down complex ideas)
          - 2-3 practical examples with detailed explanations
@@ -563,17 +576,21 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
         "resources": ["Beginner resource 1", "Beginner resource 2"]
       }
       
+      CRITICAL REQUIREMENTS:
+      1. Use sequential IDs: "subtopic-1", "subtopic-2", "subtopic-3", etc.
+      2. ${canonicalTitles ? `Use the EXACT ${canonicalTitles.length} titles listed above - do NOT change them` : 'Keep titles simple and clear'}
+      3. Do NOT add or remove subtopics
+      4. Do NOT use slugified titles as IDs
+      
       Make this version significantly LONGER and SIMPLER than a typical explanation.
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
       
       const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
@@ -594,7 +611,8 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
   async generateStoryContent(
     topicName: string,
     context: string,
-    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+    canonicalTitles?: string[]
   ): Promise<RawTopicExplanation> {
     let performanceGuidance = '';
     if (subtopicPerformance && subtopicPerformance.length > 0) {
@@ -607,9 +625,24 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
       `;
     }
 
+    // Add canonical titles guidance if provided
+    let titlesGuidance = '';
+    if (canonicalTitles && canonicalTitles.length > 0) {
+      titlesGuidance = `
+      
+      🎯 CRITICAL - USE THESE EXACT SUBTOPIC TITLES (in this exact order):
+${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')}
+      
+      You MUST use these exact titles for your ${canonicalTitles.length} subtopics.
+      Do NOT create different titles or add/remove subtopics.
+      The titles stay the same, only the explanation content should be story-based.
+      `;
+    }
+
     const prompt = `
       Create a STORY-BASED explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
+      ${titlesGuidance}
       
       THIS VERSION USES STORYTELLING TO TEACH:
       - Present concepts through engaging narratives
@@ -620,7 +653,7 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
       Provide:
       1. An engaging story-based overview that introduces the topic
       2. Why this topic matters (told through a brief scenario)
-      3. 5-8 key subtopics/concepts
+      3. ${canonicalTitles ? `EXACTLY ${canonicalTitles.length}` : '5-8'} key subtopics/concepts ${canonicalTitles ? '(using the exact titles provided above)' : ''}
       4. For EACH subtopic:
          - A STORY or SCENARIO that illustrates the concept
          - Include characters, setting, and a plot that demonstrates the learning point
@@ -655,17 +688,22 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
         "resources": ["Resource 1", "Resource 2"]
       }
       
+      CRITICAL REQUIREMENTS:
+      1. Use sequential IDs: "subtopic-1", "subtopic-2", "subtopic-3", etc.
+      2. ${canonicalTitles ? `Use the EXACT ${canonicalTitles.length} titles listed above - do NOT change them` : 'Keep titles consistent with default version'}
+      3. Do NOT add or remove subtopics
+      4. Do NOT use slugified titles as IDs
+      5. Only the explanation content should be story-based - titles remain factual
+      
       Make each subtopic a compelling mini-story that teaches the concept.
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await aiService.generateContent({ prompt });
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
       
       const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
@@ -684,15 +722,36 @@ ${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accu
 
   /**
    * Generate a video script for HeyGen based on topic subtopics
-   * Creates a ~10 second educational video script for testing
+   * Creates a ~10 second educational video script
+   * @param tone - The tone/style of the script (default, simplified, or story)
    */
   async generateVideoScript(
     topicName: string,
     context: string,
-    subtopics: TopicSubtopic[]
+    subtopics: TopicSubtopic[],
+    tone: 'default' | 'simplified' | 'story' = 'default'
   ): Promise<string> {
+    let toneGuidance = '';
+    
+    if (tone === 'simplified') {
+      toneGuidance = `
+Use SIMPLE, beginner-friendly language.
+Avoid technical jargon. Explain as if to someone just starting out.
+Be encouraging and welcoming.`;
+    } else if (tone === 'story') {
+      toneGuidance = `
+Use a STORYTELLING approach.
+Create a brief scenario or narrative that introduces the concept.
+Make it engaging and relatable through a mini-story.`;
+    } else {
+      toneGuidance = `
+Use a professional, educational tone.
+Be clear and concise while maintaining accuracy.`;
+    }
+
     const prompt = `
 Create a very brief, concise script for a ~10 second video introducing the topic "${topicName}".
+${toneGuidance}
 
 Provide ONLY:
 1. A single sentence introducing ${topicName}
@@ -708,7 +767,8 @@ Write in a friendly, conversational tone as if speaking directly to the learner.
 
     try {
       const result = await withRetry(async () => {
-        return await this.model.generateContent(prompt);
+        const text = await aiService.generateContent({ prompt });
+        return { response: { text: () => text } };
       });
       const response = await result.response;
       const text = response.text();

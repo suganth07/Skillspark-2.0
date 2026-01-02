@@ -9,6 +9,7 @@ import {ThemeSettingItem} from '@/components/settings/ThemeItem';
 import {UserManagement} from '@/components/settings/UserManagement';
 import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
 import {GeneratedVideosItem} from '@/components/settings/GeneratedVideosItem';
+import {AIProviderItem} from '@/components/settings/AIProviderItem';
 
 export default function Settings() {
   return (
@@ -43,6 +44,16 @@ export default function Settings() {
             </ListHeader>
             <EmotionDetectionItem />
             <GeneratedVideosItem />
+          </List>
+        </View>
+
+        {/* AI Configuration Section */}
+        <View className="px-6 pb-6">
+          <List>
+            <ListHeader>
+              <Muted>AI Configuration</Muted>
+            </ListHeader>
+            <AIProviderItem />
           </List>
         </View>
       </ScrollView>

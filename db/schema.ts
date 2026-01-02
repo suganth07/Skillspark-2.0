@@ -230,12 +230,69 @@ export const topicVideos = sqliteTable(
   ]
 );
 
+// --- Career Paths ---
+export const careerPaths = sqliteTable(
+  "career_paths",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    userId: text("user_id").references(() => users.id).notNull(),
+    roleName: text("role_name").notNull(),
+    roleDescription: text("role_description"),
+    totalEstimatedHours: integer("total_estimated_hours").default(0),
+    
+    // JSON array of category names
+    categories: text("categories", { mode: "json" }).default("[]"),
+    
+    progress: integer("progress").default(0), // 0-100
+    status: text("status", { enum: ["active", "completed", "archived"] }).default("active"),
+    
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: integer("updated_at", { mode: "timestamp" }),
+  },
+  (t) => [
+    index("career_paths_user_idx").on(t.userId),
+  ]
+);
+
+// --- Career Topics (topics within a career path) ---
+export const careerTopics = sqliteTable(
+  "career_topics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    careerPathId: text("career_path_id").references(() => careerPaths.id).notNull(),
+    
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category").notNull(),
+    difficulty: text("difficulty", { enum: ["basic", "intermediate", "advanced"] }).notNull(),
+    estimatedHours: integer("estimated_hours").default(0),
+    order: integer("order").notNull(),
+    isCore: integer("is_core", { mode: "boolean" }).default(true),
+    
+    // JSON array of prerequisite topic names
+    prerequisites: text("prerequisites", { mode: "json" }).default("[]"),
+    
+    // Link to actual topic if it exists
+    linkedTopicId: text("linked_topic_id").references(() => topics.id),
+    
+    isCompleted: integer("is_completed", { mode: "boolean" }).default(false),
+    completedAt: integer("completed_at", { mode: "timestamp" }),
+    
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => [
+    index("career_topics_career_path_idx").on(t.careerPathId),
+    index("career_topics_linked_topic_idx").on(t.linkedTopicId),
+  ]
+);
+
 // ---------------- Relations ----------------
 
 export const usersRelations = relations(users, ({ many }) => ({
   roadmaps: many(roadmaps),
   knowledge: many(userKnowledge),
   quizAttempts: many(quizAttempts),
+  careerPaths: many(careerPaths),
 }));
 
 export const roadmapsRelations = relations(roadmaps, ({ one, many }) => ({
@@ -277,6 +334,25 @@ export const topicVideosRelations = relations(topicVideos, ({ one }) => ({
   }),
 }));
 
+export const careerPathsRelations = relations(careerPaths, ({ one, many }) => ({
+  user: one(users, {
+    fields: [careerPaths.userId],
+    references: [users.id],
+  }),
+  topics: many(careerTopics),
+}));
+
+export const careerTopicsRelations = relations(careerTopics, ({ one }) => ({
+  careerPath: one(careerPaths, {
+    fields: [careerTopics.careerPathId],
+    references: [careerPaths.id],
+  }),
+  linkedTopic: one(topics, {
+    fields: [careerTopics.linkedTopicId],
+    references: [topics.id],
+  }),
+}));
+
 // ---------------- Zod Schemas ----------------
 
 export const UserSchema = createSelectSchema(users);
@@ -286,4 +362,9 @@ export const RoadmapSchema = createSelectSchema(roadmaps);
 export const TopicSchema = createSelectSchema(topics);
 export const TopicVideoSchema = createSelectSchema(topicVideos);
 export const InsertTopicVideoSchema = createInsertSchema(topicVideos);
+
+export const CareerPathSchema = createSelectSchema(careerPaths);
+export const InsertCareerPathSchema = createInsertSchema(careerPaths);
+export const CareerTopicSchema = createSelectSchema(careerTopics);
+export const InsertCareerTopicSchema = createInsertSchema(careerTopics);
   

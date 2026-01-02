@@ -307,7 +307,7 @@ export function useUserManagement() {
       // If deleting current user, switch to another user first
       if (userId === currentUserId) {
         // Fetch fresh user data from query client instead of stale closure
-        const freshUsers = queryClient.getQueryData<typeof usersQuery.data>(
+        const freshUsers = queryClient.getQueryData<User[] | undefined>(
           queryKeys.users.all
         );
         

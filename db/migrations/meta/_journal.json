@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1767353328237,
-      "tag": "0000_peaceful_loki",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1767340011620,
-      "tag": "0002_loving_the_fallen",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1767354390584,
-      "tag": "0003_cute_human_fly",
+      "when": 1767362776595,
+      "tag": "0000_military_whiplash",
       "breakpoints": true
     }
   ]

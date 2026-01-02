@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { generateContentBundle } from '../agents/DynamicContent';
+import { generateContentBundle } from '@/server/agents/DynamicContent';
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 

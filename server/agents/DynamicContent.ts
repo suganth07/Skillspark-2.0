@@ -1,6 +1,6 @@
 // DynamicContent.ts - Agent for parallel content generation (React Native compatible)
-import { geminiService } from "../lib/gemini";
-import type { TopicExplanation, RawTopicExplanation, RawSubtopic } from "../lib/gemini";
+import { geminiService } from "@/lib/gemini";
+import type { TopicExplanation, RawTopicExplanation, RawSubtopic } from "@/lib/gemini";
 
 // ------------------------------
 // Agent State Type

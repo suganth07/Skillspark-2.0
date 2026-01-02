@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
-import { useTopicDetail, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { useTopicDetail, usePersistTopicContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';

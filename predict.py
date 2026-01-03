@@ -11,7 +11,7 @@ MODEL_PATH = Path("assets/model/engagement6.keras")
 TFLITE_INT8_PATH = Path("assets/model/engagement6_int8_dynamic.tflite")
 TFLITE_FP16_PATH = Path("assets/model/engagement6_fp16.tflite")
 LABELS_PATH = Path("assets/model/labels.txt")
-TEST_IMAGE_PATH = Path("test_image.jpeg")
+TEST_IMAGE_PATH = Path("assets/images/5.jpg")  # Use pre-resized image
 IMG_SIZE = (224, 224)
 
 # =========================

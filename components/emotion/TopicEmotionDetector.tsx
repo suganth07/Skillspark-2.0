@@ -11,8 +11,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Buffer } from 'buffer';
 import jpeg from 'jpeg-js';
 
-// Test image - original size, will be resized by our bilinear function
-const TEST_IMAGE = require('@/assets/images/test_image.jpeg');
+// Test image - will be resized to 224x224 automatically
+const TEST_IMAGE = require('@/assets/images/5.jpg');
 
 /**
  * Bilinear resize to match Python PIL's Image.resize() behavior
@@ -136,25 +136,36 @@ function softmax(logits: ArrayLike<number>) {
 }
 
 async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: number) {
-  console.log('📷 Processing image URI:', uri);
+  console.log('📷 Processing pre-resized image:', uri);
   
-  // Get full resolution image as base64 (no resize by ImageManipulator)
+  // Try PNG format to preserve exact pixels
   const result = await ImageManipulator.manipulateAsync(
     uri,
-    [], // No operations - we'll resize ourselves
+    [], 
     { 
-      compress: 1, 
-      format: ImageManipulator.SaveFormat.JPEG, 
+      compress: 1,
+      format: ImageManipulator.SaveFormat.PNG,  // Use PNG to preserve pixels
       base64: true,
     }
   );
 
-  console.log('📷 Original image dimensions:', result.width, 'x', result.height);
+  console.log('📷 Image dimensions:', result.width, 'x', result.height);
 
-  if (!result.base64) throw new Error('No base64 returned from ImageManipulator');
-
-  // Decode JPEG -> RGBA
-  const jpgBytes = Buffer.from(result.base64, 'base64');
+  if (!result.base64) throw new Error('No base64 returned');
+  
+  // Since we can't decode PNG directly, convert to JPEG at high quality
+  const jpegResult = await ImageManipulator.manipulateAsync(
+    result.uri,
+    [],
+    { 
+      compress: 1,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    }
+  );
+  
+  if (!jpegResult.base64) throw new Error('No JPEG base64');
+  const jpgBytes = Buffer.from(jpegResult.base64, 'base64');
   const decoded = jpeg.decode(jpgBytes, { useTArray: true, formatAsRGBA: true });
 
   // Convert RGBA -> RGB
@@ -168,10 +179,15 @@ async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: n
     srcRgb[j++] = rgba[i + 2]; // B
   }
 
-  // Use our bilinear resize to match Python PIL behavior
-  const rgb = bilinearResize(srcRgb, decoded.width, decoded.height, targetWidth, targetHeight, 3);
-  
-  console.log('📷 Resized to:', targetWidth, 'x', targetHeight);
+  // Resize if needed using bilinear interpolation (matches Python PIL)
+  let rgb: Uint8Array;
+  if (decoded.width === targetWidth && decoded.height === targetHeight) {
+    console.log('📷 Image already at target size, no resize needed');
+    rgb = srcRgb;
+  } else {
+    console.log(`📷 Resizing from ${decoded.width}x${decoded.height} to ${targetWidth}x${targetHeight}`);
+    rgb = bilinearResize(srcRgb, decoded.width, decoded.height, targetWidth, targetHeight, 3);
+  }
 
   // Log first few RGB triplets for comparison with Python
   console.log('📷 First 3 pixels (RGB):', 

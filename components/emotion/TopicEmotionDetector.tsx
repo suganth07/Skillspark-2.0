@@ -11,57 +11,69 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Buffer } from 'buffer';
 import jpeg from 'jpeg-js';
 
-// Test image - will be resized to 224x224 automatically
-const TEST_IMAGE = require('@/assets/images/5.jpg');
 
 /**
  * Bilinear resize to match Python PIL's Image.resize() behavior
  * This ensures pixel values match between RN and Python
+ * Non-blocking version that yields control back to UI
  */
-function bilinearResize(
+async function bilinearResize(
   srcData: Uint8Array,
   srcWidth: number,
   srcHeight: number,
   dstWidth: number,
   dstHeight: number,
   channels: number = 3
-): Uint8Array {
+): Promise<Uint8Array> {
   const dst = new Uint8Array(dstWidth * dstHeight * channels);
   
   const xRatio = srcWidth / dstWidth;
   const yRatio = srcHeight / dstHeight;
   
-  for (let dstY = 0; dstY < dstHeight; dstY++) {
-    for (let dstX = 0; dstX < dstWidth; dstX++) {
-      // Map destination pixel to source coordinates
-      const srcX = dstX * xRatio;
-      const srcY = dstY * yRatio;
-      
-      // Get the four surrounding pixels
-      const x0 = Math.floor(srcX);
-      const y0 = Math.floor(srcY);
-      const x1 = Math.min(x0 + 1, srcWidth - 1);
-      const y1 = Math.min(y0 + 1, srcHeight - 1);
-      
-      // Calculate interpolation weights
-      const xWeight = srcX - x0;
-      const yWeight = srcY - y0;
-      
-      // For each channel
-      for (let c = 0; c < channels; c++) {
-        // Get the four pixel values
-        const p00 = srcData[(y0 * srcWidth + x0) * channels + c];
-        const p10 = srcData[(y0 * srcWidth + x1) * channels + c];
-        const p01 = srcData[(y1 * srcWidth + x0) * channels + c];
-        const p11 = srcData[(y1 * srcWidth + x1) * channels + c];
+  // Process in chunks to avoid blocking UI
+  const CHUNK_SIZE = 20; // Process 20 rows at a time
+  
+  for (let rowStart = 0; rowStart < dstHeight; rowStart += CHUNK_SIZE) {
+    const rowEnd = Math.min(rowStart + CHUNK_SIZE, dstHeight);
+    
+    // Process chunk
+    for (let dstY = rowStart; dstY < rowEnd; dstY++) {
+      for (let dstX = 0; dstX < dstWidth; dstX++) {
+        // Map destination pixel to source coordinates
+        const srcX = dstX * xRatio;
+        const srcY = dstY * yRatio;
         
-        // Bilinear interpolation
-        const top = p00 * (1 - xWeight) + p10 * xWeight;
-        const bottom = p01 * (1 - xWeight) + p11 * xWeight;
-        const value = top * (1 - yWeight) + bottom * yWeight;
+        // Get the four surrounding pixels
+        const x0 = Math.floor(srcX);
+        const y0 = Math.floor(srcY);
+        const x1 = Math.min(x0 + 1, srcWidth - 1);
+        const y1 = Math.min(y0 + 1, srcHeight - 1);
         
-        dst[(dstY * dstWidth + dstX) * channels + c] = Math.round(value);
+        // Calculate interpolation weights
+        const xWeight = srcX - x0;
+        const yWeight = srcY - y0;
+        
+        // For each channel
+        for (let c = 0; c < channels; c++) {
+          // Get the four pixel values
+          const p00 = srcData[(y0 * srcWidth + x0) * channels + c];
+          const p10 = srcData[(y0 * srcWidth + x1) * channels + c];
+          const p01 = srcData[(y1 * srcWidth + x0) * channels + c];
+          const p11 = srcData[(y1 * srcWidth + x1) * channels + c];
+          
+          // Bilinear interpolation
+          const top = p00 * (1 - xWeight) + p10 * xWeight;
+          const bottom = p01 * (1 - xWeight) + p11 * xWeight;
+          const value = top * (1 - yWeight) + bottom * yWeight;
+          
+          dst[(dstY * dstWidth + dstX) * channels + c] = Math.round(value);
+        }
       }
+    }
+    
+    // Yield control back to UI thread after each chunk
+    if (rowEnd < dstHeight) {
+      await new Promise(resolve => setImmediate(resolve));
     }
   }
   
@@ -104,7 +116,7 @@ interface TopicEmotionDetectorProps {
 // If you have labels.txt and it's different, update this array.
 const EMOTIONS = ['wbored', 'confused', 'drowsy', 'engaged', 'frustrated', 'looking_away'];
 
-const DETECTION_INTERVAL = 10000; // 10 seconds
+const DETECTION_INTERVAL = 30000; // 100 seconds
 const { width: screenWidth } = Dimensions.get('window');
 
 function argMax(arr: ArrayLike<number>) {
@@ -186,7 +198,7 @@ async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: n
     rgb = srcRgb;
   } else {
     console.log(`📷 Resizing from ${decoded.width}x${decoded.height} to ${targetWidth}x${targetHeight}`);
-    rgb = bilinearResize(srcRgb, decoded.width, decoded.height, targetWidth, targetHeight, 3);
+    rgb = await bilinearResize(srcRgb, decoded.width, decoded.height, targetWidth, targetHeight, 3);
   }
 
   // Log first few RGB triplets for comparison with Python
@@ -281,8 +293,24 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
     setIsProcessing(true);
 
     try {
-      // Use test image instead of camera
-      const photo = { uri: Image.resolveAssetSource(TEST_IMAGE).uri };
+      // Capture photo from camera
+      if (!cameraRef.current) {
+        console.warn('Camera ref not available');
+        setIsProcessing(false);
+        return;
+      }
+
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 1,
+        skipProcessing: true,
+      });
+      
+      if (!photo?.uri) {
+        console.warn('No photo captured');
+        setIsProcessing(false);
+        return;
+      }
+
       setCapturedImage(photo.uri);
 
       const rgb = await photoToRgbUint8(photo.uri, INPUT_W, INPUT_H);
@@ -382,15 +410,54 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
     return labels[emotionName] || emotionName;
   };
 
+  // Handle camera permissions
+  if (!permission) {
+    return (
+      <Card className="mx-4 mb-4">
+        <View className="p-4">
+          <ActivityIndicator size="small" />
+          <Text className="text-sm text-muted-foreground mt-2">Checking camera permissions...</Text>
+        </View>
+      </Card>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <Card className="mx-4 mb-4 border-yellow-500">
+        <View className="p-4">
+          <View className="flex-row items-center space-x-2 mb-2">
+            <Camera className="h-5 w-5 text-yellow-600" />
+            <Text className="font-semibold text-yellow-700">Camera Permission Required</Text>
+          </View>
+          <Text className="text-sm text-muted-foreground mb-3">
+            This feature needs camera access to monitor your learning engagement.
+          </Text>
+          <View className="bg-primary px-4 py-2 rounded-lg" onTouchEnd={requestPermission}>
+            <Text className="text-primary-foreground text-center font-medium">Grant Permission</Text>
+          </View>
+        </View>
+      </Card>
+    );
+  }
+
   return (
     <View className="mb-6">
+      {/* Hidden camera for capturing photos */}
+      <View style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}>
+        <CameraView
+          ref={cameraRef}
+          style={{ width: 1, height: 1 }}
+          facing="front"
+        />
+      </View>
 
       <Card>
         <View className="p-4">
           <View className="flex-row items-center justify-between mb-3">
             <View className="flex-row items-center gap-2">
               <Brain size={18} className="text-purple-600 dark:text-purple-400" />
-              <Text className="text-sm font-semibold">Learning Engagement (Test Mode)</Text>
+              <Text className="text-sm font-semibold">Learning Engagement</Text>
             </View>
 
             <View className="flex-row items-center gap-2 bg-secondary px-3 py-1.5 rounded-full">

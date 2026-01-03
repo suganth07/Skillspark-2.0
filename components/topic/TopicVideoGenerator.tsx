@@ -190,7 +190,7 @@ export function TopicVideoGenerator({
       case 'loading-existing':
         return 'Checking for existing video...';
       case 'generating-script':
-        return 'Generating 10-second script...';
+        return 'Generating 2-second script...';
       case 'sending-to-heygen':
         return 'Sending to HeyGen...';
       case 'rendering':

@@ -818,7 +818,7 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
 
   /**
    * Generate a video script for HeyGen based on topic subtopics
-   * Creates a ~10 second educational video script
+   * Creates a ~2 second educational video script
    * @param tone - The tone/style of the script (default, simplified, or story)
    */
   async generateVideoScript(
@@ -846,7 +846,7 @@ Be clear and concise while maintaining accuracy.`;
     }
 
     const prompt = `
-Create a very brief, concise script for a ~10 second video introducing the topic "${topicName}".
+Create a very brief, concise script for a ~2 second video introducing the topic "${topicName}".
 ${toneGuidance}
 
 Provide ONLY:
@@ -857,7 +857,7 @@ Use this subtopic information for context:
 ${JSON.stringify(subtopics.slice(0, 2).map(s => ({ title: s.title })), null, 2)}
 
 Output ONLY the script text. Do NOT include JSON, markdown, bullets, or extra metadata.
-Keep overall length suitable for ~10 seconds (~30-40 words maximum).
+Keep overall length suitable for ~2 seconds (~10-15 words maximum).
 Write in a friendly, conversational tone as if speaking directly to the learner.
     `;
 

@@ -41,84 +41,106 @@ export async function searchTopicUpdates(
     
     console.log(`📡 Calling LangSearch Web Search API for: "${query}"`);
 
-    // Step 1: Perform web search to get real documents
-    const searchResponse = await fetch(LANG_SEARCH_WEB_SEARCH_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LANG_SEARCH_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: query,
-        freshness: 'onLimit', // Prioritize recent content
-        summary: true, // Get full summaries
-        count: 10, // Get top 10 results
-      }),
-    });
+    // Step 1: Perform web search to get real documents with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      console.error(`❌ Web Search API Error: ${errorText}`);
-      
-      if (searchResponse.status === 429) {
-        const error = new Error('Rate limit exceeded. Please try again later.');
-        error.name = 'RateLimitError';
-        throw error;
+    try {
+      const searchResponse = await fetch(LANG_SEARCH_WEB_SEARCH_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LANG_SEARCH_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: query,
+          freshness: 'onLimit', // Prioritize recent content
+          summary: true, // Get full summaries
+          count: 10, // Get top 10 results
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        console.error(`❌ Web Search API Error: ${errorText}`);
+        
+        // Handle specific HTTP errors
+        if (searchResponse.status === 429) {
+          const error = new Error('Rate limit exceeded. Please try again later.');
+          error.name = 'RateLimitError';
+          throw error;
+        }
+        
+        if (searchResponse.status === 504) {
+          throw new Error('Search request timed out. The API is taking too long to respond. Please try again in a moment.');
+        }
+        
+        throw new Error(`LangSearch Web Search API error: ${searchResponse.status} - ${errorText}`);
       }
-      
-      throw new Error(`LangSearch Web Search API error: ${searchResponse.status} - ${errorText}`);
-    }
 
-    const searchData = await searchResponse.json();
-    console.log(`✅ Web search complete for ${topicName}, found ${searchData.data?.webPages?.value?.length || 0} results`);
+      const searchData = await searchResponse.json();
+      console.log(`✅ Web search complete for ${topicName}, found ${searchData.data?.webPages?.value?.length || 0} results`);
 
-    if (searchData.code !== 200) {
-      if (searchData.code === '429' || searchData.code === 429) {
-        const error = new Error('Rate limit exceeded. Please try again later.');
-        error.name = 'RateLimitError';
-        throw error;
+      if (searchData.code !== 200) {
+        if (searchData.code === '429' || searchData.code === 429) {
+          const error = new Error('Rate limit exceeded. Please try again later.');
+          error.name = 'RateLimitError';
+          throw error;
+        }
+        throw new Error(`LangSearch error: ${searchData.message || searchData.msg || 'Unknown error'}`);
       }
-      throw new Error(`LangSearch error: ${searchData.message || searchData.msg || 'Unknown error'}`);
-    }
 
-    // Extract web pages from response
-    const webPages = searchData.data?.webPages?.value || [];
-    
-    if (webPages.length === 0) {
-      console.log(`⚠️ No web results found for ${topicName}`);
+      // Extract web pages from response
+      const webPages = searchData.data?.webPages?.value || [];
+      
+      if (webPages.length === 0) {
+        console.log(`⚠️ No web results found for ${topicName}`);
+        return {
+          topicName,
+          newSubtopics: [],
+          sources: [],
+          hasUpdates: false,
+        };
+      }
+
+      // Convert web pages to our format with URLs
+      const results: LangSearchResult[] = webPages.map((page: any) => ({
+        title: page.name || `Update: ${topicName}`,
+        snippet: page.summary || page.snippet || '',
+        url: page.url || page.displayUrl,
+        relevance_score: 1.0, // Web search results are already relevant
+      }));
+
+      console.log(`✅ Processed ${results.length} web search results for ${topicName}`);
+
+      // Extract actual specific updates as subtopics from web results
+      const newSubtopics = extractActualUpdatesFromResults(topicName, results);
+
       return {
         topicName,
-        newSubtopics: [],
-        sources: [],
-        hasUpdates: false,
+        newSubtopics,
+        sources: results.slice(0, 5), // Return top 5 sources
+        hasUpdates: newSubtopics.length > 0,
       };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.error('❌ Failed to search topic updates:', error);
+      
+      // Handle abort/timeout error
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Search request timed out after 30 seconds. Please try again.');
+      }
+      
+      throw error;
     }
-
-    // Convert web pages to our format with URLs
-    const results: LangSearchResult[] = webPages.map((page: any) => ({
-      title: page.name || `Update: ${topicName}`,
-      snippet: page.summary || page.snippet || '',
-      url: page.url || page.displayUrl,
-      relevance_score: 1.0, // Web search results are already relevant
-    }));
-
-    console.log(`✅ Processed ${results.length} web search results for ${topicName}`);
-
-    // Extract actual specific updates as subtopics from web results
-    const newSubtopics = extractActualUpdatesFromResults(topicName, results);
-
-    return {
-      topicName,
-      newSubtopics,
-      sources: results.slice(0, 5), // Return top 5 sources
-      hasUpdates: newSubtopics.length > 0,
-    };
   } catch (error) {
     console.error('❌ Failed to search topic updates:', error);
     throw error;
   }
 }
-
 function extractActualUpdatesFromResults(
   topicName: string,
   results: LangSearchResult[]
@@ -247,6 +269,12 @@ export async function checkMultipleTopicsForUpdates(
       }
     } catch (error) {
       console.error(`❌ Topic check failed for ${topic.name}:`, error);
+      
+      // If it's a timeout, log a helpful message
+      if (error instanceof Error && 
+          (error.message.includes('timed out') || error.message.includes('504'))) {
+        console.log(`⏱️  API timeout for ${topic.name}. Continuing with next topic...`);
+      }
     }
   }
 

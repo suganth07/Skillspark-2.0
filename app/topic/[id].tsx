@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, ScrollView } from 'react-native';
+import { View, ActivityIndicator, ScrollView, Pressable, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,12 +11,72 @@ import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { searchTopicUpdates } from '@/server/langSearchClient';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2 } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type ContentVersion = 'default' | 'simplified' | 'story';
+
+// Component to render markdown text with clickable links
+function MarkdownText({ text }: { text: string }) {
+  const parts: Array<{ text: string; url?: string }> = [];
+  
+  // Parse markdown links: [text](url)
+  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index) });
+    }
+    // Add the link
+    parts.push({ text: match[1], url: match[2] });
+    lastIndex = regex.lastIndex;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex) });
+  }
+  
+  if (parts.length === 0) {
+    parts.push({ text });
+  }
+  
+  return (
+    <View className="flex-row flex-wrap ml-2">
+      <Text className="text-sm text-foreground">• </Text>
+      {parts.map((part, index) => (
+        part.url ? (
+          <Pressable
+            key={index}
+            onPress={async () => {
+              try {
+                await WebBrowser.openBrowserAsync(part.url!);
+              } catch (error) {
+                console.error('Error opening URL:', error);
+                Alert.alert('Error', 'Could not open link');
+              }
+            }}
+            className="active:opacity-70"
+          >
+            <Text className="text-sm text-blue-500 underline">
+              {part.text}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text key={index} className="text-sm text-foreground">
+            {part.text}
+          </Text>
+        )
+      ))}
+    </View>
+  );
+}
 
 export default function TopicDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,6 +87,9 @@ export default function TopicDetailScreen() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [subtopicVersions, setSubtopicVersions] = useState<Record<string, ContentVersion>>({});
   const [hasPersistedContent, setHasPersistedContent] = useState(false);
+  const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -135,6 +199,39 @@ export default function TopicDetailScreen() {
 
   const getSubtopicVersion = (subtopicId: string): ContentVersion => {
     return subtopicVersions[subtopicId] || 'default';
+  };
+
+  const handleWebSearch = async () => {
+    if (!currentTopicDetail) return;
+    
+    setIsSearching(true);
+    setShowSearchResults(true);
+    
+    try {
+      console.log(`🔍 Starting web search for topic: ${topic.name}`);
+      const result = await searchTopicUpdates(topic.name);
+      
+      console.log(`✅ Web search complete. Found ${result.newSubtopics.length} updates`);
+      setWebSearchResults(result.newSubtopics);
+      
+      if (result.newSubtopics.length === 0) {
+        Alert.alert(
+          'No Updates Found',
+          `No recent updates or changes were found for ${topic.name}.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Web search failed:', error);
+      Alert.alert(
+        'Search Failed',
+        error instanceof Error ? error.message : 'Failed to search for updates. Please try again.',
+        [{ text: 'OK' }]
+      );
+      setShowSearchResults(false);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   if (isLoading) {
@@ -446,6 +543,68 @@ export default function TopicDetailScreen() {
               subtopics={explanation.subtopics}
             />
           )}
+
+          {/* Web Search for Latest Updates */}
+          <Card>
+            <CardHeader>
+              <View className="flex-row items-center space-x-2 mb-2">
+                <Search className="h-5 w-5 text-purple-600" />
+                <CardTitle>Search Web for Updates</CardTitle>
+              </View>
+              <Text className="text-sm text-muted-foreground">
+                Find the latest information, changes, and best practices about this topic from across the web.
+              </Text>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onPress={handleWebSearch}
+                disabled={isSearching}
+                className="w-full flex-row items-center justify-center space-x-2"
+              >
+                {isSearching ? (
+                  <>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text className="text-white font-medium ml-2">Searching...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 text-white" />
+                    <Text className="text-white font-medium">Search Latest Updates</Text>
+                  </>
+                )}
+              </Button>
+
+              {/* Search Results */}
+              {showSearchResults && webSearchResults.length > 0 && (
+                <Animated.View
+                  entering={FadeIn.duration(300)}
+                  className="mt-4 p-4 bg-secondary/50 rounded-lg"
+                >
+                  <View className="flex-row items-center space-x-2 mb-3">
+                    <ExternalLink className="h-4 w-4 text-primary" />
+                    <Text className="text-sm font-semibold text-foreground">
+                      Latest Updates Found ({webSearchResults.length})
+                    </Text>
+                  </View>
+                  <View className="space-y-2">
+                    {webSearchResults.map((update, idx) => (
+                      <View key={idx} className="mb-2">
+                        <MarkdownText text={update} />
+                      </View>
+                    ))}
+                  </View>
+                  <Pressable
+                    onPress={() => setShowSearchResults(false)}
+                    className="mt-3 py-2 px-3 bg-background rounded-lg active:opacity-70"
+                  >
+                    <Text className="text-xs text-center text-muted-foreground">
+                      Hide Results
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Subtopics */}
           <Card>

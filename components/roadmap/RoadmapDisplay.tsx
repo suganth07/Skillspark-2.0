@@ -11,6 +11,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
+import { searchTopicUpdates } from '@/server/langSearchClient';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -23,6 +24,8 @@ import {
   Trash2,
   Rocket,
   RefreshCw,
+  Search,
+  ExternalLink,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -100,6 +103,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
+  const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const router = useRouter();
   const currentUserId = useCurrentUserId();
 
@@ -248,6 +254,40 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
           [{ text: 'OK' }]
         );
       }
+    }
+  };
+
+  const handleWebSearch = async () => {
+    if (!roadmap) return;
+
+    setIsSearching(true);
+    setShowWebSearchModal(true);
+
+    try {
+      console.log(`🔍 Starting web search for roadmap: ${roadmap.title}`);
+      const result = await searchTopicUpdates(roadmap.title);
+
+      console.log(`✅ Web search complete. Found ${result.newSubtopics.length} updates`);
+      setWebSearchResults(result.newSubtopics);
+
+      if (result.newSubtopics.length === 0) {
+        Alert.alert(
+          'No Updates Found',
+          `No recent updates or changes were found for ${roadmap.title}.`,
+          [{ text: 'OK' }]
+        );
+        setShowWebSearchModal(false);
+      }
+    } catch (error) {
+      console.error('❌ Web search failed:', error);
+      Alert.alert(
+        'Search Failed',
+        error instanceof Error ? error.message : 'Failed to search for updates. Please try again.',
+        [{ text: 'OK' }]
+      );
+      setShowWebSearchModal(false);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -495,6 +535,91 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         </Animated.View>
       </Modal>
 
+      {/* Web Search Results Modal */}
+      <Modal
+        transparent
+        visible={showWebSearchModal}
+        animationType="none"
+        onRequestClose={() => setShowWebSearchModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowWebSearchModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden max-h-[80%]"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Search size={24} className="text-purple-600" />
+                <Text className="text-xl font-bold text-foreground">
+                  Web Search Results
+                </Text>
+              </View>
+              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                Latest updates and information about {roadmap?.title}
+              </Text>
+
+              {isSearching ? (
+                <View className="items-center py-8">
+                  <ActivityIndicator size="large" />
+                  <Text className="mt-4 text-sm text-muted-foreground">Searching the web...</Text>
+                </View>
+              ) : (
+                <ScrollView className="max-h-96 mb-6" showsVerticalScrollIndicator={false}>
+                  {webSearchResults.length > 0 ? (
+                    <View className="space-y-3">
+                      <View className="flex-row items-center space-x-2 mb-3">
+                        <ExternalLink className="h-4 w-4 text-primary" />
+                        <Text className="text-sm font-semibold text-foreground">
+                          Found {webSearchResults.length} Updates
+                        </Text>
+                      </View>
+                      {webSearchResults.map((update, idx) => (
+                        <View key={idx} className="mb-2 p-3 bg-secondary/50 rounded-lg">
+                          <MarkdownText text={update} />
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View className="items-center py-8">
+                      <Text className="text-sm text-muted-foreground text-center">
+                        No updates found
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+              )}
+
+              <Pressable
+                onPress={() => setShowWebSearchModal(false)}
+                className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90"
+              >
+                <Text className="text-base font-semibold text-primary-foreground">
+                  Close
+                </Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
       <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
@@ -510,6 +635,17 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
           </View>
           
           <View className="flex-row gap-2">
+            <Pressable
+              onPress={handleWebSearch}
+              disabled={isSearching}
+              className="h-10 w-10 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950 active:opacity-70"
+            >
+              {isSearching ? (
+                <ActivityIndicator size="small" />
+              ) : (
+                <Search size={20} className="text-purple-600 dark:text-purple-400" />
+              )}
+            </Pressable>
             {completedSteps > 0 && (
               <Pressable
                 onPress={handleCheckUpdates}

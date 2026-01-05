@@ -14,6 +14,7 @@ export interface SerperResult {
 }
 
 export interface TopicUpdate {
+  topicId?: string;
   topicName: string;
   newSubtopics: string[];
   sources: SerperResult[];
@@ -26,7 +27,8 @@ export interface TopicUpdate {
 
 export async function searchTopicUpdates(
   topicName: string,
-  completedDate?: Date
+  completedDate?: Date,
+  topicId?: string
 ): Promise<TopicUpdate> {
   if (!SERPER_API_KEY) {
     throw new Error('Serper API key is not configured');
@@ -86,6 +88,7 @@ export async function searchTopicUpdates(
       if (organicResults.length === 0) {
         console.log(`⚠️ No web results found for ${topicName}`);
         return {
+          topicId,
           topicName,
           newSubtopics: [],
           sources: [],
@@ -107,6 +110,7 @@ export async function searchTopicUpdates(
       const newSubtopics = extractActualUpdatesFromResults(topicName, results);
 
       return {
+        topicId,
         topicName,
         newSubtopics,
         sources: results.slice(0, 5), // Return top 5 sources
@@ -190,7 +194,7 @@ function extractActualUpdatesFromResults(
 ======================= */
 
 interface CompletedTopic {
-  id: number;
+  id: string;
   name: string;
   completedAt: Date;
 }
@@ -207,7 +211,7 @@ export async function checkTopicsForUpdates(
     console.log(`\n📚 [${i + 1}/${topics.length}] Checking: ${topic.name}`);
     
     try {
-      const result = await searchTopicUpdates(topic.name, topic.completedAt);
+      const result = await searchTopicUpdates(topic.name, topic.completedAt, topic.id);
       
       if (result.hasUpdates) {
         console.log(`✨ Found ${result.newSubtopics.length} new updates for ${topic.name}`);

@@ -509,11 +509,24 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
               <Pressable
                 onPress={() => {
                   setShowUpdatesModal(false);
-                  Alert.alert(
-                    'Coming Soon',
-                    'Content generation for new topics will be available soon!',
-                    [{ text: 'OK' }]
-                  );
+                  // Use topicId directly from the update
+                  if (topicUpdates.length > 0 && topicUpdates[0].topicId) {
+                    // Pass web search results as route params with topicId
+                    router.push({
+                      pathname: `/topic/${topicUpdates[0].topicId}`,
+                      params: {
+                        webSearchResults: JSON.stringify(topicUpdates[0].newSubtopics),
+                        topicName: topicUpdates[0].topicName,
+                        generateWebContent: 'true'
+                      }
+                    });
+                  } else {
+                    Alert.alert(
+                      'Error',
+                      'Could not find topic ID. Please try again.',
+                      [{ text: 'OK' }]
+                    );
+                  }
                 }}
                 className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90 mb-3"
               >

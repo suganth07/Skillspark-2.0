@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
-import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
@@ -79,7 +80,12 @@ function MarkdownText({ text }: { text: string }) {
 }
 
 export default function TopicDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, webSearchResults: webSearchParam, topicName: topicNameParam, generateWebContent } = useLocalSearchParams<{ 
+    id: string; 
+    webSearchResults?: string;
+    topicName?: string;
+    generateWebContent?: string;
+  }>();
   const router = useRouter();
   const currentUserId = useCurrentUserId();
   const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
@@ -90,6 +96,10 @@ export default function TopicDetailScreen() {
   const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [webSearchContent, setWebSearchContent] = useState<TopicExplanation | null>(null);
+  const [isGeneratingWebContent, setIsGeneratingWebContent] = useState(false);
+  const [webSearchExpandedSections, setWebSearchExpandedSections] = useState<Set<string>>(new Set());
+  const [webSearchSubtopicVersions, setWebSearchSubtopicVersions] = useState<Record<string, ContentVersion>>({});
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -106,8 +116,43 @@ export default function TopicDetailScreen() {
   // Mutation to regenerate a single failed tone
   const regenerateToneMutation = useRegenerateSingleTone();
 
+  // Mutation to generate web search content
+  const generateWebSearchContentMutation = useGenerateWebSearchContent();
+
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
+
+  // Generate web search content if params are passed
+  useEffect(() => {
+    if (generateWebContent === 'true' && webSearchParam && topicNameParam && !isGeneratingWebContent && !webSearchContent) {
+      const parsedResults = JSON.parse(webSearchParam);
+      if (parsedResults && parsedResults.length > 0) {
+        setIsGeneratingWebContent(true);
+        console.log(`🌐 Auto-generating web search content for: ${topicNameParam}`);
+        
+        generateWebSearchContentMutation.mutate({
+          topicName: topicNameParam,
+          webSearchResults: parsedResults,
+          context: 'Latest Updates'
+        }, {
+          onSuccess: (explanation) => {
+            console.log('✅ Web search content generated successfully');
+            setWebSearchContent(explanation);
+            setIsGeneratingWebContent(false);
+          },
+          onError: (error) => {
+            console.error('❌ Failed to generate web search content:', error);
+            setIsGeneratingWebContent(false);
+            Alert.alert(
+              'Generation Failed',
+              'Failed to generate content from web search results. Please try again.',
+              [{ text: 'OK' }]
+            );
+          }
+        });
+      }
+    }
+  }, [generateWebContent, webSearchParam, topicNameParam, isGeneratingWebContent, webSearchContent]);
 
   // Persist content to database when it's generated (idempotent via server check)
   useEffect(() => {
@@ -605,6 +650,176 @@ export default function TopicDetailScreen() {
               )}
             </CardContent>
           </Card>
+
+          {/* Web Search Generated Content - Show ABOVE existing subtopics */}
+          {(isGeneratingWebContent || webSearchContent) && (
+            <Card className="border-2 border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+              <CardHeader>
+                <View className="flex-row items-center space-x-2 mb-2">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <CardTitle className="text-purple-900 dark:text-purple-100">
+                    Latest Updates & Insights
+                  </CardTitle>
+                </View>
+                <Text className="text-sm text-purple-700 dark:text-purple-300">
+                  Fresh content generated from recent web search findings
+                </Text>
+              </CardHeader>
+              <CardContent>
+                {isGeneratingWebContent ? (
+                  <View className="items-center py-8">
+                    <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full p-4 mb-4">
+                      <Sparkles size={32} className="text-purple-600" />
+                    </View>
+                    <ActivityIndicator size="large" className="mb-4" />
+                    <Text className="text-lg font-semibold text-foreground text-center mb-2">
+                      Generating Latest Content
+                    </Text>
+                    <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                      Creating educational material from web search results...
+                    </Text>
+                  </View>
+                ) : webSearchContent ? (
+                  <View className="space-y-3">
+                    {webSearchContent.subtopics.map((subtopic, index) => {
+                      const isExpanded = webSearchExpandedSections.has(subtopic.id);
+                      const content = getSubtopicContent(subtopic, subtopic.id);
+                      const currentVersion = webSearchSubtopicVersions[subtopic.id] || 'default';
+                      
+                      return (
+                        <View 
+                          key={subtopic.id}
+                          className="border border-purple-200 rounded-lg overflow-hidden bg-white dark:bg-gray-900"
+                        >
+                          {/* Accordion Header */}
+                          <Button
+                            variant="ghost"
+                            onPress={() => {
+                              const newExpanded = new Set(webSearchExpandedSections);
+                              if (newExpanded.has(subtopic.id)) {
+                                newExpanded.delete(subtopic.id);
+                              } else {
+                                newExpanded.add(subtopic.id);
+                              }
+                              setWebSearchExpandedSections(newExpanded);
+                            }}
+                            className="w-full flex-row items-center justify-between p-4 rounded-none"
+                          >
+                            <View className="flex-1 flex-row items-center space-x-2">
+                              <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full w-6 h-6 items-center justify-center">
+                                <Text className="text-purple-700 dark:text-purple-300 font-bold text-xs">
+                                  {index + 1}
+                                </Text>
+                              </View>
+                              <Text className="font-semibold text-base text-left flex-1">
+                                {subtopic.title}
+                              </Text>
+                              <Badge className="bg-purple-100">
+                                <Text className="text-xs text-purple-700">New</Text>
+                              </Badge>
+                            </View>
+                            {isExpanded ? (
+                              <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
+                            )}
+                          </Button>
+
+                          {/* Accordion Content */}
+                          {isExpanded && (
+                            <View className="border-t border-purple-200 bg-purple-50/30 dark:bg-purple-950/10">
+                              {/* Style Switcher */}
+                              <View className="px-4 pt-3 pb-2">
+                                <View className="flex-row gap-2 mb-3">
+                                  <Button
+                                    variant={currentVersion === 'default' ? 'default' : 'outline'}
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
+                                    className="flex-1 py-2"
+                                    size="sm"
+                                  >
+                                    <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
+                                      📚 Default
+                                    </Text>
+                                  </Button>
+                                  <Button
+                                    variant={currentVersion === 'simplified' ? 'default' : 'outline'}
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
+                                    className="flex-1 py-2"
+                                    size="sm"
+                                  >
+                                    <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
+                                      🎯 Simplified
+                                    </Text>
+                                  </Button>
+                                  <Button
+                                    variant={currentVersion === 'story' ? 'default' : 'outline'}
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
+                                    className="flex-1 py-2"
+                                    size="sm"
+                                  >
+                                    <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
+                                      📖 Story
+                                    </Text>
+                                  </Button>
+                                </View>
+                              </View>
+
+                              {/* Content */}
+                              <Animated.View 
+                                key={`${subtopic.id}-${currentVersion}`}
+                                entering={FadeIn.duration(300)}
+                                className="px-4 pb-4"
+                              >
+                                <Text className="text-muted-foreground leading-6 mb-4">
+                                  {content.explanation}
+                                </Text>
+
+                                {content.example && (
+                                  <View className="mt-3">
+                                    <View className="flex-row items-center space-x-2 mb-2">
+                                      <Code className="h-4 w-4 text-green-600" />
+                                      <Text className="text-sm font-semibold text-green-600">
+                                        Example:
+                                      </Text>
+                                    </View>
+                                    <View className="bg-slate-900 rounded-lg p-4">
+                                      <Text className="text-slate-100 font-mono text-sm leading-6">
+                                        {content.example}
+                                      </Text>
+                                    </View>
+                                    
+                                    {subtopic.exampleExplanation && (
+                                      <Text className="text-sm text-muted-foreground mt-2 italic">
+                                        💡 {subtopic.exampleExplanation}
+                                      </Text>
+                                    )}
+                                  </View>
+                                )}
+
+                                {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
+                                  <View className="mt-3">
+                                    <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                    {subtopic.keyPoints.map((point: string, idx: number) => (
+                                      <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                        <Text className="text-muted-foreground">•</Text>
+                                        <Text className="flex-1 text-sm text-muted-foreground">
+                                          {point}
+                                        </Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                )}
+                              </Animated.View>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Subtopics */}
           <Card>

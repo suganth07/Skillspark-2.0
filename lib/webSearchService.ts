@@ -14,6 +14,7 @@ export interface SearchResult {
 }
 
 export interface TopicUpdate {
+  topicId?: string;
   topicName: string;
   newSubtopics: string[];
   sources: SearchResult[];
@@ -21,7 +22,7 @@ export interface TopicUpdate {
 }
 
 interface CompletedTopic {
-  id: number;
+  id: string;
   name: string;
   completedAt: Date;
 }
@@ -36,7 +37,8 @@ interface CompletedTopic {
  */
 export async function searchTopicUpdates(
   topicName: string,
-  completedDate?: Date
+  completedDate?: Date,
+  topicId?: string
 ): Promise<TopicUpdate> {
   // Get the selected provider from storage
   const provider = useWebSearchProviderStore.getState().provider;
@@ -44,10 +46,10 @@ export async function searchTopicUpdates(
   console.log(`🌐 Using ${provider} for web search`);
   
   if (provider === 'serper') {
-    return await SerperClient.searchTopicUpdates(topicName, completedDate);
+    return await SerperClient.searchTopicUpdates(topicName, completedDate, topicId);
   } else {
     // Default to langsearch
-    return await LangSearchClient.searchTopicUpdates(topicName, completedDate);
+    return await LangSearchClient.searchTopicUpdates(topicName, completedDate, topicId);
   }
 }
 

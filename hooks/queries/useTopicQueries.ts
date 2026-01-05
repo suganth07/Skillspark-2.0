@@ -14,6 +14,7 @@ import {
 } from '@/server/queries/topics';
 import { geminiService, type TopicExplanation } from '@/lib/gemini';
 import { regenerateSingleContent, type ContentTone } from '@/server/agents/DynamicContent';
+import { generateContentFromWebSearch } from '@/server/agents/WebSearchContent';
 
 // ============================================
 // TYPES
@@ -418,3 +419,41 @@ export function useRegenerateSingleTone() {
     },
   });
 }
+
+/**
+ * Mutation to generate content from web search results
+ * This generates fresh educational content based on latest web findings
+ */
+export function useGenerateWebSearchContent() {
+  return useMutation({
+    mutationFn: async ({
+      topicName,
+      webSearchResults,
+      context,
+    }: {
+      topicName: string;
+      webSearchResults: string[];
+      context?: string;
+    }) => {
+      console.log(`🌐 [WebSearch] Generating content for "${topicName}" from ${webSearchResults.length} search results`);
+      
+      const explanation = await generateContentFromWebSearch(
+        topicName,
+        webSearchResults,
+        context || 'Latest Updates'
+      );
+      
+      if (!explanation) {
+        throw new Error('Failed to generate content from web search results');
+      }
+      
+      console.log(`✅ [WebSearch] Content generated with ${explanation.subtopics.length} subtopics`);
+      
+      return explanation;
+    },
+    onError: (error) => {
+      console.error(`❌ [WebSearch] Failed to generate content:`, error);
+    },
+  });
+}
+

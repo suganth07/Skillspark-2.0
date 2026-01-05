@@ -352,6 +352,28 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const progressPercentage = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
   const isCompleted = completedSteps === totalSteps && totalSteps > 0;
 
+  // Format date helper
+  const formatDate = (date: Date | string | null | undefined) => {
+    if (!date) return null;
+    try {
+      const d = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(d.getTime())) return null;
+      
+      const now = new Date();
+      const diff = now.getTime() - d.getTime();
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (days === 0) return 'Today';
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+      if (days < 365) return `${Math.floor(days / 30)} months ago`;
+      return d.toLocaleDateString();
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <>
       {/* Delete Confirmation Dialog */}
@@ -513,8 +535,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                   if (topicUpdates.length > 0 && topicUpdates[0].topicId) {
                     // Pass web search results as route params with topicId
                     router.push({
-                      pathname: `/topic/${topicUpdates[0].topicId}`,
+                      pathname: '/topic/[id]',
                       params: {
+                        id: topicUpdates[0].topicId,
                         webSearchResults: JSON.stringify(topicUpdates[0].newSubtopics),
                         topicName: topicUpdates[0].topicName,
                         generateWebContent: 'true'
@@ -633,6 +656,53 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         </Animated.View>
       </Modal>
 
+      {/* Quiz Generation Loading Modal */}
+      <Modal
+        transparent
+        visible={generatingQuizForStep !== null}
+        animationType="none"
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
+        >
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-sm overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-8 items-center">
+              <View className="mb-6 items-center">
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+              
+              <View className="items-center mb-2">
+                <Text className="text-xl font-bold text-foreground mb-2">
+                  Generating Quiz
+                </Text>
+                <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                  Creating personalized questions to test your knowledge. This will only take a moment...
+                </Text>
+              </View>
+
+              <View className="mt-4 px-4 py-3 bg-primary/10 rounded-lg">
+                <Text className="text-xs text-primary text-center font-medium">
+                  🎯 Preparing your assessment
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
       <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
@@ -645,38 +715,43 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                 {roadmap.description}
               </Text>
             )}
+            {roadmap.createdAt && formatDate(roadmap.createdAt) && (
+              <Text className="text-xs text-muted-foreground mt-2">
+                Created {formatDate(roadmap.createdAt)}
+              </Text>
+            )}
           </View>
           
           <View className="flex-row gap-2">
             <Pressable
               onPress={handleWebSearch}
               disabled={isSearching}
-              className="h-10 w-10 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950 active:opacity-70"
+              className="h-10 w-10 items-center justify-center rounded-lg bg-purple-500/20 dark:bg-purple-500/30 border-2 border-purple-500/50 dark:border-purple-500/70 active:opacity-70"
             >
               {isSearching ? (
-                <ActivityIndicator size="small" />
+                <ActivityIndicator size="small" color="#a855f7" />
               ) : (
-                <Search size={20} className="text-purple-600 dark:text-purple-400" />
+                <Search size={20} className="text-white-500 dark:text-white" />
               )}
             </Pressable>
             {completedSteps > 0 && (
               <Pressable
                 onPress={handleCheckUpdates}
                 disabled={checkTopicUpdatesMutation.isPending}
-                className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
+                className="h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20 dark:bg-blue-500/30 border-2 border-blue-500/50 dark:border-blue-500/70 active:opacity-70"
               >
                 {checkTopicUpdatesMutation.isPending ? (
-                  <ActivityIndicator size="small" />
+                  <ActivityIndicator size="small" color="#3b82f6" />
                 ) : (
-                  <RefreshCw size={20} className="text-primary" />
+                  <RefreshCw size={20} className="text-blue-500 dark:text-blue-400" />
                 )}
               </Pressable>
             )}
             <Pressable
               onPress={() => setShowDeleteDialog(true)}
-              className="h-10 w-10 items-center justify-center rounded-lg active:bg-secondary"
+              className="h-10 w-10 items-center justify-center rounded-lg bg-red-500/20 dark:bg-red-500/30 border-2 border-red-500/50 dark:border-red-500/70 active:opacity-70"
             >
-              <Trash2 size={20} className="text-red-600 dark:text-red-400" />
+              <Trash2 size={20} className="text-red-500 dark:text-red-400" />
             </Pressable>
           </View>
         </View>
@@ -771,6 +846,28 @@ function RoadmapStepItem({
   const isCompleted = step.isCompleted;
   const hasQuiz = Boolean(step.quizId);
 
+  // Format date helper
+  const formatDate = (date: Date | string | null | undefined) => {
+    if (!date) return null;
+    try {
+      const d = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(d.getTime())) return null;
+      
+      const now = new Date();
+      const diff = now.getTime() - d.getTime();
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (days === 0) return 'Today';
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+      if (days < 365) return `${Math.floor(days / 30)} months ago`;
+      return d.toLocaleDateString();
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <Animated.View
       entering={FadeInDown.delay(index * 50).duration(400).springify()}
@@ -857,6 +954,11 @@ function RoadmapStepItem({
                       </View>
                     )}
                   </View>
+                  {isCompleted && step.lastCompletedAt && formatDate(step.lastCompletedAt) && (
+                    <Text className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      Completed {formatDate(step.lastCompletedAt)}
+                    </Text>
+                  )}
                 </View>
                 <ChevronRight size={18} className="text-muted-foreground mt-1" />
               </View>

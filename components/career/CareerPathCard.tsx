@@ -154,22 +154,14 @@ export function CareerPathCard({ careerPath, onPress, onDelete, isDeleting, inde
               </View>
               
               <Text className="text-xs text-muted-foreground">
-                {careerPath.progress}% complete
-              </Text>
+                <Text className="text-xs text-muted-foreground text-white">{careerPath.progress}% complete</Text>
+                </Text>
             </View>
 
             {/* Footer Actions */}
             <View className="flex-row items-center justify-between pt-2 border-t border-border">
               <View className="flex-row items-center gap-4">
-                {careerPath.createdAt && (
-                  <Text className="text-xs text-muted-foreground">
-                    {new Date(careerPath.createdAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </Text>
-                )}
+                {/*  */}
                 
                 {/* Delete Button */}
                 <Pressable
@@ -183,7 +175,7 @@ export function CareerPathCard({ careerPath, onPress, onDelete, isDeleting, inde
                   {isDeleting ? (
                     <ActivityIndicator size="small" color="#6b7280" />
                   ) : (
-                    <Trash2 size={16} color="#6b7280" />
+                    <Trash2 size={16} color="#f53c3cff" />
                   )}
                 </Pressable>
               </View>

@@ -160,10 +160,7 @@ export default function CareerScreen() {
           {/* Empty State */}
           {!isLoading && !error && careerPaths.length === 0 && (
             <View className="flex-1 items-center justify-center">
-              <RoadmapEmptyState 
-                title="No Career Paths Yet"
-                description="Create your first career path to start learning!"
-              />
+              <RoadmapEmptyState />
             </View>
           )}
 

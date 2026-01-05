@@ -31,7 +31,7 @@ interface CareerTopic {
 export default function CareerPathDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const currentUserId = useCurrentUserId();
+  const currentUserId = useCurrentUserId() || '';
   const { isDarkColorScheme } = useColorScheme();
   
   // State for roadmap generation modal
@@ -54,20 +54,29 @@ export default function CareerPathDetailScreen() {
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case 'basic': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
-      case 'advanced': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400';
+      case 'basic': return 'bg-green-500/20 border border-green-500/50';
+      case 'intermediate': return 'bg-yellow-500/20 border border-yellow-500/50';
+      case 'advanced': return 'bg-red-500/20 border border-red-500/50';
+      default: return 'bg-gray-500/20 border border-gray-500/50';
+    }
+  };
+
+  const getDifficultyTextColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'basic': return 'text-green-700 dark:text-green-400';
+      case 'intermediate': return 'text-yellow-700 dark:text-yellow-400';
+      case 'advanced': return 'text-red-700 dark:text-red-400';
+      default: return 'text-gray-700 dark:text-gray-400';
     }
   };
 
   const getCategoryColor = (category: string) => {
     const colors = [
-      'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-      'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-      'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
-      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
-      'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
+      { bg: 'bg-blue-500/20 border border-blue-500/50', text: 'text-blue-700 dark:text-blue-400' },
+      { bg: 'bg-purple-500/20 border border-purple-500/50', text: 'text-purple-700 dark:text-purple-400' },
+      { bg: 'bg-pink-500/20 border border-pink-500/50', text: 'text-pink-700 dark:text-pink-400' },
+      { bg: 'bg-indigo-500/20 border border-indigo-500/50', text: 'text-indigo-700 dark:text-indigo-400' },
+      { bg: 'bg-cyan-500/20 border border-cyan-500/50', text: 'text-cyan-700 dark:text-cyan-400' },
     ];
     const index = category.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[index % colors.length];
@@ -341,13 +350,16 @@ export default function CareerPathDetailScreen() {
               {/* Categories */}
               {careerPath.categories.length > 0 && (
                 <View className="mt-4">
-                  <Text className="text-sm font-semibold mb-2">Categories</Text>
+                  <Text className="text-sm font-semibold text-foreground mb-2">Categories</Text>
                   <View className="flex-row flex-wrap gap-2">
-                    {careerPath.categories.map((category) => (
-                      <Badge key={category} className={getCategoryColor(category)}>
-                        <Text className="text-xs">{category}</Text>
-                      </Badge>
-                    ))}
+                    {careerPath.categories.map((category) => {
+                      const colorScheme = getCategoryColor(category);
+                      return (
+                        <View key={category} className={`px-3 py-1.5 rounded-full ${colorScheme.bg}`}>
+                          <Text className={`text-xs font-medium ${colorScheme.text}`}>{category}</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -362,81 +374,92 @@ export default function CareerPathDetailScreen() {
           </Card>
 
           {/* Topics by Category */}
-          {topicsByCategory && Object.entries(topicsByCategory).map(([category, topics]) => (
-            <Card key={category}>
-              <CardHeader>
-                <View className="flex-row items-center justify-between">
-                  <CardTitle>{category}</CardTitle>
-                  <Badge className={getCategoryColor(category)}>
-                    <Text className="text-xs">{topics.length} skills</Text>
-                  </Badge>
-                </View>
-              </CardHeader>
-              <CardContent>
-                <View className="gap-3">
-                  {topics.map((topic) => (
-                    <Pressable
-                      key={topic.id}
-                      onPress={() => handleTopicPress(topic as CareerTopic)}
-                      className="border border-border rounded-lg p-4 active:bg-secondary/50"
-                    >
-                      <View className="flex-row items-start justify-between">
-                        <View className="flex-1">
-                          <View className="flex-row items-center gap-2 mb-1">
-                            {topic.linkedRoadmapId ? (
-                              <MapIcon size={16} color="#22c55e" />
-                            ) : topic.isCompleted ? (
-                              <CheckCircle2 size={16} color="#22c55e" />
-                            ) : (
-                              <Circle size={16} color={isDarkColorScheme ? '#71717a' : '#a1a1aa'} />
-                            )}
-                            <Text className="font-semibold text-foreground flex-1">
-                              {topic.name}
-                            </Text>
-                            <ChevronRight size={16} color={isDarkColorScheme ? '#71717a' : '#a1a1aa'} />
-                          </View>
-                          
-                          {topic.description && (
-                            <Text className="text-sm text-muted-foreground mt-1 leading-5">
-                              {topic.description}
-                            </Text>
-                          )}
-
-                          <View className="flex-row items-center gap-2 mt-2 flex-wrap">
-                            <Badge className={getDifficultyColor(topic.difficulty)}>
-                              <Text className="text-xs">{topic.difficulty}</Text>
-                            </Badge>
-                            <Text className="text-xs text-muted-foreground">
-                              {topic.estimatedHours}h
-                            </Text>
-                            {topic.isCore && (
-                              <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
-                                <Text className="text-xs">Core</Text>
-                              </Badge>
-                            )}
-                            {topic.linkedRoadmapId && (
-                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                                <Text className="text-xs">Roadmap Ready</Text>
-                              </Badge>
-                            )}
-                          </View>
-
-                          {topic.prerequisites.length > 0 && (
-                            <View className="flex-row items-center gap-1 mt-2">
-                              <Lock size={12} color={isDarkColorScheme ? '#71717a' : '#a1a1aa'} />
-                              <Text className="text-xs text-muted-foreground">
-                                Requires: {topic.prerequisites.join(', ')}
+          {topicsByCategory && Object.entries(topicsByCategory).map(([category, topics]) => {
+            const colorScheme = getCategoryColor(category);
+            return (
+              <Card key={category}>
+                <CardHeader>
+                  <View className="flex-row items-center justify-between">
+                    <CardTitle>{category}</CardTitle>
+                    <View className={`px-3 py-1.5 rounded-full ${colorScheme.bg}`}>
+                      <Text className={`text-xs font-medium ${colorScheme.text}`}>{topics.length} skills</Text>
+                    </View>
+                  </View>
+                </CardHeader>
+                <CardContent>
+                  <View className="gap-3">
+                    {topics.map((topic) => (
+                      <Pressable
+                        key={topic.id}
+                        onPress={() => handleTopicPress(topic as CareerTopic)}
+                        className="border-2 border-border rounded-xl p-4 active:bg-secondary/50 active:border-primary"
+                      >
+                        <View className="flex-row items-start justify-between">
+                          <View className="flex-1">
+                            <View className="flex-row items-center gap-2 mb-2">
+                              {topic.linkedRoadmapId ? (
+                                <MapIcon size={18} color="#22c55e" />
+                              ) : topic.isCompleted ? (
+                                <CheckCircle2 size={18} color="#22c55e" />
+                              ) : (
+                                <Circle size={18} color={isDarkColorScheme ? '#71717a' : '#a1a1aa'} />
+                              )}
+                              <Text className="font-semibold text-foreground flex-1 text-base">
+                                {topic.name}
                               </Text>
+                              <ChevronRight size={18} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
                             </View>
-                          )}
+                            
+                            {topic.description && (
+                              <Text className="text-sm text-muted-foreground mt-1 mb-3 leading-5">
+                                {topic.description}
+                              </Text>
+                            )}
+
+                            <View className="flex-row items-center gap-2 flex-wrap">
+                              <View className={`px-3 py-1.5 rounded-full ${getDifficultyColor(topic.difficulty)}`}>
+                                <Text className={`text-xs font-medium ${getDifficultyTextColor(topic.difficulty)}`}>
+                                  {topic.difficulty}
+                                </Text>
+                              </View>
+                              <View className="px-3 py-1.5 rounded-full bg-secondary border border-border">
+                                <Text className="text-xs font-medium text-foreground">
+                                  {topic.estimatedHours}h
+                                </Text>
+                              </View>
+                              {topic.isCore && (
+                                <View className="px-3 py-1.5 rounded-full bg-purple-500/20 border border-purple-500/50">
+                                  <Text className="text-xs font-medium text-purple-700 dark:text-purple-400">
+                                    Core
+                                  </Text>
+                                </View>
+                              )}
+                              {topic.linkedRoadmapId && (
+                                <View className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/50">
+                                  <Text className="text-xs font-medium text-green-700 dark:text-green-400">
+                                    Roadmap Ready
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+
+                            {topic.prerequisites.length > 0 && (
+                              <View className="flex-row items-center gap-2 mt-3 p-2 bg-secondary/50 rounded-lg">
+                                <Lock size={14} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
+                                <Text className="text-xs text-muted-foreground flex-1">
+                                  Requires: {topic.prerequisites.join(', ')}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                         </View>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              </CardContent>
-            </Card>
-          ))}
+                      </Pressable>
+                    ))}
+                  </View>
+                </CardContent>
+              </Card>
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>

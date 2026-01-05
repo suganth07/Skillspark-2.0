@@ -110,23 +110,15 @@ export function RoadmapCard({ roadmap, onPress, onDelete, isDeleting, index = 0 
             </View>
             
             <Text className="text-xs text-muted-foreground">
-              {roadmap.progress}% complete
+              <Text className="text-xs text-muted-foreground text-white">{roadmap.progress}%</Text> complete
             </Text>
           </View>
 
           {/* Footer Actions */}
           <View className="flex-row items-center justify-between pt-2 border-t border-border">
             <View className="flex-row items-center gap-4">
-              {roadmap.createdAt && (
-                <Text className="text-xs text-muted-foreground">
-                  {new Date(roadmap.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </Text>
-              )}
               
+            
               {/* Delete Button */}
               <Pressable
                 onPress={(e) => {
@@ -139,7 +131,7 @@ export function RoadmapCard({ roadmap, onPress, onDelete, isDeleting, index = 0 
                 {isDeleting ? (
                   <ActivityIndicator size="small" color="#6b7280" />
                 ) : (
-                  <Trash2 size={16} color="#6b7280" />
+                  <Trash2 size={16} color="#d23737ff" />
                 )}
               </Pressable>
             </View>

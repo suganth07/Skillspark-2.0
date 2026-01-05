@@ -85,25 +85,25 @@ export function QuizResults({ userId, quizId, stepTitle, onClose }: QuizResultsP
           <CardContent>
             <View className="space-y-3">
               <View className="flex-row items-center justify-between">
-                <Text className="text-lg font-semibold">Score: {score}%</Text>
-                <Badge className={passed ? 'bg-green-100' : 'bg-red-100'}>
-                  <Text className={passed ? 'text-green-800' : 'text-red-800'}>
+                <Text className="text-lg font-semibold text-foreground">Score: {score}%</Text>
+                <View className={`px-3 py-1.5 rounded-full ${passed ? 'bg-green-100 dark:bg-green-950' : 'bg-red-100 dark:bg-red-950'}`}>
+                  <Text className={`text-sm font-semibold ${passed ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>
                     {passed ? 'Passed ✓' : 'Failed ✗'}
                   </Text>
-                </Badge>
+                </View>
               </View>
               
               <View className="flex-row items-center justify-between">
                 <Text className="text-sm text-muted-foreground">
                   Correct Answers: {correctCount} / {totalCount}
                 </Text>
-                <Text className="text-sm font-medium">{percentage}%</Text>
+                <Text className="text-sm font-medium text-foreground">{percentage}%</Text>
               </View>
               
               {!passed && (
-                <View className="bg-amber-50 p-3 rounded-lg flex-row items-start space-x-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <Text className="text-sm text-amber-800 flex-1">
+                <View className="bg-amber-100 dark:bg-amber-950 p-3 rounded-lg flex-row items-start space-x-2">
+                  <AlertCircle className="text-amber-600 dark:text-amber-400 mt-0.5" size={20} />
+                  <Text className="text-sm text-amber-800 dark:text-amber-300 flex-1">
                     Review the explanations below and try again to improve your score.
                   </Text>
                 </View>
@@ -118,90 +118,111 @@ export function QuizResults({ userId, quizId, stepTitle, onClose }: QuizResultsP
             <CardHeader>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1">
-                  <CardTitle className="text-base">Question {index + 1}</CardTitle>
+                  <CardTitle className="text-lg font-semibold">
+                    Question {index + 1}
+                  </CardTitle>
+
                   {result.subtopicName && (
-                    <Badge variant="outline" className="mt-1 self-start">
-                      <Text className="text-xs">{result.subtopicName}</Text>
-                    </Badge>
+                    <View className="mt-2 px-2 py-1 bg-secondary rounded-md self-start">
+                      <Text className="text-xs font-medium text-foreground">
+                        {result.subtopicName}
+                      </Text>
+                    </View>
                   )}
                 </View>
+                
                 <View className="ml-2">
                   {result.isCorrect ? (
-                    <View className="bg-green-100 p-2 rounded-full">
-                      <Check className="h-5 w-5 text-green-600" />
+                    <View className="bg-green-100 dark:bg-green-950 p-2 rounded-full">
+                      <Check size={20} className="text-green-600 dark:text-green-400" />
                     </View>
                   ) : (
-                    <View className="bg-red-100 p-2 rounded-full">
-                      <X className="h-5 w-5 text-red-600" />
+                    <View className="bg-red-100 dark:bg-red-950 p-2 rounded-full">
+                      <X size={20} className="text-red-600 dark:text-red-400" />
                     </View>
                   )}
                 </View>
               </View>
             </CardHeader>
+                
             <CardContent>
-              <View className="space-y-4">
+              <View className="space-y-6">
                 {/* Question */}
-                <Text className="text-base font-medium">{result.question}</Text>
+                <Text className="text-lg font-semibold text-foreground">
+                  {result.question}
+                </Text>
                 
                 {/* Options */}
-                <View className="space-y-2">
-                  {result.options.map((option, optIndex) => {
-                    const isUserAnswer = optIndex === result.userAnswer;
-                    const isCorrectAnswer = optIndex === result.correctAnswer;
-                    
-                    let bgColor = 'bg-gray-50';
-                    let borderColor = 'border-gray-200';
-                    let textColor = 'text-foreground';
-                    
-                    if (isCorrectAnswer) {
-                      bgColor = 'bg-green-50';
-                      borderColor = 'border-green-500';
-                    } else if (isUserAnswer && !result.isCorrect) {
-                      bgColor = 'bg-red-50';
-                      borderColor = 'border-red-500';
-                    }
-                    
-                    return (
-                      <View
-                        key={optIndex}
-                        className={`border ${borderColor} ${bgColor} p-3 rounded-lg`}
-                      >
-                        <View className="flex-row items-center justify-between">
-                          <Text className={`flex-1 ${textColor}`}>{option}</Text>
-                          <View className="flex-row items-center space-x-2">
-                            {isUserAnswer && (
-                              <Badge variant="outline" className="bg-blue-50">
-                                <Text className="text-xs text-blue-700">Your Answer</Text>
-                              </Badge>
-                            )}
-                            {isCorrectAnswer && (
-                              <Badge className="bg-green-100">
-                                <Text className="text-xs text-green-700">Correct</Text>
-                              </Badge>
-                            )}
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-                
-                {/* Explanation */}
-                <View className="bg-blue-50 p-3 rounded-lg">
-                  <Text className="text-xs font-semibold text-blue-900 mb-1">
-                    Explanation:
-                  </Text>
-                  <Text className="text-sm text-blue-800">{result.explanation}</Text>
-                </View>
+                {/* Options */}
+    <View>
+  {result.options.map((option, optIndex) => {
+    const isUserAnswer = optIndex === result.userAnswer;
+    const isCorrectAnswer = optIndex === result.correctAnswer;
+
+    let containerClass =
+      'border border-border bg-secondary/50 p-4 rounded-lg mb-4';
+
+    if (isCorrectAnswer) {
+      containerClass =
+        'border-2 border-green-500 dark:border-green-600 bg-green-50 dark:bg-green-950/30 p-4 rounded-lg mb-4';
+    } else if (isUserAnswer && !result.isCorrect) {
+      containerClass =
+        'border-2 border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/30 p-4 rounded-lg mb-4';
+    }
+
+    return (
+      <View key={optIndex} className={containerClass}>
+        <View className="flex-row items-start justify-between gap-3">
+          <Text className="flex-1 text-base text-foreground">
+            {option}
+          </Text>
+
+          <View className="flex-row items-center gap-2">
+            {isUserAnswer && (
+              <View className="px-2 py-1 bg-blue-100 dark:bg-blue-950 rounded-md">
+                <Text className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                  Your Answer
+                </Text>
               </View>
-            </CardContent>
-          </Card>
-        ))}
+            )}
+
+            {isCorrectAnswer && (
+              <View className="px-2 py-1 bg-green-100 dark:bg-green-950 rounded-md">
+                <Text className="text-xs font-semibold text-green-800 dark:text-green-300">
+                  Correct
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  })}
+</View>
+
+
+        {/* Divider */}
+        <View className="h-px bg-border my-6" />
+
+        {/* Explanation */}
+        <View className="bg-blue-100 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900 p-4 rounded-lg">
+          <Text className="text-sm font-bold text-blue-900 dark:text-blue-300 mb-2">
+            Explanation
+          </Text>
+          <Text className="text-sm leading-relaxed text-blue-900 dark:text-blue-200">
+            {result.explanation}
+          </Text>
+        </View>
+      </View>
+    </CardContent>
+  </Card>
+))}
+
 
         {/* Close Button */}
         {onClose && (
           <Button onPress={onClose} className="mb-6">
-            <Text className="text-white font-medium">Close Results</Text>
+            <Text className="text-primary-foreground font-medium">Close Results</Text>
           </Button>
         )}
       </View>

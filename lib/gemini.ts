@@ -9,6 +9,16 @@ if (!API_KEY) {
 }
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
+// Utility function to sanitize JSON strings by removing control characters
+// This fixes issues with Groq and other LLMs that may include control characters in JSON responses
+function sanitizeJsonString(jsonStr: string): string {
+  // Remove ALL control characters (U+0000 through U+001F)
+  // This includes tabs, newlines, carriage returns, etc.
+  // While this removes formatting, it prevents JSON parse errors
+  // caused by unescaped control characters from LLM responses
+  return jsonStr.replace(/[\x00-\x1F]/g, '');
+}
+
 // Legacy retry function (now handled by aiService)
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -221,7 +231,8 @@ export class GeminiService {
         throw new Error('Invalid JSON response from AI');
       }
       
-      const knowledgeGraph = JSON.parse(jsonMatch[0]) as KnowledgeGraph;
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const knowledgeGraph = JSON.parse(sanitizedJson) as KnowledgeGraph;
       
       // Validate response structure
       if (!knowledgeGraph.mainTopic || !knowledgeGraph.prerequisites || !knowledgeGraph.learningPath) {
@@ -280,7 +291,8 @@ export class GeminiService {
         throw new Error('Invalid JSON response from AI');
       }
       
-      const questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const questions = JSON.parse(sanitizedJson) as QuizQuestion[];
       
       // Validate questions structure
       if (!Array.isArray(questions) || questions.length === 0) {
@@ -375,7 +387,8 @@ export class GeminiService {
       
       let questions: QuizQuestion[];
       try {
-        questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+        const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+        questions = JSON.parse(sanitizedJson) as QuizQuestion[];
       } catch (parseError) {
         console.error('📛 JSON parse error:', parseError);
         console.error('📛 Attempted to parse:', jsonMatch[0].substring(0, 500));
@@ -554,7 +567,8 @@ ${subtopicPerformance.map(p =>
         throw new Error('Invalid JSON response from AI');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const explanation = JSON.parse(sanitizedJson) as RawTopicExplanation;
       
       // Validate response structure
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
@@ -680,7 +694,8 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
         throw new Error('Invalid JSON response from AI');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const explanation = JSON.parse(sanitizedJson) as RawTopicExplanation;
       
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
         throw new Error('Invalid simplified explanation structure');
@@ -808,7 +823,8 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
         throw new Error('Invalid JSON response from AI');
       }
       
-      const explanation = JSON.parse(jsonMatch[0]) as RawTopicExplanation;
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const explanation = JSON.parse(sanitizedJson) as RawTopicExplanation;
       
       if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
         throw new Error('Invalid story explanation structure');

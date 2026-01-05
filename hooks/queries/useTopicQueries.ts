@@ -311,16 +311,19 @@ export function usePersistTopicContent() {
       category,
       explanation,
       isRegeneration,
+      isWebSearchGenerated,
     }: {
       topicId: string;
       userId: string;
-      category: string;
+      category?: string;
       explanation: TopicExplanation;
-      isRegeneration: boolean;
+      isRegeneration?: boolean;
+      isWebSearchGenerated?: boolean;
     }) => {
       console.log(`💾 [Mutation] Starting persistence for topic: ${topicId}`);
       console.log(`💾 [Mutation] Subtopics to save: ${explanation.subtopics.length}`);
       console.log(`💾 [Mutation] Is regeneration: ${isRegeneration}`);
+      console.log(`💾 [Mutation] Is web search generated: ${isWebSearchGenerated}`);
       console.log(`💾 [Mutation] First subtopic sample:`, {
         id: explanation.subtopics[0]?.id,
         title: explanation.subtopics[0]?.title,
@@ -332,15 +335,15 @@ export function usePersistTopicContent() {
       if (isRegeneration) {
         // Update existing content
         console.log(`💾 [Mutation] Calling updateSubtopicsContent...`);
-        await updateSubtopicsContent(topicId, explanation);
+        await updateSubtopicsContent(topicId, explanation, isWebSearchGenerated);
         
         // Reset the regeneration flag
         await setNeedsRegeneration(userId, topicId, false);
         console.log(`✅ [Mutation] Content regenerated and cached. Regeneration flag reset to FALSE.`);
       } else {
-        // Create new content
+        // Create new content or update with web search content
         console.log(`💾 [Mutation] Calling createSubtopics...`);
-        await createSubtopics(topicId, category, explanation);
+        await createSubtopics(topicId, category || '', explanation, isWebSearchGenerated);
         console.log(`✅ [Mutation] New content cached in database`);
       }
       

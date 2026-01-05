@@ -84,10 +84,12 @@ export async function getRoadmapByTopicId(topicId: string, userId: string) {
 export async function createSubtopics(
   parentTopicId: string,
   category: string,
-  explanation: TopicExplanation
+  explanation: TopicExplanation,
+  isWebSearchGenerated?: boolean
 ) {
   console.log(`🗄️ [DB] createSubtopics called for topic: ${parentTopicId}`);
   console.log(`🗄️ [DB] Subtopics to insert: ${explanation.subtopics.length}`);
+  console.log(`🗄️ [DB] Is web search generated: ${isWebSearchGenerated}`);
   
   return await db.transaction(async (tx) => {
     // Update parent topic with metadata
@@ -115,12 +117,13 @@ export async function createSubtopics(
             bestPractices: explanation.bestPractices,
             commonPitfalls: explanation.commonPitfalls,
             whyLearn: explanation.whyLearn,
-            difficulty: explanation.difficulty
+            difficulty: explanation.difficulty,
+            isWebSearchGenerated: isWebSearchGenerated || false
           })
         })
         .where(eq(topics.id, parentTopicId));
         
-      console.log(`🗄️ [DB] Parent topic metadata updated`);
+      console.log(`🗄️ [DB] Parent topic metadata updated with isWebSearchGenerated: ${isWebSearchGenerated}`);
     }
 
     // Create each subtopic in subtopics table with three content versions
@@ -215,7 +218,8 @@ export async function getUserSubtopicPerformance(userId: string, topicId: string
 // Update existing subtopics with new adaptive content (after performance-based regeneration)
 export async function updateSubtopicsContent(
   parentTopicId: string,
-  explanation: TopicExplanation
+  explanation: TopicExplanation,
+  isWebSearchGenerated?: boolean
 ) {
   return await db.transaction(async (tx) => {
     // Update parent topic metadata
@@ -241,7 +245,8 @@ export async function updateSubtopicsContent(
             bestPractices: explanation.bestPractices,
             commonPitfalls: explanation.commonPitfalls,
             whyLearn: explanation.whyLearn,
-            difficulty: explanation.difficulty
+            difficulty: explanation.difficulty,
+            isWebSearchGenerated: isWebSearchGenerated !== undefined ? isWebSearchGenerated : existingMetadata.isWebSearchGenerated || false
           })
         })
         .where(eq(topics.id, parentTopicId));

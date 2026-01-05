@@ -13,6 +13,7 @@ import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosSt
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
+import { getItem, setItem, removeItem } from '@/lib/storage';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink } from 'lucide-react-native';
@@ -100,6 +101,7 @@ export default function TopicDetailScreen() {
   const [isGeneratingWebContent, setIsGeneratingWebContent] = useState(false);
   const [webSearchExpandedSections, setWebSearchExpandedSections] = useState<Set<string>>(new Set());
   const [webSearchSubtopicVersions, setWebSearchSubtopicVersions] = useState<Record<string, ContentVersion>>({});
+  const [contentView, setContentView] = useState<'old' | 'new'>('old'); // Toggle between old and new content
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -122,6 +124,19 @@ export default function TopicDetailScreen() {
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
 
+  // Check if topic has web search content in MMKV storage on mount
+  useEffect(() => {
+    if (id) {
+      const storageKey = `webSearchContent_${id}`;
+      const savedWebSearchContent = getItem<TopicExplanation>(storageKey);
+      
+      if (savedWebSearchContent) {
+        console.log('📦 Found existing web search content in storage');
+        setWebSearchContent(savedWebSearchContent);
+      }
+    }
+  }, [id]);
+
   // Generate web search content if params are passed
   useEffect(() => {
     if (generateWebContent === 'true' && webSearchParam && topicNameParam && !isGeneratingWebContent && !webSearchContent) {
@@ -135,10 +150,17 @@ export default function TopicDetailScreen() {
           webSearchResults: parsedResults,
           context: 'Latest Updates'
         }, {
-          onSuccess: (explanation) => {
+          onSuccess: async (explanation) => {
             console.log('✅ Web search content generated successfully');
             setWebSearchContent(explanation);
             setIsGeneratingWebContent(false);
+            
+            // Save web search content to MMKV storage (not database)
+            if (id) {
+              const storageKey = `webSearchContent_${id}`;
+              console.log('💾 Saving web search content to storage');
+              setItem(storageKey, explanation);
+            }
           },
           onError: (error) => {
             console.error('❌ Failed to generate web search content:', error);
@@ -648,6 +670,61 @@ export default function TopicDetailScreen() {
                   </Pressable>
                 </Animated.View>
               )}
+
+              {/* Content View Toggle - Show only when web search content is available */}
+              {webSearchContent && (
+                <View className="mt-4">
+                  <Text className="text-xs text-muted-foreground mb-2 text-center">
+                    Switch between original and latest content
+                  </Text>
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={() => setContentView('old')}
+                      className={`flex-1 py-3 rounded-lg border-2 ${
+                        contentView === 'old' 
+                          ? 'bg-blue-500 border-blue-500' 
+                          : 'bg-background border-border'
+                      }`}
+                    >
+                      <View className="flex-row items-center justify-center space-x-2">
+                        <BookOpen 
+                          size={16} 
+                          className={contentView === 'old' ? 'text-white' : 'text-foreground'} 
+                        />
+                        <Text 
+                          className={`text-sm font-semibold ${
+                            contentView === 'old' ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          Original Content
+                        </Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setContentView('new')}
+                      className={`flex-1 py-3 rounded-lg border-2 ${
+                        contentView === 'new' 
+                          ? 'bg-purple-600 border-purple-600' 
+                          : 'bg-background border-border'
+                      }`}
+                    >
+                      <View className="flex-row items-center justify-center space-x-2">
+                        <Sparkles 
+                          size={16} 
+                          className={contentView === 'new' ? 'text-white' : 'text-foreground'} 
+                        />
+                        <Text 
+                          className={`text-sm font-semibold ${
+                            contentView === 'new' ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          Latest Updates
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </CardContent>
           </Card>
 
@@ -658,15 +735,18 @@ export default function TopicDetailScreen() {
                 <View className="flex-row items-center space-x-2 mb-2">
                   <Sparkles className="h-5 w-5 text-purple-600" />
                   <CardTitle className="text-purple-900 dark:text-purple-100">
-                    Latest Updates & Insights
+                    Content Preview
                   </CardTitle>
                 </View>
                 <Text className="text-sm text-purple-700 dark:text-purple-300">
-                  Fresh content generated from recent web search findings
+                  {isGeneratingWebContent 
+                    ? 'Generating fresh content from web search results...'
+                    : 'Use the toggle above to switch between original and latest content'
+                  }
                 </Text>
               </CardHeader>
               <CardContent>
-                {isGeneratingWebContent ? (
+                {isGeneratingWebContent && (
                   <View className="items-center py-8">
                     <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full p-4 mb-4">
                       <Sparkles size={32} className="text-purple-600" />
@@ -679,159 +759,185 @@ export default function TopicDetailScreen() {
                       Creating educational material from web search results...
                     </Text>
                   </View>
-                ) : webSearchContent ? (
-                  <View className="space-y-3">
-                    {webSearchContent.subtopics.map((subtopic, index) => {
-                      const isExpanded = webSearchExpandedSections.has(subtopic.id);
-                      const content = getSubtopicContent(subtopic, subtopic.id);
-                      const currentVersion = webSearchSubtopicVersions[subtopic.id] || 'default';
-                      
-                      return (
-                        <View 
-                          key={subtopic.id}
-                          className="border border-purple-200 rounded-lg overflow-hidden bg-white dark:bg-gray-900"
-                        >
-                          {/* Accordion Header */}
-                          <Button
-                            variant="ghost"
-                            onPress={() => {
-                              const newExpanded = new Set(webSearchExpandedSections);
-                              if (newExpanded.has(subtopic.id)) {
-                                newExpanded.delete(subtopic.id);
-                              } else {
-                                newExpanded.add(subtopic.id);
-                              }
-                              setWebSearchExpandedSections(newExpanded);
-                            }}
-                            className="w-full flex-row items-center justify-between p-4 rounded-none"
-                          >
-                            <View className="flex-1 flex-row items-center space-x-2">
-                              <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full w-6 h-6 items-center justify-center">
-                                <Text className="text-purple-700 dark:text-purple-300 font-bold text-xs">
-                                  {index + 1}
-                                </Text>
-                              </View>
-                              <Text className="font-semibold text-base text-left flex-1">
-                                {subtopic.title}
-                              </Text>
-                              <Badge className="bg-purple-100">
-                                <Text className="text-xs text-purple-700">New</Text>
-                              </Badge>
-                            </View>
-                            {isExpanded ? (
-                              <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
-                            )}
-                          </Button>
-
-                          {/* Accordion Content */}
-                          {isExpanded && (
-                            <View className="border-t border-purple-200 bg-purple-50/30 dark:bg-purple-950/10">
-                              {/* Style Switcher */}
-                              <View className="px-4 pt-3 pb-2">
-                                <View className="flex-row gap-2 mb-3">
-                                  <Button
-                                    variant={currentVersion === 'default' ? 'default' : 'outline'}
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
-                                    className="flex-1 py-2"
-                                    size="sm"
-                                  >
-                                    <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
-                                      📚 Default
-                                    </Text>
-                                  </Button>
-                                  <Button
-                                    variant={currentVersion === 'simplified' ? 'default' : 'outline'}
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
-                                    className="flex-1 py-2"
-                                    size="sm"
-                                  >
-                                    <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
-                                      🎯 Simplified
-                                    </Text>
-                                  </Button>
-                                  <Button
-                                    variant={currentVersion === 'story' ? 'default' : 'outline'}
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
-                                    className="flex-1 py-2"
-                                    size="sm"
-                                  >
-                                    <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
-                                      📖 Story
-                                    </Text>
-                                  </Button>
-                                </View>
-                              </View>
-
-                              {/* Content */}
-                              <Animated.View 
-                                key={`${subtopic.id}-${currentVersion}`}
-                                entering={FadeIn.duration(300)}
-                                className="px-4 pb-4"
-                              >
-                                <Text className="text-muted-foreground leading-6 mb-4">
-                                  {content.explanation}
-                                </Text>
-
-                                {content.example && (
-                                  <View className="mt-3">
-                                    <View className="flex-row items-center space-x-2 mb-2">
-                                      <Code className="h-4 w-4 text-green-600" />
-                                      <Text className="text-sm font-semibold text-green-600">
-                                        Example:
-                                      </Text>
-                                    </View>
-                                    <View className="bg-slate-900 rounded-lg p-4">
-                                      <Text className="text-slate-100 font-mono text-sm leading-6">
-                                        {content.example}
-                                      </Text>
-                                    </View>
-                                    
-                                    {subtopic.exampleExplanation && (
-                                      <Text className="text-sm text-muted-foreground mt-2 italic">
-                                        💡 {subtopic.exampleExplanation}
-                                      </Text>
-                                    )}
-                                  </View>
-                                )}
-
-                                {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
-                                  <View className="mt-3">
-                                    <Text className="text-sm font-semibold mb-2">Key Points:</Text>
-                                    {subtopic.keyPoints.map((point: string, idx: number) => (
-                                      <View key={idx} className="flex-row items-start space-x-2 mb-1">
-                                        <Text className="text-muted-foreground">•</Text>
-                                        <Text className="flex-1 text-sm text-muted-foreground">
-                                          {point}
-                                        </Text>
-                                      </View>
-                                    ))}
-                                  </View>
-                                )}
-                              </Animated.View>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
+                )}
               </CardContent>
             </Card>
           )}
 
-          {/* Subtopics */}
-          <Card>
-            <CardHeader>
-              <View className="flex-row items-center space-x-2 mb-2">
-                <BookOpen className="h-5 w-5 text-blue-600" />
-                <CardTitle>Key Concepts</CardTitle>
-              </View>
-              <Text className="text-sm text-muted-foreground">
-                Tap each concept to learn more • Switch learning style per concept
-              </Text>
-            </CardHeader>
+          {/* Conditional Content Display Based on Toggle */}
+          {contentView === 'new' && webSearchContent ? (
+            /* New Web Search Content Section */
+            <Card className="border-2 border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+              <CardHeader>
+                <View className="flex-row items-center space-x-2 mb-2">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <CardTitle className="text-purple-900 dark:text-purple-100">
+                    Latest Updates & Insights
+                  </CardTitle>
+                  <Badge className="bg-purple-600">
+                    <Text className="text-xs text-white font-semibold">NEW</Text>
+                  </Badge>
+                </View>
+                <Text className="text-sm text-purple-700 dark:text-purple-300">
+                  Fresh content generated from recent web search findings
+                </Text>
+              </CardHeader>
+              <CardContent>
+                <View className="space-y-3">
+                  {webSearchContent.subtopics.map((subtopic, index) => {
+                    const isExpanded = webSearchExpandedSections.has(subtopic.id);
+                    const content = getSubtopicContent(subtopic, subtopic.id);
+                    const currentVersion = webSearchSubtopicVersions[subtopic.id] || 'default';
+                    
+                    return (
+                      <View 
+                        key={subtopic.id}
+                        className="border border-purple-200 rounded-lg overflow-hidden bg-white dark:bg-gray-900"
+                      >
+                        {/* Accordion Header */}
+                        <Button
+                          variant="ghost"
+                          onPress={() => {
+                            const newExpanded = new Set(webSearchExpandedSections);
+                            if (newExpanded.has(subtopic.id)) {
+                              newExpanded.delete(subtopic.id);
+                            } else {
+                              newExpanded.add(subtopic.id);
+                            }
+                            setWebSearchExpandedSections(newExpanded);
+                          }}
+                          className="w-full flex-row items-center justify-between p-4 rounded-none"
+                        >
+                          <View className="flex-1 flex-row items-center space-x-2">
+                            <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full w-6 h-6 items-center justify-center">
+                              <Text className="text-purple-700 dark:text-purple-300 font-bold text-xs">
+                                {index + 1}
+                              </Text>
+                            </View>
+                            <Text className="font-semibold text-base text-left flex-1">
+                              {subtopic.title}
+                            </Text>
+                            <Badge className="bg-purple-100">
+                              <Text className="text-xs text-purple-700">New</Text>
+                            </Badge>
+                          </View>
+                          {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
+                          )}
+                        </Button>
+
+                        {/* Accordion Content */}
+                        {isExpanded && (
+                          <View className="border-t border-purple-200 bg-purple-50/30 dark:bg-purple-950/10">
+                            {/* Style Switcher */}
+                            <View className="px-4 pt-3 pb-2">
+                              <View className="flex-row gap-2 mb-3">
+                                <Button
+                                  variant={currentVersion === 'default' ? 'default' : 'outline'}
+                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
+                                  className="flex-1 py-2"
+                                  size="sm"
+                                >
+                                  <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
+                                    📚 Default
+                                  </Text>
+                                </Button>
+                                <Button
+                                  variant={currentVersion === 'simplified' ? 'default' : 'outline'}
+                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
+                                  className="flex-1 py-2"
+                                  size="sm"
+                                >
+                                  <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
+                                    🎯 Simplified
+                                  </Text>
+                                </Button>
+                                <Button
+                                  variant={currentVersion === 'story' ? 'default' : 'outline'}
+                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
+                                  className="flex-1 py-2"
+                                  size="sm"
+                                >
+                                  <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
+                                    📖 Story
+                                  </Text>
+                                </Button>
+                              </View>
+                            </View>
+
+                            {/* Content */}
+                            <Animated.View 
+                              key={`${subtopic.id}-${currentVersion}`}
+                              entering={FadeIn.duration(300)}
+                              className="px-4 pb-4"
+                            >
+                              <Text className="text-muted-foreground leading-6 mb-4">
+                                {content.explanation}
+                              </Text>
+
+                              {content.example && (
+                                <View className="mt-3">
+                                  <View className="flex-row items-center space-x-2 mb-2">
+                                    <Code className="h-4 w-4 text-green-600" />
+                                    <Text className="text-sm font-semibold text-green-600">
+                                      Example:
+                                    </Text>
+                                  </View>
+                                  <View className="bg-slate-900 rounded-lg p-4">
+                                    <Text className="text-slate-100 font-mono text-sm leading-6">
+                                      {content.example}
+                                    </Text>
+                                  </View>
+                                  
+                                  {subtopic.exampleExplanation && (
+                                    <Text className="text-sm text-muted-foreground mt-2 italic">
+                                      💡 {subtopic.exampleExplanation}
+                                    </Text>
+                                  )}
+                                </View>
+                              )}
+
+                              {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
+                                <View className="mt-3">
+                                  <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                  {subtopic.keyPoints.map((point: string, idx: number) => (
+                                    <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                      <Text className="text-muted-foreground">•</Text>
+                                      <Text className="flex-1 text-sm text-muted-foreground">
+                                        {point}
+                                      </Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              )}
+                            </Animated.View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Original Subtopics Section */
+            <Card>
+              <CardHeader>
+                <View className="flex-row items-center space-x-2 mb-2">
+                  <BookOpen className="h-5 w-5 text-blue-600" />
+                  <CardTitle>Key Concepts</CardTitle>
+                  {!webSearchContent && (
+                    <Badge className="bg-blue-100">
+                      <Text className="text-xs text-blue-700 font-semibold">ORIGINAL</Text>
+                    </Badge>
+                  )}
+                </View>
+                <Text className="text-sm text-muted-foreground">
+                  Tap each concept to learn more • Switch learning style per concept
+                </Text>
+              </CardHeader>
             <CardContent>
               <View className="space-y-3">
                 {explanation.subtopics.map((subtopic, index) => {
@@ -1008,8 +1114,7 @@ export default function TopicDetailScreen() {
               </View>
             </CardContent>
           </Card>
-
-          {/* Best Practices */}
+          )}
           {explanation.bestPractices && explanation.bestPractices.length > 0 && (
             <Card>
               <CardHeader>

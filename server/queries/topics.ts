@@ -91,7 +91,34 @@ export async function createSubtopics(
   console.log(`🗄️ [DB] Subtopics to insert: ${explanation.subtopics.length}`);
   console.log(`🗄️ [DB] Is web search generated: ${isWebSearchGenerated}`);
   
+  // Determine the source based on isWebSearchGenerated flag
+  const source = isWebSearchGenerated ? 'websearch' : 'original';
+  
   return await db.transaction(async (tx) => {
+    // Check if subtopics already exist for this topic with this source
+    const existingSubtopics = await tx
+      .select({ id: subtopics.id, metadata: subtopics.metadata })
+      .from(subtopics)
+      .where(eq(subtopics.parentTopicId, parentTopicId));
+    
+    // Filter existing subtopics by source
+    const existingWithSameSource = existingSubtopics.filter(st => {
+      try {
+        const meta = JSON.parse(st.metadata as string || '{}');
+        return meta.source === source;
+      } catch {
+        // If no source metadata, treat as 'original' for backwards compatibility
+        return source === 'original';
+      }
+    });
+    
+    if (existingWithSameSource.length > 0) {
+      console.log(`⏭️ [DB] Subtopics with source='${source}' already exist (${existingWithSameSource.length}), skipping creation`);
+      return; // Don't create duplicates
+    }
+    
+    console.log(`✅ [DB] No existing subtopics with source='${source}', proceeding with creation`);
+    
     // Update parent topic with metadata
     const parentTopic = await tx
       .select()
@@ -148,6 +175,7 @@ export async function createSubtopics(
           contentStory: subtopic.explanationStory,
           order: i + 1,
           metadata: JSON.stringify({
+            source: source, // Track whether this is 'original' or 'websearch' content
             example: subtopic.example,
             exampleExplanation: subtopic.exampleExplanation,
             exampleSimplified: subtopic.exampleSimplified,
@@ -156,7 +184,7 @@ export async function createSubtopics(
           })
         });
 
-        console.log(`✅ [DB] Created subtopic with 3 content types: ${subtopic.title}`);
+        console.log(`✅ [DB] Created subtopic with 3 content types: ${subtopic.title} (source: ${source})`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Failed to create subtopic ${subtopic.title}:`, error);
@@ -177,7 +205,8 @@ export async function createSubtopics(
 }
 
 // Get all subtopics for a parent topic - OPTIMIZED with single query
-export async function getSubtopics(parentTopicId: string) {
+// Optionally filter by source ('original' or 'websearch')
+export async function getSubtopics(parentTopicId: string, source?: 'original' | 'websearch') {
   const result = await db
     .select({
       id: subtopics.id,
@@ -192,7 +221,31 @@ export async function getSubtopics(parentTopicId: string) {
     .where(eq(subtopics.parentTopicId, parentTopicId))
     .orderBy(subtopics.order); // Order by display order
 
-  return result;
+  // If source filter is specified, filter by metadata.source
+  if (source) {
+    return result.filter(st => {
+      try {
+        const meta = JSON.parse(st.metadata as string || '{}');
+        // If no source in metadata, treat as 'original' for backwards compatibility
+        const subtopicSource = meta.source || 'original';
+        return subtopicSource === source;
+      } catch {
+        // If parsing fails, treat as 'original' for backwards compatibility
+        return source === 'original';
+      }
+    });
+  }
+  
+  // By default, return only 'original' subtopics (not websearch)
+  return result.filter(st => {
+    try {
+      const meta = JSON.parse(st.metadata as string || '{}');
+      const subtopicSource = meta.source || 'original';
+      return subtopicSource === 'original';
+    } catch {
+      return true; // Include if can't parse (backwards compatible)
+    }
+  });
 }
 
 // Get user performance for subtopics

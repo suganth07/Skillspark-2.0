@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, ActivityIndicator, ScrollView, Pressable, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -124,6 +124,14 @@ export default function TopicDetailScreen() {
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
 
+  // Memoize explanation to prevent unnecessary recalculations
+  // MUST be called before any conditional returns to follow Rules of Hooks
+  const explanation = useMemo(() => {
+    if (!currentTopicDetail) return null;
+    console.log('📚 Loading explanation with', currentTopicDetail.explanation.subtopics.length, 'subtopics');
+    return currentTopicDetail.explanation;
+  }, [currentTopicDetail]);
+
   // Check if topic has web search content in MMKV storage on mount
   useEffect(() => {
     if (id) {
@@ -132,7 +140,15 @@ export default function TopicDetailScreen() {
       
       if (savedWebSearchContent) {
         console.log('📦 Found existing web search content in storage');
-        setWebSearchContent(savedWebSearchContent);
+        // Add 'websearch-' prefix to all subtopic IDs to avoid conflicts with original content
+        const contentWithUniqueIds = {
+          ...savedWebSearchContent,
+          subtopics: savedWebSearchContent.subtopics.map((st, index) => ({
+            ...st,
+            id: `websearch-${index + 1}`
+          }))
+        };
+        setWebSearchContent(contentWithUniqueIds);
       }
     }
   }, [id]);
@@ -152,14 +168,24 @@ export default function TopicDetailScreen() {
         }, {
           onSuccess: async (explanation) => {
             console.log('✅ Web search content generated successfully');
-            setWebSearchContent(explanation);
+            
+            // Add 'websearch-' prefix to all subtopic IDs to avoid conflicts with original content
+            const contentWithUniqueIds = {
+              ...explanation,
+              subtopics: explanation.subtopics.map((st, index) => ({
+                ...st,
+                id: `websearch-${index + 1}`
+              }))
+            };
+            
+            setWebSearchContent(contentWithUniqueIds);
             setIsGeneratingWebContent(false);
             
             // Save web search content to MMKV storage (not database)
             if (id) {
               const storageKey = `webSearchContent_${id}`;
               console.log('💾 Saving web search content to storage');
-              setItem(storageKey, explanation);
+              setItem(storageKey, contentWithUniqueIds);
             }
           },
           onError: (error) => {
@@ -353,7 +379,26 @@ export default function TopicDetailScreen() {
     );
   }
 
-  const { topic, explanation, subtopicPerformance } = currentTopicDetail;
+  const topic = currentTopicDetail.topic;
+  const subtopicPerformance = currentTopicDetail.subtopicPerformance;
+  
+  // explanation is already memoized above with deduplication applied
+  if (!explanation) {
+    return (
+      <View className="flex-1 bg-background justify-center items-center p-6">
+        <Stack.Screen 
+          options={{ 
+            title: 'Error',
+            headerBackTitle: 'Back'
+          }} 
+        />
+        <Text className="text-center text-muted-foreground">Failed to load content</Text>
+        <Button onPress={() => router.back()} className="mt-4">
+          <Text className="text-white">Go Back</Text>
+        </Button>
+      </View>
+    );
+  }
   
   console.log('📊 Subtopic Performance Map:', subtopicPerformance);
   console.log('📊 Performance Map size:', subtopicPerformance?.size);

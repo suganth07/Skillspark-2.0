@@ -498,7 +498,11 @@ ${subtopicPerformance.map(p =>
       Provide:
       1. A clear overview of what ${topicName} is
       2. Why someone learning ${context} should understand ${topicName}
-      3. 5-8 key subtopics/concepts within ${topicName}
+      3. 5-8 UNIQUE key subtopics/concepts within ${topicName}
+         ⚠️ CRITICAL: Each subtopic MUST have a UNIQUE, SPECIFIC title
+         ⚠️ DO NOT repeat subtopic names like "Basic HTML", "Basic HTML", "Basic HTML"
+         ⚠️ Examples of GOOD unique titles: "HTML Document Structure", "Common HTML Tags", "HTML Attributes", "Semantic HTML Elements"
+         ⚠️ Examples of BAD duplicate titles: "Basic HTML", "Basic HTML", "HTML Elements", "HTML Elements"
       4. For EACH subtopic, provide:
          - A clear, balanced explanation ${subtopicPerformance ? '(LENGTH MUST VARY based on performance data above!)' : ''}
          - A practical code example (if applicable)
@@ -625,6 +629,7 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
       1. A simple, easy-to-understand overview
       2. Why this topic matters (in simple terms)
       3. ${canonicalTitles ? `EXACTLY ${canonicalTitles.length}` : '5-8'} key subtopics/concepts ${canonicalTitles ? '(using the exact titles provided above)' : ''}
+         ${!canonicalTitles ? '⚠️ CRITICAL: Each subtopic MUST have a UNIQUE, SPECIFIC title - NO DUPLICATES!' : ''}
       4. For EACH subtopic:
          - A LONGER, simpler explanation (4-5 paragraphs, break down complex ideas)
          - 2-3 practical examples with detailed explanations
@@ -750,6 +755,7 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
       1. An engaging story-based overview that introduces the topic
       2. Why this topic matters (told through a brief scenario)
       3. ${canonicalTitles ? `EXACTLY ${canonicalTitles.length}` : '5-8'} key subtopics/concepts ${canonicalTitles ? '(using the exact titles provided above)' : ''}
+         ${!canonicalTitles ? '⚠️ CRITICAL: Each subtopic MUST have a UNIQUE, SPECIFIC title - NO DUPLICATES!' : ''}
       4. For EACH subtopic:
          - A STORY or SCENARIO that illustrates the concept
          - Include characters, setting, and a plot that demonstrates the learning point

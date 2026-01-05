@@ -10,6 +10,7 @@ import {UserManagement} from '@/components/settings/UserManagement';
 import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
 import {GeneratedVideosItem} from '@/components/settings/GeneratedVideosItem';
 import {AIProviderItem} from '@/components/settings/AIProviderItem';
+import {WebSearchProviderItem} from '@/components/settings/WebSearchProviderItem';
 
 export default function Settings() {
   return (
@@ -54,6 +55,16 @@ export default function Settings() {
               <Muted>AI Configuration</Muted>
             </ListHeader>
             <AIProviderItem />
+          </List>
+        </View>
+
+        {/* Web Search Configuration Section */}
+        <View className="px-6 pb-6">
+          <List>
+            <ListHeader>
+              <Muted>Web Search Configuration</Muted>
+            </ListHeader>
+            <WebSearchProviderItem />
           </List>
         </View>
       </ScrollView>

@@ -94,7 +94,7 @@ class AIService {
       throw new Error('Gemini API key not configured');
     }
 
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-2.5-flash-lite';
     const model = geminiClient.getGenerativeModel({ 
       model: modelName,
       generationConfig: {

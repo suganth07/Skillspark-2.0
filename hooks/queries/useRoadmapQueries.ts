@@ -14,7 +14,7 @@ import {
 } from '@/server/queries/roadmaps';
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
-import { checkMultipleTopicsForUpdates } from '@/server/langSearchClient';
+import { checkTopicsForUpdates } from '@/lib/webSearchService';
 import type { RoadmapWithProgress, RoadmapStep } from '@/server/queries/roadmaps';
 
 // ============================================
@@ -317,11 +317,12 @@ export function useCheckTopicUpdates() {
         return { hasUpdates: false, updates: [] };
       }
 
-      // Check for updates using Lang Search
-      const updates = await checkMultipleTopicsForUpdates(
+      // Check for updates using selected web search provider
+      const updates = await checkTopicsForUpdates(
         completedTopics.map(topic => ({
+          id: topic.id, // Add id field
           name: topic.name,
-          completedDate: topic.completedDate,
+          completedAt: topic.completedDate, // Use completedAt instead of completedDate
         }))
       );
 

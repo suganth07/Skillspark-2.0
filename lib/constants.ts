@@ -10,6 +10,9 @@ export const HEYGEN_VOICE_ID = process.env.EXPO_PUBLIC_HEYGEN_VOICE_ID || "1bd00
 // Lang Search API Configuration
 export const LANG_SEARCH_API_KEY = process.env.EXPO_PUBLIC_LANG_SEARCH_API_KEY || null;
 
+// Serper API Configuration
+export const SERPER_API_KEY = process.env.EXPO_PUBLIC_SERPER_API_KEY || null;
+
 export const NAV_THEME = {
   light: {
     background: "hsl(0 0% 100%)", // background

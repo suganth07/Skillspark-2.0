@@ -11,7 +11,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
-import { searchTopicUpdates } from '@/server/langSearchClient';
+import { searchTopicUpdates } from '@/lib/webSearchService';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 

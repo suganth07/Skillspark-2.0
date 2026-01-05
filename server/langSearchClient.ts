@@ -245,6 +245,52 @@ function extractActualUpdatesFromResults(
    Batch Topic Search
 ======================= */
 
+interface CompletedTopic {
+  id: number;
+  name: string;
+  completedAt: Date;
+}
+
+export async function checkTopicsForUpdates(
+  topics: CompletedTopic[]
+): Promise<TopicUpdate[]> {
+  console.log(`🔍 Checking ${topics.length} topics for updates...`);
+  
+  const updates: TopicUpdate[] = [];
+  
+  for (let i = 0; i < topics.length; i++) {
+    const topic = topics[i];
+    console.log(`\n📚 [${i + 1}/${topics.length}] Checking: ${topic.name}`);
+    
+    try {
+      const result = await searchTopicUpdates(topic.name, topic.completedAt);
+      
+      if (result.hasUpdates) {
+        console.log(`✨ Found ${result.newSubtopics.length} new updates for ${topic.name}`);
+        updates.push(result);
+      } else {
+        console.log(`✅ No significant updates for ${topic.name}`);
+      }
+      
+      // Add 5 second delay between requests (except for the last one)
+      if (i < topics.length - 1) {
+        console.log(`⏸️  Waiting 5 seconds before next request...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    } catch (error) {
+      console.error(`❌ Topic check failed for ${topic.name}:`, error);
+      
+      // If it's a timeout, log a helpful message
+      if (error instanceof Error && 
+          (error.message.includes('timed out') || error.message.includes('504'))) {
+        console.log(`⏱️  API timeout for ${topic.name}. Continuing with next topic...`);
+      }
+    }
+  }
+
+  return updates.filter(update => update.hasUpdates);
+}
+
 export async function checkMultipleTopicsForUpdates(
   topics: Array<{ name: string; completedDate?: Date }>
 ): Promise<TopicUpdate[]> {

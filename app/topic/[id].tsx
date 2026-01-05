@@ -11,7 +11,7 @@ import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
-import { searchTopicUpdates } from '@/server/langSearchClient';
+import { searchTopicUpdates } from '@/lib/webSearchService';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink } from 'lucide-react-native';

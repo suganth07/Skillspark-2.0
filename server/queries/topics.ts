@@ -103,13 +103,8 @@ export async function createSubtopics(
     
     // Filter existing subtopics by source
     const existingWithSameSource = existingSubtopics.filter(st => {
-      try {
-        const meta = JSON.parse(st.metadata as string || '{}');
-        return meta.source === source;
-      } catch {
-        // If no source metadata, treat as 'original' for backwards compatibility
-        return source === 'original';
-      }
+      const meta = (st.metadata as Record<string, any>) || {};
+      return meta.source === source;
     });
     
     if (existingWithSameSource.length > 0) {
@@ -129,12 +124,7 @@ export async function createSubtopics(
     console.log(`🗄️ [DB] Parent topic found: ${parentTopic.length > 0}`);
 
     if (parentTopic[0]) {
-      let existingMetadata = {};
-      try {
-        existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
-      } catch {
-        console.warn('Failed to parse existing metadata, using empty object');
-      }
+      const existingMetadata = (parentTopic[0].metadata as Record<string, any>) || {};
 
       await tx
         .update(topics)
@@ -224,28 +214,15 @@ export async function getSubtopics(parentTopicId: string, source?: 'original' | 
   // If source filter is specified, filter by metadata.source
   if (source) {
     return result.filter(st => {
-      try {
-        const meta = JSON.parse(st.metadata as string || '{}');
-        // If no source in metadata, treat as 'original' for backwards compatibility
-        const subtopicSource = meta.source || 'original';
-        return subtopicSource === source;
-      } catch {
-        // If parsing fails, treat as 'original' for backwards compatibility
-        return source === 'original';
-      }
+      const meta = (st.metadata as Record<string, any>) || {};
+      // If no source in metadata, treat as 'original' for backwards compatibility
+      const subtopicSource = meta.source || 'original';
+      return subtopicSource === source;
     });
   }
   
   // By default, return only 'original' subtopics (not websearch)
-  return result.filter(st => {
-    try {
-      const meta = JSON.parse(st.metadata as string || '{}');
-      const subtopicSource = meta.source || 'original';
-      return subtopicSource === 'original';
-    } catch {
-      return true; // Include if can't parse (backwards compatible)
-    }
-  });
+  return result;
 }
 
 // Get user performance for subtopics
@@ -283,12 +260,7 @@ export async function updateSubtopicsContent(
       .limit(1);
 
     if (parentTopic[0]) {
-      let existingMetadata = {};
-      try {
-        existingMetadata = JSON.parse(parentTopic[0].metadata as string || '{}');
-      } catch {
-        console.warn('Failed to parse existing metadata, using empty object');
-      }
+      const existingMetadata = (parentTopic[0].metadata as Record<string, any>) || {};
 
       await tx
         .update(topics)
@@ -379,12 +351,7 @@ export async function updateSingleToneContent(
     }
 
     // Parse existing metadata
-    let metadata: Record<string, any> = {};
-    try {
-      metadata = JSON.parse(existing.metadata as string || '{}');
-    } catch {
-      metadata = {};
-    }
+    const metadata = (existing.metadata as Record<string, any>) || {};
 
     // Update only the specific tone
     const updateData: Record<string, any> = {};

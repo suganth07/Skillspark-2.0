@@ -116,7 +116,7 @@ interface TopicEmotionDetectorProps {
 // If you have labels.txt and it's different, update this array.
 const EMOTIONS = ['wbored', 'confused', 'drowsy', 'engaged', 'frustrated', 'looking_away'];
 
-const DETECTION_INTERVAL = 30000; // 100 seconds
+const DETECTION_INTERVAL = 30000; // 30 seconds
 const { width: screenWidth } = Dimensions.get('window');
 
 function argMax(arr: ArrayLike<number>) {
@@ -148,15 +148,15 @@ function softmax(logits: ArrayLike<number>) {
 }
 
 async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: number) {
-  console.log('📷 Processing pre-resized image:', uri);
+  console.log('📷 Processing and resizing image:', uri);
   
-  // Try PNG format to preserve exact pixels
+  // Resize and convert to JPEG in a single operation
   const result = await ImageManipulator.manipulateAsync(
     uri,
-    [], 
+    [{ resize: { width: targetWidth, height: targetHeight } }],
     { 
       compress: 1,
-      format: ImageManipulator.SaveFormat.PNG,  // Use PNG to preserve pixels
+      format: ImageManipulator.SaveFormat.JPEG,
       base64: true,
     }
   );
@@ -165,40 +165,23 @@ async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: n
 
   if (!result.base64) throw new Error('No base64 returned');
   
-  // Since we can't decode PNG directly, convert to JPEG at high quality
-  const jpegResult = await ImageManipulator.manipulateAsync(
-    result.uri,
-    [],
-    { 
-      compress: 1,
-      format: ImageManipulator.SaveFormat.JPEG,
-      base64: true,
-    }
-  );
-  
-  if (!jpegResult.base64) throw new Error('No JPEG base64');
-  const jpgBytes = Buffer.from(jpegResult.base64, 'base64');
+  const jpgBytes = Buffer.from(result.base64, 'base64');
   const decoded = jpeg.decode(jpgBytes, { useTArray: true, formatAsRGBA: true });
 
-  // Convert RGBA -> RGB
+  // Convert RGBA -> RGB (image is already at target size from ImageManipulator)
   const rgba = decoded.data;
-  const srcRgb = new Uint8Array(decoded.width * decoded.height * 3);
+  const rgb = new Uint8Array(decoded.width * decoded.height * 3);
   
   let j = 0;
   for (let i = 0; i < rgba.length; i += 4) {
-    srcRgb[j++] = rgba[i]; // R
-    srcRgb[j++] = rgba[i + 1]; // G
-    srcRgb[j++] = rgba[i + 2]; // B
+    rgb[j++] = rgba[i]; // R
+    rgb[j++] = rgba[i + 1]; // G
+    rgb[j++] = rgba[i + 2]; // B
   }
 
-  // Resize if needed using bilinear interpolation (matches Python PIL)
-  let rgb: Uint8Array;
-  if (decoded.width === targetWidth && decoded.height === targetHeight) {
-    console.log('📷 Image already at target size, no resize needed');
-    rgb = srcRgb;
-  } else {
-    console.log(`📷 Resizing from ${decoded.width}x${decoded.height} to ${targetWidth}x${targetHeight}`);
-    rgb = await bilinearResize(srcRgb, decoded.width, decoded.height, targetWidth, targetHeight, 3);
+  console.log('📷 Converted to RGB, size:', decoded.width, 'x', decoded.height);
+  if (decoded.width !== targetWidth || decoded.height !== targetHeight) {
+    console.warn(`⚠️ Size mismatch: expected ${targetWidth}x${targetHeight}, got ${decoded.width}x${decoded.height}`);
   }
 
   // Log first few RGB triplets for comparison with Python

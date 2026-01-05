@@ -13,6 +13,7 @@ import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosSt
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
+import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { getItem, setItem, removeItem } from '@/lib/storage';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
@@ -91,6 +92,7 @@ export default function TopicDetailScreen() {
   const currentUserId = useCurrentUserId();
   const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
   const isGeneratedVideosEnabled = useIsGeneratedVideosEnabled();
+  const provider = useWebSearchProvider();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [subtopicVersions, setSubtopicVersions] = useState<Record<string, ContentVersion>>({});
   const [hasPersistedContent, setHasPersistedContent] = useState(false);
@@ -156,7 +158,13 @@ export default function TopicDetailScreen() {
   // Generate web search content if params are passed
   useEffect(() => {
     if (generateWebContent === 'true' && webSearchParam && topicNameParam && !isGeneratingWebContent && !webSearchContent) {
-      const parsedResults = JSON.parse(webSearchParam);
+      let parsedResults;
+      try {
+        parsedResults = JSON.parse(webSearchParam);
+      } catch (e) {
+        console.error('Failed to parse web search results param:', e);
+        return;
+      }
       if (parsedResults && parsedResults.length > 0) {
         setIsGeneratingWebContent(true);
         console.log(`🌐 Auto-generating web search content for: ${topicNameParam}`);
@@ -200,7 +208,7 @@ export default function TopicDetailScreen() {
         });
       }
     }
-  }, [generateWebContent, webSearchParam, topicNameParam, isGeneratingWebContent, webSearchContent]);
+  }, [generateWebContent, webSearchParam, topicNameParam, isGeneratingWebContent, webSearchContent, generateWebSearchContentMutation, id]);
 
   // Persist content to database when it's generated (idempotent via server check)
   useEffect(() => {
@@ -302,7 +310,7 @@ export default function TopicDetailScreen() {
     
     try {
       console.log(`🔍 Starting web search for topic: ${topic.name}`);
-      const result = await searchTopicUpdates(topic.name);
+      const result = await searchTopicUpdates(topic.name, provider);
       
       console.log(`✅ Web search complete. Found ${result.newSubtopics.length} updates`);
       setWebSearchResults(result.newSubtopics);

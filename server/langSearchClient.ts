@@ -249,7 +249,7 @@ function extractActualUpdatesFromResults(
    Batch Topic Search
 ======================= */
 
-interface CompletedTopic {
+export interface CompletedTopic {
   id: string;
   name: string;
   completedAt: Date;

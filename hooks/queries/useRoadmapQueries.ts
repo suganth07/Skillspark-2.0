@@ -16,6 +16,7 @@ import {
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
 import { checkTopicsForUpdates } from '@/lib/webSearchService';
+import { useWebSearchProviderStore } from '@/hooks/stores/useWebSearchProviderStore';
 import type { RoadmapWithProgress, RoadmapStep, CategorizedRoadmaps, CareerRoadmapGroup } from '@/server/queries/roadmaps';
 
 // ============================================
@@ -330,13 +331,17 @@ export function useCheckTopicUpdates() {
         return { hasUpdates: false, updates: [] };
       }
 
+      // Get the current provider
+      const provider = useWebSearchProviderStore.getState().provider;
+      
       // Check for updates using selected web search provider
       const updates = await checkTopicsForUpdates(
         completedTopics.map(topic => ({
           id: topic.id, // Add id field
           name: topic.name,
           completedAt: topic.completedDate, // Use completedAt instead of completedDate
-        }))
+        })),
+        provider
       );
 
       return {

@@ -1,4 +1,4 @@
-import { useWebSearchProviderStore } from '@/hooks/stores/useWebSearchProviderStore';
+import type { WebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import * as LangSearchClient from '@/server/langSearchClient';
 import * as SerperClient from '@/server/serperClient';
 
@@ -6,22 +6,17 @@ import * as SerperClient from '@/server/serperClient';
    Unified Types
 ======================= */
 
-export interface SearchResult {
-  title: string;
-  snippet: string;
-  url?: string;
-  relevance_score: number;
-}
+// Re-export types from client modules for external use
+export type { SerperResult } from '@/server/serperClient';
+export type { LangSearchResult } from '@/server/langSearchClient';
 
-export interface TopicUpdate {
-  topicId?: string;
-  topicName: string;
-  newSubtopics: string[];
-  sources: SearchResult[];
-  hasUpdates: boolean;
-}
+// Union type for search results from either provider
+export type SearchResult = SerperClient.SerperResult | LangSearchClient.LangSearchResult;
 
-interface CompletedTopic {
+// Union type for topic updates from either provider
+export type TopicUpdate = SerperClient.TopicUpdate | LangSearchClient.TopicUpdate;
+
+export interface CompletedTopic {
   id: string;
   name: string;
   completedAt: Date;
@@ -37,15 +32,16 @@ interface CompletedTopic {
  */
 export async function searchTopicUpdates(
   topicName: string,
+  provider: WebSearchProvider | undefined,
   completedDate?: Date,
   topicId?: string
-): Promise<TopicUpdate> {
-  // Get the selected provider from storage
-  const provider = useWebSearchProviderStore.getState().provider;
+): Promise<SerperClient.TopicUpdate | LangSearchClient.TopicUpdate> {
+  // Server-safe fallback if provider is undefined
+  const selectedProvider = provider || 'langsearch';
   
-  console.log(`🌐 Using ${provider} for web search`);
+  console.log(`🌐 Using ${selectedProvider} for web search`);
   
-  if (provider === 'serper') {
+  if (selectedProvider === 'serper') {
     return await SerperClient.searchTopicUpdates(topicName, completedDate, topicId);
   } else {
     // Default to langsearch
@@ -57,14 +53,15 @@ export async function searchTopicUpdates(
  * Check multiple topics for updates using the selected web search provider
  */
 export async function checkTopicsForUpdates(
-  topics: CompletedTopic[]
-): Promise<TopicUpdate[]> {
-  // Get the selected provider from storage
-  const provider = useWebSearchProviderStore.getState().provider;
+  topics: CompletedTopic[],
+  provider: WebSearchProvider | undefined
+): Promise<Array<SerperClient.TopicUpdate | LangSearchClient.TopicUpdate>> {
+  // Server-safe fallback if provider is undefined
+  const selectedProvider = provider || 'langsearch';
   
-  console.log(`🌐 Checking topics for updates using ${provider}`);
+  console.log(`🌐 Checking topics for updates using ${selectedProvider}`);
   
-  if (provider === 'serper') {
+  if (selectedProvider === 'serper') {
     return await SerperClient.checkTopicsForUpdates(topics);
   } else {
     // Default to langsearch - convert to old format

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Globe, Search } from 'lucide-react-native';
 import { useWebSearchProvider, useSetWebSearchProvider, useIsWebSearchProviderAvailable, type WebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
@@ -52,14 +52,16 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
           const isSelected = currentProvider === provider.id;
 
           return (
-            <View
+            <Pressable
               key={provider.id}
               className={`
                 p-4 rounded-lg border-2 
                 ${isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card'}
                 ${!isAvailable ? 'opacity-50' : ''}
               `}
-              onTouchEnd={() => isAvailable && handleProviderSelect(provider.id)}
+              onPress={() => handleProviderSelect(provider.id)}
+              disabled={!isAvailable}
+              accessibilityRole="button"
             >
               <View className="flex-row items-center gap-3">
                 <View className={`p-2 rounded-full ${isSelected ? 'bg-primary' : 'bg-muted'}`}>
@@ -90,7 +92,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
                   </Text>
                 </View>
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </View>

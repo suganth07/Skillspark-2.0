@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
 import { searchTopicUpdates } from '@/lib/webSearchService';
+import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -102,12 +103,14 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
+  
+  const userId = useCurrentUserId();
+  const provider = useWebSearchProvider();
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
   const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const router = useRouter();
-  const currentUserId = useCurrentUserId();
 
   // TanStack Query hooks - automatic caching and refetching
   const { 
@@ -115,7 +118,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     isLoading, 
     error,
     refetch 
-  } = useRoadmapDetails(roadmapId, currentUserId || undefined);
+  } = useRoadmapDetails(roadmapId, userId || undefined);
   
   const deleteRoadmapMutation = useDeleteRoadmap();
   const updateStepCompletionMutation = useUpdateStepCompletion();
@@ -125,14 +128,14 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   // Reload roadmap details when returning from quiz
   useFocusEffect(
     useCallback(() => {
-      if (currentUserId && roadmapId) {
+      if (userId && roadmapId) {
         refetch();
       }
-    }, [roadmapId, currentUserId, refetch])
+    }, [roadmapId, userId, refetch])
   );
 
   const handleTakeQuiz = async (step: RoadmapStep) => {
-    if (!currentUserId) return;
+    if (!userId) return;
     
     try {
       let quizId = step.quizId;
@@ -141,7 +144,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
       if (!quizId) {
         setGeneratingQuizForStep(step.id);
         const result = await generateQuizMutation.mutateAsync({
-          userId: currentUserId,
+          userId: userId,
           roadmapId,
           stepId: step.id,
           prerequisiteName: step.title
@@ -185,11 +188,11 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   };
 
   const handleConfirmDelete = async () => {
-    if (!currentUserId) return;
+    if (!userId) return;
 
     try {
       await deleteRoadmapMutation.mutateAsync({ 
-        userId: currentUserId, 
+        userId: userId, 
         roadmapId 
       });
       onDelete?.();
@@ -199,12 +202,12 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   };
 
   const handleToggleCompletion = async (step: RoadmapStep) => {
-    if (!currentUserId) return;
+    if (!userId) return;
 
     try {
       await updateStepCompletionMutation.mutateAsync({
         stepId: step.id,
-        userId: currentUserId,
+        userId: userId,
         roadmapId: roadmapId,
         isCompleted: !step.isCompleted,
       });
@@ -219,12 +222,12 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   };
 
   const handleCheckUpdates = async () => {
-    if (!currentUserId) return;
+    if (!userId) return;
 
     try {
       const result = await checkTopicUpdatesMutation.mutateAsync({
         roadmapId,
-        userId: currentUserId,
+        userId: userId,
       });
 
       if (result.hasUpdates) {
@@ -265,7 +268,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
 
     try {
       console.log(`🔍 Starting web search for roadmap: ${roadmap.title}`);
-      const result = await searchTopicUpdates(roadmap.title);
+      const result = await searchTopicUpdates(roadmap.title, provider);
 
       console.log(`✅ Web search complete. Found ${result.newSubtopics.length} updates`);
       setWebSearchResults(result.newSubtopics);

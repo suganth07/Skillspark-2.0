@@ -10,12 +10,13 @@ import {
   getQuizWithQuestions,
   submitQuizAttempt,
   updateStepCompletion,
-  getCompletedTopicsForUpdates 
+  getCompletedTopicsForUpdates,
+  getCategorizedRoadmaps
 } from '@/server/queries/roadmaps';
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
 import { checkTopicsForUpdates } from '@/lib/webSearchService';
-import type { RoadmapWithProgress, RoadmapStep } from '@/server/queries/roadmaps';
+import type { RoadmapWithProgress, RoadmapStep, CategorizedRoadmaps, CareerRoadmapGroup } from '@/server/queries/roadmaps';
 
 // ============================================
 // QUERY HOOKS (for fetching data)
@@ -31,6 +32,18 @@ export function useUserRoadmaps(userId: string | undefined) {
     queryFn: () => getUserRoadmaps(userId!),
     enabled: !!userId, // Only run when userId is available
     staleTime: 5 * 60 * 1000, // Fresh for 5 minutes
+  });
+}
+
+/**
+ * Hook to fetch categorized roadmaps (standalone vs career)
+ */
+export function useCategorizedRoadmaps(userId: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.roadmaps.list(userId || ''), 'categorized'],
+    queryFn: () => getCategorizedRoadmaps(userId!),
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

@@ -10,7 +10,9 @@ import {
   quizAttempts, 
   userKnowledge,
   userSubtopicPerformance,
-  users
+  users,
+  careerTopics,
+  careerPaths
 } from '@/db/schema';
 import type { KnowledgeGraph, Prerequisite, QuizQuestion } from '@/lib/gemini';
 import { createId } from '@paralleldrive/cuid2';
@@ -285,6 +287,94 @@ export async function getUserRoadmaps(userId: string): Promise<RoadmapWithProgre
     stepsCount: roadmap.stepsCount || 0,
     completedSteps: roadmap.completedSteps || 0
   })) as RoadmapWithProgress[];
+}
+
+// Interface for career-grouped roadmaps
+export interface CareerRoadmapGroup {
+  careerPathId: string;
+  careerPathName: string;
+  careerPathDescription: string | null;
+  roadmaps: (RoadmapWithProgress & { careerTopicName: string })[];
+}
+
+export interface CategorizedRoadmaps {
+  standalone: RoadmapWithProgress[];
+  career: CareerRoadmapGroup[];
+}
+
+// Get user's roadmaps categorized by standalone vs career
+export async function getCategorizedRoadmaps(userId: string): Promise<CategorizedRoadmaps> {
+  // First get all roadmaps with progress
+  const allRoadmaps = await getUserRoadmaps(userId);
+  
+  // Get all career topics that have linked roadmaps for this user
+  const linkedCareerTopics = await db
+    .select({
+      roadmapId: careerTopics.linkedRoadmapId,
+      careerTopicName: careerTopics.name,
+      careerPathId: careerTopics.careerPathId,
+      careerPathName: careerPaths.roleName,
+      careerPathDescription: careerPaths.roleDescription,
+    })
+    .from(careerTopics)
+    .innerJoin(careerPaths, eq(careerTopics.careerPathId, careerPaths.id))
+    .where(
+      and(
+        eq(careerPaths.userId, userId),
+        sql`${careerTopics.linkedRoadmapId} IS NOT NULL`
+      )
+    );
+  
+  // Create a map of roadmapId -> career info
+  const careerRoadmapMap = new Map<string, {
+    careerTopicName: string;
+    careerPathId: string;
+    careerPathName: string;
+    careerPathDescription: string | null;
+  }>();
+  
+  for (const topic of linkedCareerTopics) {
+    if (topic.roadmapId) {
+      careerRoadmapMap.set(topic.roadmapId, {
+        careerTopicName: topic.careerTopicName,
+        careerPathId: topic.careerPathId,
+        careerPathName: topic.careerPathName,
+        careerPathDescription: topic.careerPathDescription,
+      });
+    }
+  }
+  
+  // Separate standalone and career roadmaps
+  const standalone: RoadmapWithProgress[] = [];
+  const careerRoadmapsMap = new Map<string, CareerRoadmapGroup>();
+  
+  for (const roadmap of allRoadmaps) {
+    const careerInfo = careerRoadmapMap.get(roadmap.id);
+    
+    if (careerInfo) {
+      // This is a career roadmap
+      if (!careerRoadmapsMap.has(careerInfo.careerPathId)) {
+        careerRoadmapsMap.set(careerInfo.careerPathId, {
+          careerPathId: careerInfo.careerPathId,
+          careerPathName: careerInfo.careerPathName,
+          careerPathDescription: careerInfo.careerPathDescription,
+          roadmaps: [],
+        });
+      }
+      careerRoadmapsMap.get(careerInfo.careerPathId)!.roadmaps.push({
+        ...roadmap,
+        careerTopicName: careerInfo.careerTopicName,
+      });
+    } else {
+      // This is a standalone roadmap
+      standalone.push(roadmap);
+    }
+  }
+  
+  return {
+    standalone,
+    career: Array.from(careerRoadmapsMap.values()),
+  };
 }
 
 // Get roadmap details with steps

@@ -94,14 +94,6 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
           );
         })}
       </View>
-
-      <View className="mt-2 p-3 bg-muted/50 rounded-lg">
-        <Text className="text-xs text-muted-foreground">
-          💡 Tip: Configure API keys in your .env file:
-          {'\n'}• EXPO_PUBLIC_LANG_SEARCH_API_KEY
-          {'\n'}• EXPO_PUBLIC_SERPER_API_KEY
-        </Text>
-      </View>
     </View>
   );
 }

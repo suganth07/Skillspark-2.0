@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, ActivityIndicator, Pressable, Modal, Alert } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, ActivityIndicator, Pressable, Modal, Alert, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -33,6 +33,10 @@ export default function CareerPathDetailScreen() {
   const router = useRouter();
   const currentUserId = useCurrentUserId() || '';
   const { isDarkColorScheme } = useColorScheme();
+  
+  // Refs for scrolling to categories
+  const scrollViewRef = useRef<ScrollView>(null);
+  const categoryRefs = useRef<Record<string, View | null>>({});
   
   // State for roadmap generation modal
   const [selectedTopic, setSelectedTopic] = useState<CareerTopic | null>(null);
@@ -163,14 +167,54 @@ export default function CareerPathDetailScreen() {
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
           >
-            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            <ArrowLeft size={20} className="text-foreground" />
           </Pressable>
-          <Text className="text-lg font-semibold flex-1 ml-3">Loading...</Text>
         </View>
-        <View className="flex-1 justify-center items-center px-6">
-          <ActivityIndicator size="large" />
-          <Text className="mt-4 text-muted-foreground text-center">Loading career path...</Text>
-        </View>
+        <ScrollView className="flex-1 px-4 py-6">
+          {/* Title skeleton */}
+          <View className="h-8 w-3/4 bg-muted rounded-lg mb-3 animate-pulse" />
+          {/* Description skeleton */}
+          <View className="h-4 w-full bg-muted rounded-lg mb-2 animate-pulse" />
+          <View className="h-4 w-5/6 bg-muted rounded-lg mb-6 animate-pulse" />
+          
+          {/* Stats skeleton */}
+          <View className="flex-row gap-4 mb-6">
+            {[1, 2, 3].map((i) => (
+              <View key={i} className="gap-1">
+                <View className="h-8 w-16 bg-muted rounded-lg animate-pulse" />
+                <View className="h-3 w-12 bg-muted rounded-lg animate-pulse" />
+              </View>
+            ))}
+          </View>
+          
+          {/* Categories skeleton */}
+          <View className="mb-6">
+            <View className="h-4 w-24 bg-muted rounded-lg mb-2 animate-pulse" />
+            <View className="flex-row gap-2 flex-wrap">
+              {[1, 2, 3, 4].map((i) => (
+                <View key={i} className="h-7 w-20 bg-muted rounded-full animate-pulse" />
+              ))}
+            </View>
+          </View>
+          
+          {/* Topics skeleton */}
+          {[1, 2, 3].map((cardIndex) => (
+            <View key={cardIndex} className="mb-4 p-4 bg-card border border-border rounded-xl">
+              <View className="h-5 w-32 bg-muted rounded-lg mb-4 animate-pulse" />
+              {[1, 2, 3].map((topicIndex) => (
+                <View key={topicIndex} className="p-4 border-2 border-border rounded-xl mb-3">
+                  <View className="h-5 w-2/3 bg-muted rounded-lg mb-2 animate-pulse" />
+                  <View className="h-4 w-full bg-muted rounded-lg mb-1 animate-pulse" />
+                  <View className="h-4 w-4/5 bg-muted rounded-lg mb-3 animate-pulse" />
+                  <View className="flex-row gap-2">
+                    <View className="h-6 w-16 bg-muted rounded-full animate-pulse" />
+                    <View className="h-6 w-12 bg-muted rounded-full animate-pulse" />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -310,82 +354,99 @@ export default function CareerPathDetailScreen() {
           onPress={() => router.back()}
           className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
         >
-          <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          <ArrowLeft size={20} className="text-foreground" />
         </Pressable>
-        <Text className="text-lg font-semibold flex-1 ml-3" numberOfLines={1}>
-          {careerPath.roleName}
-        </Text>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="p-6 gap-6">
+      <ScrollView ref={scrollViewRef} className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="px-4 py-6 gap-6">
           {/* Career Path Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{careerPath.roleName}</CardTitle>
-              {careerPath.roleDescription && (
-                <Text className="text-muted-foreground mt-2 leading-6">
-                  {careerPath.roleDescription}
+          <View>
+            <Text className="text-2xl font-bold text-foreground mb-2">{careerPath.roleName}</Text>
+            {careerPath.roleDescription && (
+              <Text className="text-muted-foreground leading-6 mb-6">
+                {careerPath.roleDescription}
+              </Text>
+            )}
+            
+            <View className="flex-row items-center gap-4 flex-wrap mb-6">
+              <View>
+                <Text className="text-2xl font-bold text-primary">
+                  {careerPath.topics.length}
                 </Text>
-              )}
-            </CardHeader>
-            <CardContent>
-              <View className="flex-row items-center gap-4 flex-wrap">
-                <View>
-                  <Text className="text-2xl font-bold text-primary">
-                    {careerPath.topics.length}
-                  </Text>
-                  <Text className="text-xs text-muted-foreground">Skills</Text>
-                </View>
-                <View>
-                  <Text className="text-2xl font-bold text-primary">
-                    {roadmapsGenerated}
-                  </Text>
-                  <Text className="text-xs text-muted-foreground">Roadmaps</Text>
-                </View>
-                <View>
-                  <Text className="text-2xl font-bold text-primary">
-                    {careerPath.totalEstimatedHours}h
-                  </Text>
-                  <Text className="text-xs text-muted-foreground">Est. Time</Text>
-                </View>
+                <Text className="text-xs text-muted-foreground">Skills</Text>
               </View>
-
-              {/* Categories */}
-              {careerPath.categories.length > 0 && (
-                <View className="mt-4">
-                  <Text className="text-sm font-semibold text-foreground mb-2">Categories</Text>
-                  <View className="flex-row flex-wrap gap-2">
-                    {careerPath.categories.map((category) => {
-                      const colorScheme = getCategoryColor(category);
-                      return (
-                        <View key={category} className={`px-3 py-1.5 rounded-full ${colorScheme.bg}`}>
-                          <Text className={`text-xs font-medium ${colorScheme.text}`}>{category}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* Info about clicking topics */}
-              <View className="mt-4 p-3 bg-secondary/50 rounded-lg">
-                <Text className="text-xs text-muted-foreground text-center">
-                  Tap a skill to generate its learning roadmap
+              <View>
+                <Text className="text-2xl font-bold text-primary">
+                  {roadmapsGenerated}
+                </Text>
+                <Text className="text-xs text-muted-foreground">
+                  {roadmapsGenerated === 1 ? "Roadmap" : "Roadmaps"}
                 </Text>
               </View>
-            </CardContent>
-          </Card>
+              <View>
+                <Text className="text-2xl font-bold text-primary">
+                  {careerPath.totalEstimatedHours}h
+                </Text>
+                <Text className="text-xs text-muted-foreground">Est. Time</Text>
+              </View>
+            </View>
+
+            {/* Categories */}
+            {careerPath.categories.length > 0 && (
+              <View className="mb-6">
+                <Text className="text-sm font-semibold text-foreground mb-2">Categories</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {careerPath.categories.map((category) => {
+                    const colorScheme = getCategoryColor(category);
+                    return (
+                      <TouchableOpacity 
+                        key={category}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          const categoryView = categoryRefs.current[category];
+                          if (categoryView && scrollViewRef.current) {
+                            categoryView.measureLayout(
+                              scrollViewRef.current as any,
+                              (x, y) => {
+                                scrollViewRef.current?.scrollTo({ y: y - 80, animated: true });
+                              },
+                              (error) => console.log('measureLayout error:', error)
+                            );
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full ${colorScheme.bg}`}
+                      >
+                        <Text className={`text-xs font-medium ${colorScheme.text}`}>{category}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Info about clicking topics */}
+            <View className="p-3 bg-secondary/50 rounded-lg">
+              <Text className="text-xs text-muted-foreground text-center">
+                Tap a skill to generate its learning roadmap
+              </Text>
+            </View>
+          </View>
 
           {/* Topics by Category */}
           {topicsByCategory && Object.entries(topicsByCategory).map(([category, topics]) => {
             const colorScheme = getCategoryColor(category);
             return (
-              <Card key={category}>
+              <Card 
+                key={category}
+                ref={(ref) => {
+                  categoryRefs.current[category] = ref;
+                }}
+              >
                 <CardHeader>
-                  <View className="flex-row items-center justify-between">
-                    <CardTitle>{category}</CardTitle>
-                    <View className={`px-3 py-1.5 rounded-full ${colorScheme.bg}`}>
+                  <View className="flex-row items-center justify-between gap-3">
+                    <CardTitle className="flex-1 flex-shrink">{category}</CardTitle>
+                    <View className={`px-3 py-1.5 rounded-full ${colorScheme.bg} flex-shrink-0`}>
                       <Text className={`text-xs font-medium ${colorScheme.text}`}>{topics.length} skills</Text>
                     </View>
                   </View>

@@ -9,6 +9,7 @@ import {
   AlignLeft,
   AlignRight,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   Baby,
   BadgeAlert,
@@ -90,6 +91,7 @@ interopIcon(Lamp);
 interopIcon(Table);
 interopIcon(ArrowDown);
 interopIcon(ArrowUp);
+interopIcon(ArrowLeft);
 interopIcon(ChevronDown);
 interopIcon(LayoutPanelLeft);
 interopIcon(MenuSquare);
@@ -136,6 +138,7 @@ export {
   AlignLeft,
   AlignRight,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   Baby,
   BadgeAlert,

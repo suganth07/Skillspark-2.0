@@ -274,7 +274,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                 {showAdvanced && (
                   <Animated.View 
                     entering={FadeIn.duration(200)}
-                    className="p-4 bg-secondary/50 rounded-lg mb-4"
+                    className="p-4 bg-secondary/50 rounded-lg mb-6"
                   >
                     {/* Level Transition */}
                     <View className="mb-5">
@@ -327,7 +327,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                         numberOfLines={3}
                         textAlignVertical="top"
                       />
-                      <Text className="text-xs text-muted-foreground leading-relaxed">
+                      <Text className="text-xs text-muted-foreground leading-relaxed mb-8">
                         Tell us what you want to focus on, skip, or prioritize in your career path.
                       </Text>
                     </View>
@@ -335,7 +335,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                 )}
 
                 {validationError && (
-                  <View className="mt-4">
+                  <View className="mb-4">
                     <ErrorDisplay
                       error={validationError}
                       onDismiss={() => setValidationError(null)}
@@ -344,8 +344,7 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
                   </View>
                 )}
                 {error && (
-                  <View className="mt-4">
-
+                  <View className="mb-4">
                     <ErrorDisplay
                       error={error}
                       onRetry={() => handleGenerate()}

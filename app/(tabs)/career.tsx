@@ -220,7 +220,7 @@ export default function CareerScreen() {
                 {careerPaths
                   .filter(path => path.roleName.toLowerCase().includes(searchQuery.toLowerCase()))
                   .length > 0 ? (
-                  <View className="space-y-4">
+                  <View className="gap-4">
                     {careerPaths
                       .filter(path => path.roleName.toLowerCase().includes(searchQuery.toLowerCase()))
                       .map((path, index) => (

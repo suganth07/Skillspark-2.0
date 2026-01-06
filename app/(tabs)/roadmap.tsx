@@ -195,7 +195,7 @@ export default function RoadmapScreen() {
         )}
 
         {/* Main Content - Roadmaps */}
-        {!isLoading && !error && filteredRoadmaps && filteredRoadmaps.length > 0 && (
+        {!isLoading && !error && categorizedData && categorizedData.standalone.length > 0 && (
           <View className="space-y-6">
             {/* Search Section */}
             <View>
@@ -218,9 +218,9 @@ export default function RoadmapScreen() {
             {/* Roadmaps List */}
             <View>
               {/* Section Header */}
-              <View className="mb-4">
+              <View className="m-2">
                 <Text className="text-base font-medium text-muted-foreground">
-                  {filteredRoadmaps.length === 0 
+                  {!filteredRoadmaps || filteredRoadmaps.length === 0 
                     ? 'No roadmaps found' 
                     : searchQuery 
                       ? `Found ${filteredRoadmaps.length} ${filteredRoadmaps.length === 1 ? 'result' : 'results'}`
@@ -230,8 +230,8 @@ export default function RoadmapScreen() {
               </View>
               
               {/* Roadmap Cards */}
-              {filteredRoadmaps.length > 0 ? (
-                <View className="space-y-4">
+              {filteredRoadmaps && filteredRoadmaps.length > 0 ? (
+                <View className="gap-4">
                   {filteredRoadmaps.map((roadmap, index) => (
                       <View key={roadmap.id}>
                         <View className="relative">

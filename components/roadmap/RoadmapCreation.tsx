@@ -267,7 +267,7 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                 {showAdvanced && (
                   <Animated.View 
                     entering={FadeIn.duration(200)}
-                    className="mb-4 p-4 bg-secondary/50 rounded-lg"
+                    className="p-4 bg-secondary/50 rounded-lg mb-6"
                   >
                     <Text className="text-sm font-medium text-foreground mb-3">
                       Learning Preferences (Optional)
@@ -282,15 +282,14 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                       numberOfLines={3}
                       textAlignVertical="top"
                     />
-                    <Text className="text-xs text-muted-foreground leading-relaxed mb-9">
-                      Tell us what you want to focus on, skip, or prioritize in your career path.
-
+                    <Text className="text-xs text-muted-foreground leading-relaxed mb-8">
+                      Tell us what you want to focus on, skip, or prioritize in your learning path.
                     </Text>
                   </Animated.View>
                 )}
 
                 {validationError && (
-                  <View className="mt-4">
+                  <View className="mb-4">
                     <ErrorDisplay
                       error={validationError}
                       onDismiss={() => setValidationError(null)}
@@ -299,8 +298,7 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                   </View>
                 )}
                 {error && (
-                  <View className="mt-4">
-
+                  <View className="mb-4">
                     <ErrorDisplay
                       error={error}
                       onRetry={() => handleGenerateRoadmap()}

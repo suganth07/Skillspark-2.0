@@ -259,6 +259,45 @@ export async function createPrerequisiteQuiz(
   });
 }
 
+// Create revision quiz for a completed topic
+export async function createRevisionQuiz(
+  roadmapId: string,
+  topicId: string,
+  topicName: string,
+  quizQuestions: QuizQuestion[],
+  difficulty: 'basic' | 'intermediate' | 'advanced'
+): Promise<string> {
+  return await db.transaction(async (tx) => {
+    // Create revision quiz
+    const quizId = createId();
+    await tx.insert(quizzes).values({
+      id: quizId,
+      title: `${topicName} - Revision`,
+      topicId,
+      roadmapId,
+      type: 'revision', // Tagged as revision quiz
+      difficulty
+    });
+
+    // Create questions with subtopic linking
+    for (const question of quizQuestions) {
+      await tx.insert(questions).values({
+        quizId,
+        subtopicId: question.subtopicId || null,
+        content: question.content,
+        type: question.type,
+        data: JSON.stringify({
+          ...question.data,
+          subtopicName: question.subtopicName
+        })
+      });
+    }
+
+    console.log(`✅ Created revision quiz: ${quizId} for topic: ${topicName}`);
+    return quizId;
+  });
+}
+
 // Get user's roadmaps with progress
 export async function getUserRoadmaps(userId: string): Promise<RoadmapWithProgress[]> {
   const roadmapsWithProgress = await db

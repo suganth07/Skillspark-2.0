@@ -6,6 +6,7 @@ import {
   getRoadmapWithSteps, 
   createRoadmap,
   createPrerequisiteQuiz,
+  createRevisionQuiz,
   deleteRoadmap,
   getQuizWithQuestions,
   submitQuizAttempt,
@@ -15,6 +16,7 @@ import {
 } from '@/server/queries/roadmaps';
 import { getSubtopics, createSubtopics } from '@/server/queries/topics';
 import { geminiService, type KnowledgeGraph } from '@/lib/gemini';
+import { generateRevisionContent, type RevisionSummary } from '@/server/agents/RevisionAgent';
 import { checkTopicsForUpdates } from '@/lib/webSearchService';
 import { useWebSearchProviderStore } from '@/hooks/stores/useWebSearchProviderStore';
 import type { RoadmapWithProgress, RoadmapStep, CategorizedRoadmaps, CareerRoadmapGroup } from '@/server/queries/roadmaps';
@@ -221,6 +223,67 @@ export function useGenerateQuiz() {
     },
     onSuccess: async ({ roadmapId, userId }) => {
       // Use centralized cache invalidation for comprehensive updates
+      await cacheInvalidation.invalidateRoadmapData(roadmapId, userId);
+    },
+  });
+}
+
+/**
+ * Hook to generate revision content (summary + quiz)
+ * For completed topics that users want to revise
+ */
+export function useGenerateRevision() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      roadmapId,
+      stepId,
+      topicId,
+      topicName,
+      context,
+      difficulty
+    }: {
+      userId: string;
+      roadmapId: string;
+      stepId: string;
+      topicId: string;
+      topicName: string;
+      context: string;
+      difficulty?: 'basic' | 'intermediate' | 'advanced';
+    }) => {
+      console.log(`🔄 [Revision Hook] Starting revision generation for "${topicName}"`);
+      
+      // Generate revision content (summary + quiz)
+      const { summary, quiz } = await generateRevisionContent(
+        topicId,
+        topicName,
+        context,
+        difficulty || 'intermediate'
+      );
+      
+      // Create revision quiz in database
+      const quizId = await createRevisionQuiz(
+        roadmapId,
+        topicId,
+        topicName,
+        quiz,
+        difficulty || 'intermediate'
+      );
+      
+      console.log(`✅ [Revision Hook] Revision content generated with quiz: ${quizId}`);
+      
+      return {
+        summary,
+        quizId,
+        roadmapId,
+        userId,
+        topicName
+      };
+    },
+    onSuccess: async ({ roadmapId, userId }) => {
+      // Invalidate caches
       await cacheInvalidation.invalidateRoadmapData(roadmapId, userId);
     },
   });

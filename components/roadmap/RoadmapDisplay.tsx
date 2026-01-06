@@ -10,7 +10,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
-import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
+import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz, useGenerateRevision } from '@/hooks/queries/useRoadmapQueries';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Search,
   ExternalLink,
+  Brain,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -103,6 +104,11 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [revisionSummary, setRevisionSummary] = useState<any>(null);
+  const [revisionQuizId, setRevisionQuizId] = useState<string | null>(null);
+  const [revisionStep, setRevisionStep] = useState<'summary' | 'quiz'>('summary');
+  const [generatingRevision, setGeneratingRevision] = useState(false);
   
   const userId = useCurrentUserId();
   const provider = useWebSearchProvider();
@@ -124,6 +130,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const updateStepCompletionMutation = useUpdateStepCompletion();
   const checkTopicUpdatesMutation = useCheckTopicUpdates();
   const generateQuizMutation = useGenerateQuiz();
+  const generateRevisionMutation = useGenerateRevision();
 
   // Reload roadmap details when returning from quiz
   useFocusEffect(
@@ -258,6 +265,52 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         );
       }
     }
+  };
+
+  const handleStartRevision = async (step: RoadmapStep) => {
+    if (!userId || !currentRoadmap) return;
+
+    if (!step.topicId) {
+      Alert.alert('Error', 'Cannot start revision: Topic ID missing');
+      return;
+    }
+
+    try {
+      setSelectedStep(step);
+      setGeneratingRevision(true);
+      setShowRevisionModal(true);
+      setRevisionStep('summary');
+
+      const result = await generateRevisionMutation.mutateAsync({
+        userId: userId,
+        roadmapId: roadmapId,
+        stepId: step.id,
+        topicId: step.topicId,
+        topicName: step.title,
+        context: currentRoadmap.roadmap.title,
+        difficulty: step.difficulty || 'intermediate'
+      });
+
+      setRevisionSummary(result.summary);
+      setRevisionQuizId(result.quizId);
+      setGeneratingRevision(false);
+    } catch (error) {
+      setGeneratingRevision(false);
+      setShowRevisionModal(false);
+      console.error('Failed to generate revision:', error);
+      Alert.alert(
+        'Error',
+        'Failed to generate revision content. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleRevisionQuizStart = () => {
+    if (!revisionQuizId || !selectedStep) return;
+    
+    setShowRevisionModal(false);
+    onTakeQuiz?.(revisionQuizId, `${selectedStep.title} - Revision`);
   };
 
   const handleWebSearch = async () => {
@@ -706,6 +759,150 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         </Animated.View>
       </Modal>
 
+      {/* Revision Modal */}
+      <Modal
+        transparent
+        visible={showRevisionModal}
+        animationType="none"
+        onRequestClose={() => !generatingRevision && setShowRevisionModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => !generatingRevision && setShowRevisionModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden max-h-[80%]"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            {generatingRevision ? (
+              <View className="p-8 items-center">
+                <View className="mb-6 items-center">
+                  <ActivityIndicator size="large" color="#8b5cf6" />
+                </View>
+                
+                <View className="items-center mb-2">
+                  <Text className="text-xl font-bold text-foreground mb-2">
+                    Generating Revision Content
+                  </Text>
+                  <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                    Creating a quick summary and 5 quiz questions to help you revise...
+                  </Text>
+                </View>
+
+                <View className="mt-4 px-4 py-3 bg-purple-100 dark:bg-purple-950 rounded-lg">
+                  <Text className="text-xs text-purple-700 dark:text-purple-400 text-center font-medium">
+                    🧠 Preparing your revision
+                  </Text>
+                </View>
+              </View>
+            ) : revisionStep === 'summary' && revisionSummary ? (
+              <ScrollView className="max-h-[600px]" showsVerticalScrollIndicator={false}>
+                <View className="p-6">
+                  <View className="flex-row items-center gap-2 mb-4">
+                    <Brain size={24} className="text-purple-600" />
+                    <Text className="text-xl font-bold text-foreground">
+                      Quick Revision Summary
+                    </Text>
+                  </View>
+                  
+                  <Text className="text-base font-semibold text-foreground mb-2">
+                    {revisionSummary.topicName}
+                  </Text>
+
+                  {/* Key Points */}
+                  <View className="mb-4">
+                    <Text className="text-sm font-semibold text-foreground mb-2">
+                      🎯 Key Points
+                    </Text>
+                    {revisionSummary.keyPoints.map((point: string, idx: number) => (
+                      <View key={idx} className="mb-2">
+                        <MarkdownText text={point} />
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Important Concepts */}
+                  <View className="mb-4">
+                    <Text className="text-sm font-semibold text-foreground mb-2">
+                      💡 Important Concepts
+                    </Text>
+                    {revisionSummary.importantConcepts.map((concept: string, idx: number) => (
+                      <View key={idx} className="mb-2">
+                        <MarkdownText text={concept} />
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Practical Applications */}
+                  {revisionSummary.practicalApplications && revisionSummary.practicalApplications.length > 0 && (
+                    <View className="mb-4">
+                      <Text className="text-sm font-semibold text-foreground mb-2">
+                        🚀 Practical Applications
+                      </Text>
+                      {revisionSummary.practicalApplications.map((app: string, idx: number) => (
+                        <View key={idx} className="mb-2">
+                          <MarkdownText text={app} />
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Review Tips */}
+                  {revisionSummary.reviewTips && revisionSummary.reviewTips.length > 0 && (
+                    <View className="mb-6">
+                      <Text className="text-sm font-semibold text-foreground mb-2">
+                        💭 Review Tips
+                      </Text>
+                      {revisionSummary.reviewTips.map((tip: string, idx: number) => (
+                        <View key={idx} className="mb-2">
+                          <MarkdownText text={tip} />
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Actions */}
+                  <View className="space-y-3">
+                    <Pressable
+                      onPress={handleRevisionQuizStart}
+                      className="w-full h-12 items-center justify-center rounded-lg bg-purple-600 active:opacity-90"
+                    >
+                      <Text className="text-base font-semibold text-white">
+                        Take Revision Quiz (5 Questions)
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => setShowRevisionModal(false)}
+                      className="w-full h-12 items-center justify-center rounded-lg border border-border bg-background active:bg-secondary"
+                    >
+                      <Text className="text-base font-medium text-foreground">
+                        Close
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </ScrollView>
+            ) : null}
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
       <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
@@ -814,6 +1011,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
             onPress={() => handleTopicPress(step)}
             onTakeQuiz={() => handleTakeQuiz(step)}
             onToggleCompletion={() => handleToggleCompletion(step)}
+            onRevise={() => handleStartRevision(step)}
             onViewResults={
               step.quizId && step.hasAttempt && onViewResults
                 ? () => onViewResults(step.quizId!, step.title)
@@ -834,6 +1032,7 @@ interface RoadmapStepItemProps {
   onPress: () => void;
   onTakeQuiz: () => void;
   onToggleCompletion: () => void;
+  onRevise: () => void;
   onViewResults?: () => void;
 }
 
@@ -844,6 +1043,7 @@ function RoadmapStepItem({
   onPress,
   onTakeQuiz,
   onToggleCompletion,
+  onRevise,
   onViewResults,
 }: RoadmapStepItemProps) {
   const isCompleted = step.isCompleted;
@@ -992,6 +1192,22 @@ function RoadmapStepItem({
                     className="px-4 py-2 rounded-lg border border-border bg-background active:bg-secondary"
                   >
                     <Text className="text-sm font-medium text-foreground">View Results</Text>
+                  </Pressable>
+                )}
+
+                {/* Revision Button - Only shown for completed topics */}
+                {isCompleted && step.topicId && (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onRevise();
+                    }}
+                    className="px-4 py-2 rounded-lg flex-row items-center gap-2 bg-purple-600 active:opacity-90"
+                  >
+                    <Brain size={14} className="text-white" />
+                    <Text className="text-sm font-medium text-white">
+                      Revise
+                    </Text>
                   </Pressable>
                 )}
 

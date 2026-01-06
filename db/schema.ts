@@ -139,7 +139,7 @@ export const quizzes = sqliteTable("quizzes", {
   topicId: text("topic_id").references(() => topics.id),
   roadmapId: text("roadmap_id").references(() => roadmaps.id),
 
-  type: text("type", { enum: ["proficiency_check", "topic_quiz", "daily_review"] }).notNull(),
+  type: text("type", { enum: ["proficiency_check", "topic_quiz", "daily_review", "revision"] }).notNull(),
   difficulty: text("difficulty"),
 
   createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(CURRENT_TIMESTAMP)`),

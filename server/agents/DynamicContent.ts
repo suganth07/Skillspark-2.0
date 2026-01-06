@@ -61,8 +61,11 @@ async function withRetry<T>(
 // ------------------------------
 // Agent Nodes (Content Generators with Retry)
 // ------------------------------
-async function generateDefaultNode(state: ContentAgentState): Promise<RawTopicExplanation | null> {
+async function generateDefaultNode(state: ContentAgentState, specificSubtopics?: string[]): Promise<RawTopicExplanation | null> {
   console.log("🔄 Agent Node: Generating DEFAULT content...");
+  if (specificSubtopics && specificSubtopics.length > 0) {
+    console.log(`🎯 Constraining to ${specificSubtopics.length} specific subtopic(s): ${specificSubtopics.join(', ')}`);
+  }
   
   const content = await withRetry(
     async () => {
@@ -70,7 +73,8 @@ async function generateDefaultNode(state: ContentAgentState): Promise<RawTopicEx
         state.topic,
         state.context,
         state.subtopicPerformance,
-        state.userPreferences
+        state.userPreferences,
+        specificSubtopics // Pass the constraint
       );
     },
     3,
@@ -84,8 +88,14 @@ async function generateDefaultNode(state: ContentAgentState): Promise<RawTopicEx
   return content;
 }
 
-async function generateSimplifiedNode(state: ContentAgentState, canonicalTitles: string[]): Promise<RawTopicExplanation | null> {
+async function generateSimplifiedNode(state: ContentAgentState, canonicalTitles: string[], specificSubtopics?: string[]): Promise<RawTopicExplanation | null> {
   console.log("🔄 Agent Node: Generating SIMPLIFIED content...");
+  if (specificSubtopics && specificSubtopics.length > 0) {
+    console.log(`🎯 Constraining to ${specificSubtopics.length} specific subtopic(s)`);
+  }
+  
+  // Use specificSubtopics as canonical titles if provided
+  const titlesToUse = specificSubtopics && specificSubtopics.length > 0 ? specificSubtopics : canonicalTitles;
   
   const content = await withRetry(
     async () => {
@@ -93,7 +103,7 @@ async function generateSimplifiedNode(state: ContentAgentState, canonicalTitles:
         state.topic,
         state.context,
         state.subtopicPerformance,
-        canonicalTitles, // Pass canonical titles
+        titlesToUse, // Use the appropriate titles
         state.userPreferences
       );
     },
@@ -108,8 +118,14 @@ async function generateSimplifiedNode(state: ContentAgentState, canonicalTitles:
   return content;
 }
 
-async function generateStoryNode(state: ContentAgentState, canonicalTitles: string[]): Promise<RawTopicExplanation | null> {
+async function generateStoryNode(state: ContentAgentState, canonicalTitles: string[], specificSubtopics?: string[]): Promise<RawTopicExplanation | null> {
   console.log("🔄 Agent Node: Generating STORY content...");
+  if (specificSubtopics && specificSubtopics.length > 0) {
+    console.log(`🎯 Constraining to ${specificSubtopics.length} specific subtopic(s)`);
+  }
+  
+  // Use specificSubtopics as canonical titles if provided
+  const titlesToUse = specificSubtopics && specificSubtopics.length > 0 ? specificSubtopics : canonicalTitles;
   
   const content = await withRetry(
     async () => {
@@ -117,7 +133,7 @@ async function generateStoryNode(state: ContentAgentState, canonicalTitles: stri
         state.topic,
         state.context,
         state.subtopicPerformance,
-        canonicalTitles, // Pass canonical titles
+        titlesToUse, // Use the appropriate titles
         state.userPreferences
       );
     },
@@ -344,4 +360,76 @@ export async function regenerateSingleContent(
   } else {
     return await generateStoryNode(state, canonicalTitles || []);
   }
+}
+
+// ------------------------------
+// Regenerate Selected Subtopics with User Instructions
+// ------------------------------
+export async function regenerateSelectedSubtopicsContent(
+  topicName: string,
+  context: string,
+  selectedSubtopicTitles: string[],
+  userInstructions: string
+): Promise<TopicExplanation | null> {
+  console.log(`🔄 [Selected Subtopics] Regenerating ${selectedSubtopicTitles.length} subtopics with user instructions`);
+  console.log(`📝 Subtopics: ${selectedSubtopicTitles.join(', ')}`);
+  console.log(`📝 Instructions: ${userInstructions}`);
+
+  // Generate all 3 tones with the user's instructions
+  // IMPORTANT: Format user preferences so AI actually uses them
+  const formattedPreferences = `
+🎯 CRITICAL USER REQUEST - MUST ADDRESS:
+${userInstructions}
+
+📌 FOCUS ONLY ON THESE SUBTOPICS:
+${selectedSubtopicTitles.map((title, i) => `${i + 1}. ${title}`).join('\n')}
+
+✅ REQUIREMENTS:
+- Answer the user's specific question/doubt above
+- Provide BETTER EXAMPLES that directly address their concern
+- Create NEW, DIFFERENT content (not the same as before)
+- Make explanations CLEARER and more focused on their question
+- Each subtopic MUST relate to answering their question
+  `;
+
+  console.log('📝 Formatted preferences for AI:', formattedPreferences);
+
+  const state: ContentAgentState = {
+    topic: topicName,
+    context,
+    userPreferences: formattedPreferences,
+    defaultContent: null,
+    simplifiedContent: null,
+    storyContent: null,
+  };
+
+  console.log('⚙️ [Selected Subtopics] Generating all 3 content tones in parallel...');
+
+  // Generate all 3 tones in parallel - CONSTRAINED to only selected subtopics
+  const [defaultContent, simplifiedContent, storyContent] = await Promise.all([
+    generateDefaultNode(state, selectedSubtopicTitles), // Pass specific subtopics
+    generateSimplifiedNode(state, selectedSubtopicTitles, selectedSubtopicTitles), // Pass as both canonical and specific
+    generateStoryNode(state, selectedSubtopicTitles, selectedSubtopicTitles), // Pass as both canonical and specific
+  ]);
+
+  console.log(`✅ [Selected Subtopics] Generation complete:
+    - Default: ${defaultContent ? 'Success' : 'Failed'}
+    - Simplified: ${simplifiedContent ? 'Success' : 'Failed'}
+    - Story: ${storyContent ? 'Success' : 'Failed'}
+  `);
+
+  // Merge the three versions
+  const mergedExplanation = mergeContentVersions(
+    defaultContent,
+    simplifiedContent,
+    storyContent
+  );
+
+  if (!mergedExplanation) {
+    console.error('❌ [Selected Subtopics] All content generation failed!');
+    return null;
+  }
+
+  console.log(`✅ [Selected Subtopics] Successfully regenerated with ${mergedExplanation.subtopics.length} subtopics`);
+  return mergedExplanation;
 }

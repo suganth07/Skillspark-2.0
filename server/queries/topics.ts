@@ -282,6 +282,23 @@ export async function updateSubtopicsContent(
     
     for (const subtopic of explanation.subtopics) {
       try {
+        // Find the existing subtopic by matching the title (case-insensitive)
+        const existingSubtopics = await tx
+          .select()
+          .from(subtopics)
+          .where(eq(subtopics.parentTopicId, parentTopicId));
+        
+        // Find matching subtopic by title
+        const matchingSubtopic = existingSubtopics.find(
+          st => st.name.toLowerCase().trim() === subtopic.title.toLowerCase().trim()
+        );
+
+        if (!matchingSubtopic) {
+          console.warn(`⚠️ No existing subtopic found for "${subtopic.title}" - skipping update`);
+          continue;
+        }
+
+        // Update the matched subtopic with new content
         await tx
           .update(subtopics)
           .set({
@@ -296,7 +313,7 @@ export async function updateSubtopicsContent(
               keyPoints: subtopic.keyPoints
             })
           })
-          .where(eq(subtopics.id, subtopic.id));
+          .where(eq(subtopics.id, matchingSubtopic.id));
 
         console.log(`✅ Updated subtopic with 3 content types: ${subtopic.title}`);
       } catch (error) {

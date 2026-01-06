@@ -142,13 +142,40 @@ export class GeminiService {
     
     if (preferences && preferences.trim()) {
       const lowerPrefs = preferences.toLowerCase();
+      
+      // Detect different user preferences
+      const wantsBasicOnly = lowerPrefs.includes('only basic') || lowerPrefs.includes('show only basic') || 
+                             lowerPrefs.includes('just basic') || lowerPrefs.includes('basic only') ||
+                             lowerPrefs.includes('beginner');
       const skipBasics = lowerPrefs.includes('skip basic') || lowerPrefs.includes('skip the basic') || 
                          lowerPrefs.includes('already know') || lowerPrefs.includes('go advanced') ||
                          lowerPrefs.includes('skip fundamentals');
-      const focusAdvanced = lowerPrefs.includes('advanced') || lowerPrefs.includes('complex') ||
-                            lowerPrefs.includes('expert') || lowerPrefs.includes('deep dive');
+      const skipAdvanced = lowerPrefs.includes('skip advanced') || lowerPrefs.includes('no advanced') ||
+                           lowerPrefs.includes('without advanced');
+      const focusAdvanced = lowerPrefs.includes('advanced') && !skipAdvanced && !wantsBasicOnly;
       
-      if (skipBasics || focusAdvanced) {
+      if (wantsBasicOnly) {
+        skipBasicsInstruction = `
+        
+        🚨 CRITICAL INSTRUCTION:
+        The user wants ONLY BASIC/BEGINNER level content. EXCLUDE all advanced and intermediate topics.
+        
+        DO NOT INCLUDE:
+        - Advanced topics (like Redux, GraphQL, TypeScript advanced features, etc.)
+        - Intermediate topics (like complex state management, advanced patterns)
+        - Expert-level concepts
+        
+        ONLY INCLUDE:
+        - Basic fundamentals (HTML, CSS, basic JavaScript)
+        - Introductory concepts
+        - Elementary prerequisites
+        - Beginner-friendly topics
+        - Foundation-level knowledge
+        
+        ALL prerequisites must have difficulty: "basic" ONLY.
+        Focus on building a strong foundation for absolute beginners.
+        `;
+      } else if (skipBasics || focusAdvanced) {
         skipBasicsInstruction = `
         
         🚨 CRITICAL INSTRUCTION:
@@ -167,6 +194,24 @@ export class GeminiService {
         
         Start from an intermediate baseline - assume the user has foundational knowledge.
         `;
+      } else if (skipAdvanced) {
+        skipBasicsInstruction = `
+        
+        🚨 CRITICAL INSTRUCTION:
+        The user wants to SKIP ADVANCED topics and focus on BASIC TO INTERMEDIATE content.
+        
+        DO NOT INCLUDE:
+        - Advanced topics (Redux, GraphQL, advanced TypeScript, etc.)
+        - Expert-level concepts
+        - Complex architectures
+        
+        INCLUDE:
+        - Basic fundamentals
+        - Intermediate topics
+        - Practical, commonly-used features
+        
+        Focus on "difficulty": "basic" and "intermediate" ONLY.
+        `;
       }
       
       preferencesContext = `
@@ -176,11 +221,12 @@ export class GeminiService {
       ${skipBasicsInstruction}
       
       MANDATORY - Follow these preferences strictly:
+      - If they say "only basic" or "beginner" → ONLY include basic-level prerequisites, EXCLUDE intermediate and advanced
       - If they say "skip basics" or "go advanced" → EXCLUDE all basic/fundamental prerequisites
-      - If they mention specific technologies → Include only those and related advanced topics
+      - If they say "skip advanced" → EXCLUDE all advanced prerequisites, keep basic and intermediate
+      - If they mention specific technologies → Include only those and related topics
       - If they mention areas to focus on → Make those the PRIMARY focus, 80% of content
       - If they mention areas they know → COMPLETELY EXCLUDE those from prerequisites
-      - If they want advanced content → Start from intermediate level, focus on expert topics
       - Tailor the entire learning path to their exact stated goals and preferences
       `;
     }
@@ -196,7 +242,11 @@ export class GeminiService {
       4. Estimates learning hours for each prerequisite
       5. Creates a logical progression
       
-      ${preferences ? '⚠️ CRITICAL: User preferences OVERRIDE default recommendations. If they want advanced content only, DO NOT include basic prerequisites.' : 'Include all prerequisites from basic to advanced for a comprehensive learning path.'}
+      ${preferences ? `⚠️ CRITICAL: User preferences are ABSOLUTE and OVERRIDE all default recommendations.
+      - If user says "only basic" → ONLY include prerequisites with difficulty: "basic"
+      - If user says "skip advanced" → ONLY include prerequisites with difficulty: "basic" or "intermediate"
+      - If user says "skip basics" → ONLY include prerequisites with difficulty: "intermediate" or "advanced"
+      Follow their exact instructions about difficulty levels. DO NOT deviate.` : 'Include all prerequisites from basic to advanced for a comprehensive learning path.'}
 
       Return ONLY valid JSON in this exact format:
       {
@@ -219,7 +269,7 @@ export class GeminiService {
         }
       }
 
-      ${preferences ? '🎯 Remember: User preferences are ABSOLUTE. Respect their stated goals completely.' : 'Make prerequisites comprehensive and cover all foundational knowledge.'}
+      ${preferences ? '🎯 Remember: User preferences are ABSOLUTE. Respect their stated goals about difficulty levels completely. If they want only basic, DO NOT include any intermediate or advanced topics.' : 'Make prerequisites comprehensive and cover all foundational knowledge.'}
     `;
 
     try {
@@ -466,7 +516,8 @@ export class GeminiService {
     topicName: string,
     context: string,
     subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
-    userPreferences?: string
+    userPreferences?: string,
+    specificSubtopics?: string[] // NEW: If provided, only generate these subtopics
   ): Promise<RawTopicExplanation> {
     // Build performance guidance for AI
     let performanceGuidance = '';
@@ -502,20 +553,42 @@ ${subtopicPerformance.map(p =>
       Adapt the content to align with these preferences where applicable.
       `;
     }
+
+    // Build specific subtopics constraint
+    let subtopicConstraint = '';
+    if (specificSubtopics && specificSubtopics.length > 0) {
+      subtopicConstraint = `
+      
+      🎯 CRITICAL CONSTRAINT - ONLY GENERATE THESE SPECIFIC SUBTOPICS:
+${specificSubtopics.map((title, i) => `      ${i + 1}. "${title}"`).join('\n')}
+      
+      ⚠️ DO NOT generate any other subtopics!
+      ⚠️ ONLY generate content for the ${specificSubtopics.length} subtopic${specificSubtopics.length > 1 ? 's' : ''} listed above!
+      ⚠️ Use EXACTLY these titles, do not change them!
+      ⚠️ The response MUST contain ONLY ${specificSubtopics.length} subtopic${specificSubtopics.length > 1 ? 's' : ''}!
+      `;
+    }
     
     const prompt = `
       Create a comprehensive, educational explanation for the topic "${topicName}" in the context of learning "${context}".
       ${performanceGuidance}
       ${preferencesGuidance}
+      ${subtopicConstraint}
       
       Provide:
       1. A clear overview of what ${topicName} is
       2. Why someone learning ${context} should understand ${topicName}
-      3. 5-8 UNIQUE key subtopics/concepts within ${topicName}
+      3. ${specificSubtopics && specificSubtopics.length > 0 
+          ? `THE FOLLOWING ${specificSubtopics.length} SPECIFIC SUBTOPIC${specificSubtopics.length > 1 ? 'S' : ''} (and ONLY these):`
+          : '5-8 UNIQUE key subtopics/concepts within ${topicName}'}
+         ${specificSubtopics && specificSubtopics.length > 0
+           ? specificSubtopics.map((title, i) => `\n         ${i + 1}. "${title}"`).join('')
+           : `
          ⚠️ CRITICAL: Each subtopic MUST have a UNIQUE, SPECIFIC title
          ⚠️ DO NOT repeat subtopic names like "Basic HTML", "Basic HTML", "Basic HTML"
          ⚠️ Examples of GOOD unique titles: "HTML Document Structure", "Common HTML Tags", "HTML Attributes", "Semantic HTML Elements"
-         ⚠️ Examples of BAD duplicate titles: "Basic HTML", "Basic HTML", "HTML Elements", "HTML Elements"
+         ⚠️ Examples of BAD duplicate titles: "Basic HTML", "Basic HTML", "HTML Elements", "HTML Elements"`
+         }
       4. For EACH subtopic, provide:
          - A clear, balanced explanation ${subtopicPerformance ? '(LENGTH MUST VARY based on performance data above!)' : ''}
          - A practical code example (if applicable)

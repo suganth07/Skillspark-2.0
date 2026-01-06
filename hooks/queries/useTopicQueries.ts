@@ -460,3 +460,76 @@ export function useGenerateWebSearchContent() {
   });
 }
 
+/**
+ * Mutation to regenerate selected subtopics with custom user instructions
+ * Generates all 3 tones (default, simplified, story) focused on user's question
+ */
+export function useRegenerateSelectedSubtopics() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({
+      topicId,
+      userId,
+      topicName,
+      context,
+      selectedSubtopicTitles,
+      userInstructions,
+    }: {
+      topicId: string;
+      userId: string;
+      topicName: string;
+      context: string;
+      selectedSubtopicTitles: string[];
+      userInstructions: string;
+    }) => {
+      console.log(`🔄 [Regenerate Subtopics] Starting regeneration for ${selectedSubtopicTitles.length} subtopics`);
+      console.log(`📝 User instructions: ${userInstructions}`);
+      
+      // Import the content generation function
+      const { regenerateSelectedSubtopicsContent } = await import('@/server/agents/DynamicContent');
+      
+      // Generate content for all 3 tones with user's instructions
+      const result = await regenerateSelectedSubtopicsContent(
+        topicName,
+        context,
+        selectedSubtopicTitles,
+        userInstructions
+      );
+      
+      if (!result) {
+        throw new Error('Failed to regenerate subtopics content');
+      }
+      
+      console.log(`✅ [Regenerate Subtopics] Content generated successfully`);
+      
+      // Update the content in database
+      await updateSubtopicsContent(topicId, result);
+      
+      return { topicId, userId, result };
+    },
+    onSuccess: ({ topicId, userId }) => {
+      console.log(`✅ [Regenerate Subtopics] Content saved, invalidating all queries...`);
+      
+      // Remove all cached data for this topic to force complete refetch
+      queryClient.removeQueries({ 
+        queryKey: queryKeys.topics.detail(topicId, userId) 
+      });
+      queryClient.removeQueries({ 
+        queryKey: queryKeys.topics.subtopics(topicId) 
+      });
+      
+      // Also invalidate to trigger refetch
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.detail(topicId, userId) 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.topics.subtopics(topicId) 
+      });
+    },
+    onError: (error) => {
+      console.error(`❌ [Regenerate Subtopics] Failed:`, error);
+    },
+  });
+}
+

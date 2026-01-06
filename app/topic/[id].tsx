@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, ActivityIndicator, ScrollView, Pressable, Alert } from 'react-native';
+import { View, ActivityIndicator, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Text } from '@/components/ui/text';
@@ -10,15 +10,15 @@ import { Badge } from '@/components/ui/badge';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
-import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, useRegenerateSelectedSubtopics, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { getItem, setItem, removeItem } from '@/lib/storage';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink } from 'lucide-react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2 } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 type ContentVersion = 'default' | 'simplified' | 'story';
 
@@ -104,6 +104,10 @@ export default function TopicDetailScreen() {
   const [webSearchExpandedSections, setWebSearchExpandedSections] = useState<Set<string>>(new Set());
   const [webSearchSubtopicVersions, setWebSearchSubtopicVersions] = useState<Record<string, ContentVersion>>({});
   const [contentView, setContentView] = useState<'old' | 'new'>('old'); // Toggle between old and new content
+  const [selectedSubtopics, setSelectedSubtopics] = useState<Set<string>>(new Set());
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerateInstructions, setRegenerateInstructions] = useState('');
+  const [isRegeneratingSubtopics, setIsRegeneratingSubtopics] = useState(false);
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -122,6 +126,9 @@ export default function TopicDetailScreen() {
 
   // Mutation to generate web search content
   const generateWebSearchContentMutation = useGenerateWebSearchContent();
+
+  // Mutation to regenerate selected subtopics
+  const regenerateSelectedSubtopicsMutation = useRegenerateSelectedSubtopics();
 
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
@@ -489,6 +496,54 @@ export default function TopicDetailScreen() {
       context,
       tone,
       canonicalTitles,
+    });
+  };
+
+  // Handler for regenerating selected subtopics with custom instructions
+  const handleRegenerateSelectedSubtopics = async () => {
+    if (!currentUserId || !currentTopicDetail || selectedSubtopics.size === 0) return;
+    
+    if (!regenerateInstructions.trim()) {
+      Alert.alert('Instructions Required', 'Please enter your question or instructions for regeneration.');
+      return;
+    }
+
+    // Get the titles of selected subtopics
+    const selectedSubtopicTitles = explanation.subtopics
+      .filter(st => selectedSubtopics.has(st.id))
+      .map(st => st.title);
+
+    console.log(`🔄 Regenerating ${selectedSubtopicTitles.length} subtopics with instructions`);
+
+    setIsRegeneratingSubtopics(true);
+    setShowRegenerateModal(false);
+
+    regenerateSelectedSubtopicsMutation.mutate({
+      topicId: topic.id,
+      userId: currentUserId,
+      topicName: topic.name,
+      context: topic.category,
+      selectedSubtopicTitles,
+      userInstructions: regenerateInstructions,
+    }, {
+      onSuccess: () => {
+        setIsRegeneratingSubtopics(false);
+        setSelectedSubtopics(new Set());
+        setRegenerateInstructions('');
+        Alert.alert(
+          'Regeneration Complete!',
+          'Selected subtopics have been regenerated with your instructions for all 3 learning styles.',
+          [{ text: 'OK' }]
+        );
+      },
+      onError: (error) => {
+        setIsRegeneratingSubtopics(false);
+        Alert.alert(
+          'Regeneration Failed',
+          error instanceof Error ? error.message : 'Failed to regenerate subtopics. Please try again.',
+          [{ text: 'OK' }]
+        );
+      },
     });
   };
 
@@ -976,7 +1031,40 @@ export default function TopicDetailScreen() {
             </Card>
           ) : (
             /* Original Subtopics Section */
-            <Card>
+            <>
+              {/* Regenerate Selected Subtopics Button */}
+              {selectedSubtopics.size > 0 && (
+                <Animated.View entering={FadeIn.duration(300)}>
+                  <Card className="border-2 border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
+                    <CardContent className="p-4">
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-1">
+                          <View className="flex-row items-center gap-2 mb-1">
+                            <Wand2 size={18} className="text-orange-600" />
+                            <Text className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                              {selectedSubtopics.size} subtopic{selectedSubtopics.size > 1 ? 's' : ''} selected
+                            </Text>
+                          </View>
+                          <Text className="text-xs text-orange-700 dark:text-orange-300">
+                            Regenerate with your custom instructions
+                          </Text>
+                        </View>
+                        <Button
+                          onPress={() => setShowRegenerateModal(true)}
+                          className="bg-orange-500 flex-row items-center gap-2"
+                        >
+                          <Wand2 size={16} className="text-white" />
+                          <Text className="text-white font-medium">
+                            Regenerate
+                          </Text>
+                        </Button>
+                      </View>
+                    </CardContent>
+                  </Card>
+                </Animated.View>
+              )}
+
+              <Card>
               <CardHeader>
                 <View className="flex-row items-center space-x-2 mb-2">
                   <BookOpen className="h-5 w-5 text-blue-600" />
@@ -999,47 +1087,83 @@ export default function TopicDetailScreen() {
                   const content = getSubtopicContent(subtopic, subtopic.id);
                   const currentVersion = getSubtopicVersion(subtopic.id);
                   
+                  const isSelected = selectedSubtopics.has(subtopic.id);
+                  
                   return (
                     <View 
                       key={subtopic.id}
-                      className="border border-border rounded-lg overflow-hidden"
+                      className={`rounded-lg overflow-hidden ${
+                        isSelected 
+                          ? 'border-2 border-orange-500 bg-orange-50/30 dark:bg-orange-950/20' 
+                          : 'border border-border'
+                      }`}
                     >
-                      {/* Accordion Header */}
-                      <Button
-                        variant="ghost"
-                        onPress={() => toggleSection(subtopic.id)}
-                        className="w-full flex-row items-center justify-between p-4 rounded-none"
-                      >
-                        <View className="flex-1 flex-row items-center space-x-2">
-                          <Text className="font-semibold text-base text-left flex-1">
-                            {index + 1}. {subtopic.title}
-                          </Text>
-                          <View className={`px-2 py-1 rounded ${
-                            performance 
-                              ? (performance.status === 'strong' ? 'bg-green-100' :
-                                 performance.status === 'weak' ? 'bg-red-100' :
-                                 'bg-yellow-100')
-                              : 'bg-gray-100'
-                          }`}>
-                            <Text className={`text-xs font-bold ${
-                              performance
-                                ? (performance.status === 'strong' ? 'text-green-700' :
-                                   performance.status === 'weak' ? 'text-red-700' :
-                                   'text-yellow-700')
-                                : 'text-gray-600'
-                            }`}>
-                              {performance 
-                                ? `${performance.correctCount}/${performance.totalAttempts}` 
-                                : 'No quiz'}
-                            </Text>
+                      {/* Accordion Header with Selection */}
+                      <View className="flex-row items-center">
+                        {/* Selection Checkbox */}
+                        <Pressable
+                          onPress={() => {
+                            const newSelected = new Set(selectedSubtopics);
+                            if (newSelected.has(subtopic.id)) {
+                              newSelected.delete(subtopic.id);
+                            } else {
+                              newSelected.add(subtopic.id);
+                            }
+                            setSelectedSubtopics(newSelected);
+                          }}
+                          className={`pl-3 pr-1 py-4 active:opacity-70 rounded-l-lg ${
+                            isSelected ? 'bg-orange-100 dark:bg-orange-900/30' : ''
+                          }`}
+                        >
+                          <View className={`rounded-full ${
+                            isSelected 
+                              ? 'border-2 border-orange-500 bg-orange-500' 
+                              : 'border-2 border-gray-300 dark:border-gray-600'
+                          } p-0.5`}>
+                            {isSelected ? (
+                              <CheckCircle2 size={18} className="text-white" />
+                            ) : (
+                              <Circle size={18} className="text-transparent" />
+                            )}
                           </View>
-                        </View>
-                        {isExpanded ? (
-                          <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
-                        )}
-                      </Button>
+                        </Pressable>
+
+                        <Button
+                          variant="ghost"
+                          onPress={() => toggleSection(subtopic.id)}
+                          className="flex-1 flex-row items-center justify-between p-4 rounded-none"
+                        >
+                          <View className="flex-1 flex-row items-center space-x-2">
+                            <Text className="font-semibold text-base text-left flex-1">
+                              {index + 1}. {subtopic.title}
+                            </Text>
+                            <View className={`px-2 py-1 rounded ${
+                              performance 
+                                ? (performance.status === 'strong' ? 'bg-green-100' :
+                                   performance.status === 'weak' ? 'bg-red-100' :
+                                   'bg-yellow-100')
+                                : 'bg-gray-100'
+                            }`}>
+                              <Text className={`text-xs font-bold ${
+                                performance
+                                  ? (performance.status === 'strong' ? 'text-green-700' :
+                                     performance.status === 'weak' ? 'text-red-700' :
+                                     'text-yellow-700')
+                                  : 'text-gray-600'
+                              }`}>
+                                {performance 
+                                  ? `${performance.correctCount}/${performance.totalAttempts}` 
+                                  : 'No quiz'}
+                              </Text>
+                            </View>
+                          </View>
+                          {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
+                          )}
+                        </Button>
+                      </View>
 
 
                       {/* Accordion Content */}
@@ -1167,6 +1291,7 @@ export default function TopicDetailScreen() {
               </View>
             </CardContent>
           </Card>
+            </>
           )}
           {explanation.bestPractices && explanation.bestPractices.length > 0 && (
             <Card>
@@ -1214,6 +1339,142 @@ export default function TopicDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Regenerating Selected Subtopics Overlay */}
+      {isRegeneratingSubtopics && (
+        <Animated.View 
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="absolute inset-0 z-50 bg-background/90 justify-center items-center"
+          style={{ zIndex: 50 }}
+        >
+          <Card className="mx-8 p-6">
+            <View className="items-center">
+              <View className="bg-orange-100 dark:bg-orange-900/30 rounded-full p-4 mb-4">
+                <Wand2 size={32} className="text-orange-600" />
+              </View>
+              <ActivityIndicator size="large" className="mb-4" />
+              <Text className="text-lg font-semibold text-foreground text-center mb-2">
+                Regenerating Subtopics
+              </Text>
+              <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                Creating better examples focused on your instructions for all 3 learning styles...
+              </Text>
+            </View>
+          </Card>
+        </Animated.View>
+      )}
+
+      {/* Regenerate Modal */}
+      <Modal
+        transparent
+        visible={showRegenerateModal}
+        animationType="none"
+        onRequestClose={() => setShowRegenerateModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowRegenerateModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Wand2 size={24} className="text-orange-500" />
+                <Text className="text-xl font-bold text-foreground">
+                  Regenerate Subtopics
+                </Text>
+              </View>
+              <Text className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                Provide your question or instructions to regenerate the selected subtopics with better examples focused on your needs.
+              </Text>
+
+              <View className="mb-2">
+                <Text className="text-sm font-medium text-foreground mb-1">
+                  Selected Subtopics ({selectedSubtopics.size})
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {explanation.subtopics
+                    .filter(st => selectedSubtopics.has(st.id))
+                    .map(st => (
+                      <View key={st.id} className="bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded">
+                        <Text className="text-xs text-orange-700 dark:text-orange-300">
+                          {st.title}
+                        </Text>
+                      </View>
+                    ))}
+                </View>
+              </View>
+
+              <View className="mb-6">
+                <Text className="text-sm font-medium text-foreground mb-2">
+                  Your Question/Instructions
+                </Text>
+                <View className="min-h-[120px] p-3 rounded-lg border border-border bg-background">
+                  <TextInput
+                    value={regenerateInstructions}
+                    onChangeText={setRegenerateInstructions}
+                    placeholder="e.g., How are variables created? Show more practical examples..."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    className="text-sm text-foreground"
+                    style={{ minHeight: 100, textAlignVertical: 'top' }}
+                  />
+                </View>
+                <Text className="text-xs text-muted-foreground mt-2">
+                  💡 Be specific about what you want to understand better
+                </Text>
+              </View>
+
+              <View className="flex-col gap-2">
+                <Pressable
+                  onPress={handleRegenerateSelectedSubtopics}
+                  disabled={!regenerateInstructions.trim()}
+                  className={`w-full h-12 items-center justify-center rounded-lg flex-row gap-2 ${
+                    !regenerateInstructions.trim()
+                      ? 'bg-orange-500/30'
+                      : 'bg-orange-500 active:bg-orange-600'
+                  }`}
+                >
+                  <Wand2 size={20} className="text-white" />
+                  <Text className="text-base font-semibold text-white">
+                    Regenerate (All 3 Styles)
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowRegenerateModal(false);
+                    setRegenerateInstructions('');
+                  }}
+                  className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
+                >
+                  <Text className="text-base font-medium text-muted-foreground">
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </View>
   );
 }

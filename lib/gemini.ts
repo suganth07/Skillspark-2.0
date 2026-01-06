@@ -401,9 +401,8 @@ export class GeminiService {
       - Make questions challenging but fair for ${difficulty} level
     `;
 
-    // Use retry wrapper for resilience
-    return withRetry(async () => {
-      const text = await aiService.generateContent({ prompt });
+    // aiService already has retry logic built-in
+    const text = await aiService.generateContent({ prompt });
       
       // Log raw response for debugging
       console.log('📝 AI raw response length:', text.length);
@@ -462,7 +461,6 @@ export class GeminiService {
       
       console.log(`✅ Generated ${questions.length} quiz questions from subtopics`);
       return questions;
-    }, 3, 1500); // 3 retries with 1.5s initial delay
   }
 
   async generatePersonalizedFeedback(

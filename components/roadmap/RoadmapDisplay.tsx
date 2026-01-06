@@ -1146,24 +1146,15 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
             }}
           >
             <View className="p-8 items-center">
-              <View className="mb-6 items-center">
-                <ActivityIndicator size="large" color="#3b82f6" />
-              </View>
-              
-              <View className="items-center mb-2">
-                <Text className="text-xl font-bold text-foreground mb-2">
-                  Generating Quiz
-                </Text>
-                <Text className="text-sm text-muted-foreground text-center leading-relaxed">
-                  Creating personalized questions to test your knowledge. This will only take a moment...
-                </Text>
-              </View>
-
-              <View className="mt-4 px-4 py-3 bg-primary/10 rounded-lg">
-                <Text className="text-xs text-primary text-center font-medium">
-                  🎯 Preparing your assessment
-                </Text>
-              </View>
+              <LoadingAnimation 
+                title="Generating Quiz"
+                messages={[
+                  'Creating personalized questions...',
+                  'Analyzing subtopics...',
+                  'Preparing your assessment...',
+                  'Almost ready...'
+                ]}
+              />
             </View>
           </Animated.View>
         </Animated.View>
@@ -1223,7 +1214,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
               {revisionReminderQueue.length > 1 && (
                 <View className="mb-4 px-3 py-2 bg-purple-50 dark:bg-purple-950/50 rounded-lg">
                   <Text className="text-xs text-purple-700 dark:text-purple-400 text-center">
-                    📚 {revisionReminderQueue.length} topics ready for revision
+                    {revisionReminderQueue.length} topics ready for revision
                   </Text>
                 </View>
               )}
@@ -1285,24 +1276,15 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
           >
             {generatingRevision ? (
               <View className="p-8 items-center">
-                <View className="mb-6 items-center">
-                  <ActivityIndicator size="large" color="#8b5cf6" />
-                </View>
-                
-                <View className="items-center mb-2">
-                  <Text className="text-xl font-bold text-foreground mb-2">
-                    Generating Revision Content
-                  </Text>
-                  <Text className="text-sm text-muted-foreground text-center leading-relaxed">
-                    Creating a quick summary and 5 quiz questions to help you revise...
-                  </Text>
-                </View>
-
-                <View className="mt-4 px-4 py-3 bg-purple-100 dark:bg-purple-950 rounded-lg">
-                  <Text className="text-xs text-purple-700 dark:text-purple-400 text-center font-medium">
-                    🧠 Preparing your revision
-                  </Text>
-                </View>
+                <LoadingAnimation 
+                  title="Generating Revision"
+                  messages={[
+                    'Creating quick summary...',
+                    'Preparing quiz questions...',
+                    'Analyzing key concepts...',
+                    'Almost ready...'
+                  ]}
+                />
               </View>
             ) : revisionStep === 'summary' && revisionSummary ? (
               <ScrollView className="max-h-[600px]" showsVerticalScrollIndicator={false}>
@@ -1321,7 +1303,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   {/* Key Points */}
                   <View className="mb-4">
                     <Text className="text-sm font-semibold text-foreground mb-2">
-                      🎯 Key Points
+                      Key Points
                     </Text>
                     {revisionSummary.keyPoints.map((point: string, idx: number) => (
                       <View key={idx} className="mb-2">
@@ -1333,7 +1315,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   {/* Important Concepts */}
                   <View className="mb-4">
                     <Text className="text-sm font-semibold text-foreground mb-2">
-                      💡 Important Concepts
+                      Important Concepts
                     </Text>
                     {revisionSummary.importantConcepts.map((concept: string, idx: number) => (
                       <View key={idx} className="mb-2">
@@ -1346,7 +1328,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   {revisionSummary.practicalApplications && revisionSummary.practicalApplications.length > 0 && (
                     <View className="mb-4">
                       <Text className="text-sm font-semibold text-foreground mb-2">
-                        🚀 Practical Applications
+                        Practical Applications
                       </Text>
                       {revisionSummary.practicalApplications.map((app: string, idx: number) => (
                         <View key={idx} className="mb-2">
@@ -1360,7 +1342,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   {revisionSummary.reviewTips && revisionSummary.reviewTips.length > 0 && (
                     <View className="mb-6">
                       <Text className="text-sm font-semibold text-foreground mb-2">
-                        💭 Review Tips
+                        Review Tips
                       </Text>
                       {revisionSummary.reviewTips.map((tip: string, idx: number) => (
                         <View key={idx} className="mb-2">

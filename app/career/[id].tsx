@@ -125,7 +125,6 @@ export default function CareerPathDetailScreen() {
       Alert.alert('Error', 'Failed to generate roadmap. Please try again.');
     }
   };
-
   // Group topics by category
   const topicsByCategory = careerPath?.topics.reduce((acc, topic) => {
     if (!acc[topic.category]) {

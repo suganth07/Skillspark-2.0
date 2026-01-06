@@ -9,23 +9,26 @@ import {
 } from '@/server/queries/roadmaps';
 
 export class RoadmapGenerationService {
-  async generateCompleteRoadmap(userId: string, topic: string): Promise<{
+  async generateCompleteRoadmap(userId: string, topic: string, preferences?: string): Promise<{
     roadmapId: string;
     knowledgeGraph: KnowledgeGraph;
     message: string;
   }> {
     try {
       console.log(`🚀 Starting roadmap generation for topic: ${topic}`);
+      if (preferences) {
+        console.log(`📝 Using preferences: ${preferences}`);
+      }
       
       // Step 1: Generate knowledge graph using Gemini
       console.log('📊 Generating knowledge graph with Gemini...');
-      const knowledgeGraph = await geminiService.generateKnowledgeGraph(topic);
+      const knowledgeGraph = await geminiService.generateKnowledgeGraph(topic, preferences);
       
       console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
       
       // Step 2: Create roadmap and store in database
       console.log('💾 Creating roadmap in database...');
-      const roadmapId = await createRoadmap(userId, knowledgeGraph);
+      const roadmapId = await createRoadmap(userId, knowledgeGraph, preferences);
       
       // Fetch roadmap and steps once to avoid N+1 queries
       const { roadmap, steps } = await getRoadmapWithSteps(roadmapId, userId);

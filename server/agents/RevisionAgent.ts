@@ -241,7 +241,7 @@ export async function generateRevisionContent(
     const subtopics = subtopicsData.map((st: any) => ({
       id: st.id,
       name: st.name,
-      description: st.description || st.contentDefault || ''
+      description: st.contentDefault || st.contentSimplified || st.contentStory || ''
     }));
     
     console.log(`📊 [Revision Agent] Found ${subtopics.length} subtopics`);

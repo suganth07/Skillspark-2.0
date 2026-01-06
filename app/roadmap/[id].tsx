@@ -21,8 +21,11 @@ export default function RoadmapDetailScreen() {
   const currentUserId = useCurrentUserId();
   const { isDarkColorScheme } = useColorScheme();
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'roadmap' });
+  const [isRevisionQuiz, setIsRevisionQuiz] = useState(false);
 
   const handleTakeQuiz = (quizId: string, stepTitle: string) => {
+    // Check if this is a revision quiz based on the title
+    setIsRevisionQuiz(stepTitle.includes('- Revision'));
     setScreenState({ type: 'quiz', quizId, stepTitle });
   };
 
@@ -31,7 +34,17 @@ export default function RoadmapDetailScreen() {
   };
 
   const handleQuizComplete = () => {
+    // If this was a revision quiz, trigger the revision complete callback
+    if (isRevisionQuiz) {
+      // The callback will be triggered in RoadmapDisplay
+      setIsRevisionQuiz(false);
+    }
     setScreenState({ type: 'roadmap' });
+  };
+
+  const handleRevisionQuizComplete = () => {
+    // This is called by RoadmapDisplay when a revision quiz completes
+    // RoadmapDisplay handles its own internal state updates
   };
 
   const handleCloseResults = () => {
@@ -136,6 +149,7 @@ export default function RoadmapDetailScreen() {
         roadmapId={roadmapId}
         onTakeQuiz={handleTakeQuiz}
         onViewResults={handleViewResults}
+        onRevisionQuizComplete={handleRevisionQuizComplete}
         onDelete={() => router.back()}
       />
     </SafeAreaView>

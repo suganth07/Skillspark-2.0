@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator, Modal, Alert } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Pressable, ActivityIndicator, Modal, Alert, TextInput } from 'react-native';
 import Animated, { FadeInDown, FadeIn, ZoomIn, FadeOut } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
 import { Text } from '@/components/ui/text';
@@ -13,6 +13,8 @@ import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckTopicUpdates, useGenerateQuiz, useGenerateRevision } from '@/hooks/queries/useRoadmapQueries';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
+import { geminiService } from '@/lib/gemini';
+import { createRoadmap } from '@/server/queries/roadmaps';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -28,6 +30,7 @@ import {
   Search,
   ExternalLink,
   Brain,
+  Wand2,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -95,10 +98,11 @@ interface RoadmapDisplayProps {
   roadmapId: string;
   onTakeQuiz?: (quizId: string, stepTitle: string) => void;
   onViewResults?: (quizId: string, stepTitle: string) => void;
+  onRevisionQuizComplete?: () => void;
   onDelete?: () => void;
 }
 
-export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete }: RoadmapDisplayProps) {
+export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisionQuizComplete, onDelete }: RoadmapDisplayProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
@@ -112,6 +116,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [revisionReminderQueue, setRevisionReminderQueue] = useState<RoadmapStep[]>([]);
   const [showRevisionReminder, setShowRevisionReminder] = useState(false);
   const [currentReminderStep, setCurrentReminderStep] = useState<RoadmapStep | null>(null);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regeneratePreferences, setRegeneratePreferences] = useState('');
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const pendingRevisionCompletion = useRef(false);
   
   const userId = useCurrentUserId();
   const provider = useWebSearchProvider();
@@ -135,22 +143,42 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const generateQuizMutation = useGenerateQuiz();
   const generateRevisionMutation = useGenerateRevision();
 
+  // Handle revision quiz completion
+  const handleRevisionQuizComplete = useCallback(() => {
+    // After quiz completes, show next reminder if any
+    if (revisionReminderQueue.length > 1) {
+      const nextQueue = revisionReminderQueue.slice(1);
+      setRevisionReminderQueue(nextQueue);
+      setCurrentReminderStep(nextQueue[0]);
+      setShowRevisionReminder(true);
+    } else {
+      setRevisionReminderQueue([]);
+      setCurrentReminderStep(null);
+    }
+    // Call parent callback if provided
+    onRevisionQuizComplete?.();
+  }, [revisionReminderQueue, onRevisionQuizComplete]);
+
   // Reload roadmap details when returning from quiz
   useFocusEffect(
     useCallback(() => {
       if (userId && roadmapId) {
         refetch();
+        // If we just completed a revision quiz, handle the completion
+        if (pendingRevisionCompletion.current) {
+          pendingRevisionCompletion.current = false;
+          handleRevisionQuizComplete();
+        }
       }
-    }, [roadmapId, userId, refetch])
+    }, [roadmapId, userId, refetch, handleRevisionQuizComplete])
   );
 
-  // Check for topics needing revision (completed >= 30 seconds ago)
-  // TO CHANGE TO 1 WEEK: Replace 30 * 1000 with 7 * 24 * 60 * 60 * 1000
+  // Check for topics needing revision (completed >= REVISION_THRESHOLD ago)
   const checkForRevisionReminders = React.useCallback(() => {
     if (!currentRoadmap?.steps || showRevisionReminder || revisionReminderQueue.length > 0) return;
 
-    const REVISION_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 30 seconds (for testing)
-    // For 1 week, use: const REVISION_THRESHOLD = 7 * 24 * 60 * 60 * 1000;
+    const REVISION_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 1 week
+    // For testing with 30 seconds, use: const REVISION_THRESHOLD = 30 * 1000;
     
     const now = new Date().getTime();
     const stepsNeedingRevision = currentRoadmap.steps.filter(step => {
@@ -249,6 +277,70 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     } catch (err) {
       console.error('Failed to delete roadmap:', err);
     }
+  };
+
+  const handleRegenerateRoadmap = async () => {
+    if (!userId || !currentRoadmap?.roadmap.title) return;
+
+    // Extract the topic from title (remove " Learning Path")
+    const topic = currentRoadmap.roadmap.title.replace(' Learning Path', '');
+
+    if (!regeneratePreferences.trim()) {
+      Alert.alert('Preferences Required', 'Please enter your customization preferences to regenerate the roadmap.');
+      return;
+    }
+
+    Alert.alert(
+      'Regenerate Roadmap',
+      `This will replace your entire roadmap for "${topic}" with a new one based on your preferences. All progress will be lost. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Regenerate',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsRegenerating(true);
+              console.log(`🔄 Regenerating roadmap for: ${topic}`);
+              console.log(`📝 User preferences: ${regeneratePreferences}`);
+
+              // Step 1: Delete old roadmap using mutation hook
+              await deleteRoadmapMutation.mutateAsync({
+                userId: userId,
+                roadmapId: roadmapId
+              });
+              console.log('🗑️ Old roadmap deleted');
+
+              // Step 2: Generate knowledge graph with preferences
+              const knowledgeGraph = await geminiService.generateKnowledgeGraph(
+                topic,
+                regeneratePreferences.trim()
+              );
+              console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
+
+              // Step 3: Create new roadmap (without generating quizzes)
+              const newRoadmapId = await createRoadmap(userId, knowledgeGraph, regeneratePreferences.trim());
+              console.log(`✨ New roadmap created: ${newRoadmapId}`);
+
+              // Close modal and reset state
+              setShowRegenerateModal(false);
+              setRegeneratePreferences('');
+              setIsRegenerating(false);
+
+              // Navigate immediately to new roadmap
+              router.replace(`/roadmap/${newRoadmapId}` as any);
+            } catch (error) {
+              setIsRegenerating(false);
+              console.error('Failed to regenerate roadmap:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to regenerate roadmap. Please try again.'
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleToggleCompletion = async (step: RoadmapStep) => {
@@ -353,7 +445,11 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     if (!revisionQuizId || !selectedStep) return;
     
     setShowRevisionModal(false);
+    // Mark that we're starting a revision quiz
+    pendingRevisionCompletion.current = true;
     onTakeQuiz?.(revisionQuizId, `${selectedStep.title} - Revision`);
+    // Mark that this is a revision quiz for later completion handling
+    setRevisionStep('quiz');
   };
 
   const handleReminderAccept = async () => {
@@ -388,19 +484,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     } else {
       // No more reminders
       setShowRevisionReminder(false);
-      setRevisionReminderQueue([]);
-      setCurrentReminderStep(null);
-    }
-  };
-
-  const handleRevisionQuizComplete = () => {
-    // After quiz completes, show next reminder if any
-    if (revisionReminderQueue.length > 1) {
-      const nextQueue = revisionReminderQueue.slice(1);
-      setRevisionReminderQueue(nextQueue);
-      setCurrentReminderStep(nextQueue[0]);
-      setShowRevisionReminder(true);
-    } else {
       setRevisionReminderQueue([]);
       setCurrentReminderStep(null);
     }
@@ -534,6 +617,114 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
         confirmLabel="Delete"
         onConfirm={handleConfirmDelete}
       />
+
+      {/* Regenerate Roadmap Modal */}
+      <Modal
+        transparent
+        visible={showRegenerateModal}
+        animationType="none"
+        onRequestClose={() => !isRegenerating && setShowRegenerateModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => !isRegenerating && setShowRegenerateModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Wand2 size={24} className="text-orange-500" />
+                <Text className="text-xl font-bold text-foreground">
+                  Customize Roadmap
+                </Text>
+              </View>
+              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                Regenerate your roadmap with custom preferences. Enter what you want to focus on, skip, or prioritize.
+              </Text>
+
+              <View className="mb-6">
+                <Text className="text-sm font-medium text-foreground mb-2">
+                  Your Preferences
+                </Text>
+                <View className="min-h-[120px] p-3 rounded-lg border border-border bg-background">
+                  <TextInput
+                    value={regeneratePreferences}
+                    onChangeText={setRegeneratePreferences}
+                    placeholder="e.g., Skip basics, focus mainly on advanced patterns, include real-world examples..."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    editable={!isRegenerating}
+                    className="text-sm text-foreground"
+                    style={{ minHeight: 100, textAlignVertical: 'top' }}
+                  />
+                </View>
+                <Text className="text-xs text-muted-foreground mt-2">
+                  💡 Examples: "Skip {'{topic}'}, focus mainly on {'{topic}'}," "Include interview prep," "Focus on practical projects"
+                </Text>
+              </View>
+
+              <View className="flex-col gap-2">
+                <Pressable
+                  onPress={handleRegenerateRoadmap}
+                  disabled={isRegenerating || !regeneratePreferences.trim()}
+                  className={cn(
+                    "w-full h-12 items-center justify-center rounded-lg flex-row gap-2",
+                    isRegenerating || !regeneratePreferences.trim()
+                      ? "bg-orange-500/30"
+                      : "bg-orange-500 active:bg-orange-600"
+                  )}
+                >
+                  {isRegenerating ? (
+                    <>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text className="text-base font-semibold text-white">
+                        Regenerating...
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 size={20} className="text-white" />
+                      <Text className="text-base font-semibold text-white">
+                        Regenerate Roadmap
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowRegenerateModal(false);
+                    setRegeneratePreferences('');
+                  }}
+                  disabled={isRegenerating}
+                  className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
+                >
+                  <Text className="text-base font-medium text-muted-foreground">
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
 
       {/* Knowledge Assessment Modal */}
       <Modal
@@ -1100,6 +1291,12 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
           </View>
           
           <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => setShowRegenerateModal(true)}
+              className="h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20 dark:bg-orange-500/30 border-2 border-orange-500/50 dark:border-orange-500/70 active:opacity-70"
+            >
+              <Wand2 size={20} className="text-orange-500 dark:text-orange-400" />
+            </Pressable>
             <Pressable
               onPress={handleWebSearch}
               disabled={isSearching}

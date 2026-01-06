@@ -12,7 +12,7 @@ import { useUserManagement } from '@/hooks/stores/useUserStore';
 import { useQuiz, useSubmitQuiz } from '@/hooks/queries/useRoadmapQueries';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Check, X, Clock } from '@/components/Icons';
-import { Brain } from 'lucide-react-native';
+import { Brain } from '@/lib/icons/Brain';
 import { cn } from '@/lib/utils';
 
 interface QuizComponentProps {
@@ -33,7 +33,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [showResults, setShowResults] = useState(false);
   const [timeStarted, setTimeStarted] = useState<Date>(new Date());
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
   
   const { currentUser, currentUserId } = useUserManagement();
   
@@ -63,14 +62,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const handleSubmitQuiz = async () => {
     if (!currentUserId || !currentQuiz) return;
 
-    // Check if all questions are answered
-    const unansweredQuestions = currentQuiz.questions.filter(q => !(q.id in answers));
-    if (unansweredQuestions.length > 0) {
-      setValidationError(`Please answer all questions before submitting. ${unansweredQuestions.length} questions remaining.`);
-      return;
-    }
-
-    setValidationError(null);
     setSubmitError(null);
 
     Alert.alert(
@@ -145,7 +136,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
         
         <RadioGroup 
           value={answers[questionId]?.toString() || ''}
-          onValueChange={(value) => handleAnswerChange(questionId, parseInt(value))}
+          onValueChange={() => {}} // No-op: selection handled by Pressable onPress
           className="gap-2"
         >
           {questionData.options.map((option: string, optionIndex: number) => (
@@ -312,17 +303,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   return (
     <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       <View className="px-6 pt-6 pb-4">
-        {/* Validation Error */}
-        {validationError && (
-          <View className="mb-4">
-            <ErrorDisplay
-              error={validationError}
-              onDismiss={() => setValidationError(null)}
-              variant="inline"
-            />
-          </View>
-        )}
-        
         {/* Submit Error */}
         {submitError && (
           <View className="mb-4">

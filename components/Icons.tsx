@@ -133,7 +133,6 @@ interopIcon(Terminal);
 interopIcon(AlertTriangle);
 interopIcon(Code);
 interopIcon(CheckSquare);
-interopIcon(X);
 interopIcon(Wand2);
 interopIcon(RefreshCw);
 interopIcon(RotateCcw);

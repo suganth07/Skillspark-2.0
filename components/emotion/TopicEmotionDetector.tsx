@@ -116,7 +116,7 @@ interface TopicEmotionDetectorProps {
 // If you have labels.txt and it's different, update this array.
 const EMOTIONS = ['wbored', 'confused', 'drowsy', 'engaged', 'frustrated', 'looking_away'];
 
-const DETECTION_INTERVAL = 10000; // 30 seconds
+const DETECTION_INTERVAL = 10000; // 10 seconds
 const { width: screenWidth } = Dimensions.get('window');
 
 function argMax(arr: ArrayLike<number>) {

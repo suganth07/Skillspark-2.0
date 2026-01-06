@@ -115,7 +115,7 @@ export default function TopicDetailScreen() {
   const [distractionCount, setDistractionCount] = useState(0);
   const soundRef = useRef<Audio.Sound | null>(null);
   const lastDistractionTime = useRef<number>(0);
-  const currentEmotion = useRef<string | null>(null);
+  const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const lastToneSwitchTime = useRef<number>(0);
   
   // Ref to track current expanded sections (for emotion callback access)
@@ -744,7 +744,7 @@ export default function TopicDetailScreen() {
             <TopicEmotionDetector 
               onEmotionDetected={(emotion, confidence) => {
                 console.log(`📊 User emotion: ${emotion} (${(confidence * 100).toFixed(1)}%)`);
-                currentEmotion.current = emotion;
+                setCurrentEmotion(emotion);
                 
                 // Detect if user is looking away/distracted
                 if (emotion === 'looking_away' && confidence > 0.5) {

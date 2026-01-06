@@ -27,6 +27,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleUserRound,
+  Clock,
   Cloud,
   Code,
   Copy,
@@ -88,6 +89,7 @@ interopIcon(Baby);
 interopIcon(BadgeAlert);
 interopIcon(Calendar);
 interopIcon(CircleUserRound);
+interopIcon(Clock);
 interopIcon(Database);
 interopIcon(Ear);
 interopIcon(Fan);
@@ -166,6 +168,7 @@ export {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleUserRound,
+  Clock,
   Cloud,
   Code,
   Copy,

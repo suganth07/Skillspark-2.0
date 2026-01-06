@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { Badge } from '@/components/ui/badge';
+import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
@@ -620,31 +621,20 @@ export default function TopicDetailScreen() {
         <Animated.View 
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(200)}
-          className="absolute inset-0 z-50 bg-background/90 justify-center items-center"
+          className="absolute inset-0 z-50 bg-background/95 justify-center items-center"
           style={{ zIndex: 50 }}
         >
-          <Card className="mx-8 p-6">
-            <View className="items-center">
-              <View className="bg-primary/10 rounded-full p-4 mb-4">
-                <Sparkles size={32} className="text-primary" />
-              </View>
-              <ActivityIndicator size="large" className="mb-4" />
-              <Text className="text-lg font-semibold text-foreground text-center mb-2">
-                Personalizing Content
-              </Text>
-              <Text className="text-sm text-muted-foreground text-center leading-relaxed">
-                Regenerating learning material based on your quiz performance...
-              </Text>
-              <View className="flex-row flex-wrap justify-center gap-2 mt-4">
-                <Badge className="bg-green-100">
-                  <Text className="text-xs text-green-700">Strengthening weak areas</Text>
-                </Badge>
-                <Badge className="bg-blue-100">
-                  <Text className="text-xs text-blue-700">Adapting to your level</Text>
-                </Badge>
-              </View>
-            </View>
-          </Card>
+          <View className="px-8">
+            <LoadingAnimation 
+              title="Personalizing Content"
+              messages={[
+                'Analyzing your quiz performance...',
+                'Strengthening weak areas...',
+                'Adapting to your level...',
+                'Almost ready...'
+              ]}
+            />
+          </View>
         </Animated.View>
       )}
       

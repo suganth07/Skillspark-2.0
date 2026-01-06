@@ -507,6 +507,10 @@ export class GeminiService {
     // Use the content agent to orchestrate parallel content generation
     const result = await generateContentBundle(topicName, context, subtopicPerformance, userPreferences);
     
+    if (!result) {
+      throw new Error('Failed to generate content bundle - received null result');
+    }
+    
     console.log(`✅ [Content Agent] Content generation complete via agent for "${topicName}"`);
     return result;
   }
@@ -908,6 +912,140 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
     } catch (error) {
       console.error('Error generating story topic explanation:', error);
       throw new Error(`Failed to generate story topic explanation: ${error}`);
+    }
+  }
+
+  // Generate humor/entertaining content to combat boredom
+  async generateHumorContent(
+    topicName: string,
+    context: string,
+    subtopicPerformance?: Array<{ subtopicName: string; status: string; accuracy: number }>,
+    canonicalTitles?: string[],
+    userPreferences?: string
+  ): Promise<RawTopicExplanation> {
+    let performanceGuidance = '';
+    if (subtopicPerformance && subtopicPerformance.length > 0) {
+      performanceGuidance = `
+      
+      📊 User Performance Data (use for prioritization):
+${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      
+      Make weak areas extra fun and engaging with more humor and interactive examples.
+      `;
+    }
+
+    // Add canonical titles guidance if provided
+    let titlesGuidance = '';
+    if (canonicalTitles && canonicalTitles.length > 0) {
+      titlesGuidance = `
+      
+      🎯 CRITICAL - USE THESE EXACT SUBTOPIC TITLES (in this exact order):
+${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')}
+      
+      You MUST use these exact titles for your ${canonicalTitles.length} subtopics.
+      Do NOT create different titles or add/remove subtopics.
+      The titles stay the same, only make the explanation content funny and engaging.
+      `;
+    }
+
+    // Build preferences guidance for AI
+    let preferencesGuidance = '';
+    if (userPreferences && userPreferences.trim()) {
+      preferencesGuidance = `
+      
+      📝 USER LEARNING PREFERENCES (Important - incorporate into humor content):
+      ${userPreferences}
+      
+      Adapt the humorous content to align with these preferences where applicable.
+      `;
+    }
+
+    const prompt = `
+      Create a FUNNY, ENTERTAINING, and HUMOROUS explanation for the topic "${topicName}" in the context of learning "${context}".
+      ${performanceGuidance}
+      ${titlesGuidance}
+      ${preferencesGuidance}
+      
+      ⚠️ THIS VERSION MUST BE HILARIOUS AND ENGAGING TO COMBAT LEARNER BOREDOM:
+      - Use jokes, puns, and witty remarks throughout
+      - Include funny analogies and pop culture references
+      - Add memes-style humor and relatable developer jokes
+      - Use playful language while still being educational
+      - Make learning feel like entertainment, not a chore
+      - Include "fun facts" and amusing observations
+      - Add humorous warnings about common mistakes
+      - Use emojis to add personality 🚀 😂 🎉
+      
+      Provide:
+      1. A funny, attention-grabbing overview (with a joke or pun)
+      2. Why this topic matters (make it entertaining and relatable)
+      3. ${canonicalTitles ? `EXACTLY ${canonicalTitles.length}` : '5-8'} key subtopics/concepts ${canonicalTitles ? '(using the exact titles provided above)' : ''}
+         ${!canonicalTitles ? '⚠️ CRITICAL: Each subtopic MUST have a UNIQUE, SPECIFIC title - NO DUPLICATES!' : ''}
+      4. For EACH subtopic:
+         - A FUNNY explanation that makes the concept memorable through humor
+         - Include jokes, puns, or witty observations
+         - Use amusing real-world analogies (like comparing code to pizza ordering 🍕)
+         - A practical example with humorous comments in the code
+         - 2-3 key points delivered with wit and charm
+      5. Best practices (delivered as "Pro tips from a fellow developer who learned the hard way 😅")
+      6. Common mistakes (as "Hilarious ways people mess this up - don't be that person!")
+      7. Fun resources with quirky descriptions
+      
+      Make it educational BUT PRIMARILY ENTERTAINING!
+      Think: "If a stand-up comedian who codes had to teach this..."
+      
+      Return ONLY valid JSON in this exact format:
+      {
+        "topicName": "${topicName}",
+        "overview": "Funny, engaging overview with humor and emojis",
+        "difficulty": "basic|intermediate|advanced",
+        "whyLearn": "Entertaining take on why this matters (with a joke)",
+        "subtopics": [
+          {
+            "id": "subtopic-1",
+            "title": "Subtopic name",
+            "explanation": "Hilarious explanation with jokes, puns, and wit while still teaching the concept. Include emojis and pop culture references where appropriate! 🎯",
+            "example": "Code example with funny comments like // This is where the magic happens ✨ or // If this breaks, blame the rubber duck 🦆",
+            "exampleExplanation": "Witty explanation of the code that makes you smile",
+            "keyPoints": ["Funny key point 1 😎", "Amusing observation 2 🎉", "Witty takeaway 3 🚀"]
+          }
+        ],
+        "bestPractices": ["Pro tip 1 (with humor)", "Pro tip 2 (with a joke)"],
+        "commonPitfalls": ["Hilarious mistake 1 (how to avoid it)", "Amusing blunder 2 (the fix)"],
+        "resources": ["Fun resource 1", "Entertaining resource 2"]
+      }
+      
+      CRITICAL REQUIREMENTS:
+      1. Use sequential IDs: "subtopic-1", "subtopic-2", "subtopic-3", etc.
+      2. ${canonicalTitles ? `Use the EXACT ${canonicalTitles.length} titles listed above - do NOT change them` : 'Keep titles consistent'}
+      3. Do NOT add or remove subtopics
+      4. Do NOT use slugified titles as IDs
+      5. MUST be genuinely funny - not just add "haha" or "(funny)" - actual wit and humor!
+      6. Include relevant emojis throughout the content
+      
+      Remember: The goal is to make learning FUN so the user stays engaged! 🎮
+    `;
+
+    try {
+      const text = await aiService.generateContent({ prompt });
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Invalid JSON response from AI');
+      }
+      
+      const sanitizedJson = sanitizeJsonString(jsonMatch[0]);
+      const explanation = JSON.parse(sanitizedJson) as RawTopicExplanation;
+      
+      if (!explanation.topicName || !explanation.overview || !explanation.subtopics) {
+        throw new Error('Invalid humor explanation structure');
+      }
+      
+      console.log(`✅ Generated HUMOR content with ${explanation.subtopics.length} subtopics`);
+      return explanation;
+    } catch (error) {
+      console.error('Error generating humor topic explanation:', error);
+      throw new Error(`Failed to generate humor topic explanation: ${error}`);
     }
   }
 

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, ActivityIndicator, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { Audio } from 'expo-av';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -108,6 +109,17 @@ export default function TopicDetailScreen() {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerateInstructions, setRegenerateInstructions] = useState('');
   const [isRegeneratingSubtopics, setIsRegeneratingSubtopics] = useState(false);
+  
+  // Distraction detection state
+  const [showDistractionAlert, setShowDistractionAlert] = useState(false);
+  const [distractionCount, setDistractionCount] = useState(0);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const lastDistractionTime = useRef<number>(0);
+  const currentEmotion = useRef<string | null>(null);
+  const lastToneSwitchTime = useRef<number>(0);
+  
+  // Ref to track current expanded sections (for emotion callback access)
+  const expandedSectionsRef = useRef<Set<string>>(new Set());
 
   // TanStack Query hook - automatic caching, loading, and error states
   const { 
@@ -296,6 +308,8 @@ export default function TopicDetailScreen() {
       newExpanded.add(sectionId);
     }
     setExpandedSections(newExpanded);
+    expandedSectionsRef.current = newExpanded;
+    console.log(`📂 Toggled section ${sectionId}. Now expanded: ${newExpanded.size} section(s)`);
   };
 
   const setSubtopicVersion = (subtopicId: string, version: ContentVersion) => {
@@ -341,6 +355,51 @@ export default function TopicDetailScreen() {
       setIsSearching(false);
     }
   };
+
+  // Play distraction sound effect
+  const playDistractionSound = async () => {
+    try {
+      // Configure audio mode for sound effects
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      // Unload previous sound if exists
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+
+      // Play a simple beep sound using a short audio tone
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCyAx/DZiTYIGGS57+qFNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAo=' },
+        { shouldPlay: true, volume: 0.8 }
+      );
+
+      soundRef.current = sound;
+
+      // Auto cleanup after 1 second
+      setTimeout(async () => {
+        try {
+          await sound.unloadAsync();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }, 1000);
+    } catch (error) {
+      console.warn('Could not play distraction sound:', error);
+      // Sound playback is optional, don't block the alert
+    }
+  };
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -685,7 +744,77 @@ export default function TopicDetailScreen() {
             <TopicEmotionDetector 
               onEmotionDetected={(emotion, confidence) => {
                 console.log(`📊 User emotion: ${emotion} (${(confidence * 100).toFixed(1)}%)`);
-                // TODO: Store emotion data for analytics
+                currentEmotion.current = emotion;
+                
+                // Detect if user is looking away/distracted
+                if (emotion === 'looking_away' && confidence > 0.5) {
+                  const now = Date.now();
+                  // Prevent multiple alerts within 30 seconds
+                  if (now - lastDistractionTime.current > 30000) {
+                    lastDistractionTime.current = now;
+                    setDistractionCount(prev => prev + 1);
+                    setShowDistractionAlert(true);
+                    playDistractionSound();
+                  }
+                }
+                
+                // Automatic tone adjustment based on emotions
+                if (confidence > 0.5) { // Act on 50%+ confidence detections
+                  const now = Date.now();
+                  // Prevent rapid tone switches (wait 45 seconds between switches)
+                  if (now - lastToneSwitchTime.current > 45000) {
+                    let targetTone: ContentVersion | null = null;
+                    let shouldSwitch = false;
+                    
+                    if (emotion === 'wbored' || emotion === 'drowsy') {
+                      targetTone = 'story';
+                      shouldSwitch = true;
+                      console.log('😴 User seems bored/drowsy → Switching to Story mode');
+                    } else if (emotion === 'frustrated' || emotion === 'confused') {
+                      targetTone = 'simplified';
+                      shouldSwitch = true;
+                      console.log('😤 User seems frustrated/confused → Switching to Simplified mode');
+                    }
+                    
+                    if (shouldSwitch && targetTone) {
+                      lastToneSwitchTime.current = now;
+                      
+                      const currentExpandedSections = expandedSectionsRef.current;
+                      console.log(`📋 Currently expanded sections: ${currentExpandedSections.size}`);
+                      
+                      // Only switch tone for currently expanded subtopics (don't auto-expand)
+                      if (currentExpandedSections.size > 0) {
+                        const updatedVersions: Record<string, ContentVersion> = {};
+                        currentExpandedSections.forEach(subtopicId => {
+                          const currentTone = subtopicVersions[subtopicId] || 'default';
+                          console.log(`  → Subtopic ${subtopicId}: ${currentTone} → ${targetTone}`);
+                          if (currentTone !== targetTone) {
+                            updatedVersions[subtopicId] = targetTone;
+                          }
+                        });
+                        
+                        if (Object.keys(updatedVersions).length > 0) {
+                          console.log(`✅ Updating ${Object.keys(updatedVersions).length} subtopic(s) to ${targetTone} mode`);
+                          setSubtopicVersions(prev => ({ ...prev, ...updatedVersions }));
+                          
+                          Alert.alert(
+                            '📚 Content Adapted',
+                            `Based on your engagement, we've switched to ${targetTone === 'story' ? 'Story mode (more engaging)' : 'Simplified mode (easier to understand)'} to help you learn better!`,
+                            [{ text: 'Got it!' }],
+                            { cancelable: true }
+                          );
+                        } else {
+                          console.log('ℹ️ All expanded subtopics already in target tone');
+                        }
+                      } else {
+                        console.log('ℹ️ No subtopics expanded - skipping tone switch (open a subtopic to see adaptive content)');
+                      }
+                    }
+                  } else {
+                    const timeLeft = Math.round((45000 - (now - lastToneSwitchTime.current)) / 1000);
+                    console.log(`⏳ Tone switch cooldown active (${timeLeft}s remaining)`);
+                  }
+                }
               }}
             />
           )}
@@ -1171,6 +1300,17 @@ export default function TopicDetailScreen() {
                         <View className="border-t border-border bg-muted/30">
                           {/* Per-Subtopic Style Switcher */}
                           <View className="px-4 pt-3 pb-2">
+                            {/* Auto-adaptation indicator */}
+                            {currentEmotion.current && (currentEmotion.current === 'wbored' || currentEmotion.current === 'drowsy' || currentEmotion.current === 'frustrated' || currentEmotion.current === 'confused') && (
+                              <View className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 mb-3 flex-row items-center">
+                                <Sparkles size={14} className="text-blue-600 dark:text-blue-400 mr-2" />
+                                <Text className="text-xs text-blue-700 dark:text-blue-300 flex-1">
+                                  {currentEmotion.current === 'wbored' || currentEmotion.current === 'drowsy' 
+                                    ? '✨ Content adapting to keep you engaged!' 
+                                    : '🎯 Content simplifying to help you understand!'}
+                                </Text>
+                              </View>
+                            )}
                             <View className="flex-row gap-2 mb-3">
                               <Button
                                 variant={currentVersion === 'default' ? 'default' : 'outline'}
@@ -1470,6 +1610,100 @@ export default function TopicDetailScreen() {
                     Cancel
                   </Text>
                 </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      {/* Distraction Alert Modal */}
+      <Modal
+        visible={showDistractionAlert}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDistractionAlert(false)}
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          className="flex-1 bg-black/50 justify-center items-center px-6"
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowDistractionAlert(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(400).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              {/* Alert Icon */}
+              <View className="items-center mb-4">
+                <View className="bg-orange-100 dark:bg-orange-900/30 rounded-full p-4 mb-3">
+                  <AlertCircle size={48} className="text-orange-500" />
+                </View>
+                <Text className="text-2xl font-bold text-foreground text-center mb-2">
+                  You Seem Distracted
+                </Text>
+                <Text className="text-base text-muted-foreground text-center leading-relaxed">
+                  We noticed you're looking away. Let's get back to learning! 🎯
+                </Text>
+              </View>
+
+              {/* Distraction Stats */}
+              <View className="bg-secondary rounded-lg p-4 mb-6">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-sm text-muted-foreground">
+                    Distraction Count
+                  </Text>
+                  <View className="bg-orange-500 rounded-full px-3 py-1">
+                    <Text className="text-white font-bold">
+                      {distractionCount}
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-xs text-muted-foreground mt-2">
+                  💡 Staying focused helps you learn faster!
+                </Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View className="flex-col gap-3">
+                <Pressable
+                  onPress={() => setShowDistractionAlert(false)}
+                  className="w-full h-12 items-center justify-center rounded-lg bg-orange-500 active:bg-orange-600 flex-row gap-2"
+                >
+                  <CheckCircle2 size={20} className="text-white" />
+                  <Text className="text-base font-semibold text-white">
+                    I'm Back, Let's Continue!
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setShowDistractionAlert(false);
+                    // Could add a "take a break" feature here
+                  }}
+                  className="w-full h-10 items-center justify-center rounded-lg active:opacity-70"
+                >
+                  <Text className="text-sm font-medium text-muted-foreground">
+                    Dismiss
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Motivational Message */}
+              <View className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <Text className="text-xs text-center text-green-700 dark:text-green-300 leading-relaxed">
+                  🌟 "Focus is the gateway to success. Stay engaged and unlock your potential!"
+                </Text>
               </View>
             </View>
           </Animated.View>

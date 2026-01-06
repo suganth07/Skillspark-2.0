@@ -411,7 +411,7 @@ export default function CareerPathDetailScreen() {
                               (x, y) => {
                                 scrollViewRef.current?.scrollTo({ y: y - 80, animated: true });
                               },
-                              (error) => console.log('measureLayout error:', error)
+                              () => {}
                             );
                           }
                         }}

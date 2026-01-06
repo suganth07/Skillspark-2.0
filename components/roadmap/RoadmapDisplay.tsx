@@ -29,8 +29,9 @@ import {
   RefreshCw,
   Search,
   ExternalLink,
-  Brain,
   Wand2,
+  X,
+  RotateCcw,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -119,6 +120,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regeneratePreferences, setRegeneratePreferences] = useState('');
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showSearchUpdateModal, setShowSearchUpdateModal] = useState(false);
+  const [searchUpdateType, setSearchUpdateType] = useState<'all' | 'completed' | null>(null);
   const pendingRevisionCompletion = useRef(false);
   
   const userId = useCurrentUserId();
@@ -649,11 +652,23 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
             }}
           >
             <View className="p-6">
-              <View className="flex-row items-center gap-2 mb-2">
-                <Wand2 size={24} className="text-orange-500" />
-                <Text className="text-xl font-bold text-foreground">
-                  Customize Roadmap
-                </Text>
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center gap-2">
+                  <Wand2 size={24} className="text-orange-500" />
+                  <Text className="text-xl font-bold text-foreground">
+                    Customize Roadmap
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => {
+                    setShowRegenerateModal(false);
+                    setRegeneratePreferences('');
+                  }}
+                  disabled={isRegenerating}
+                  className="h-8 w-8 items-center justify-center rounded-lg active:bg-secondary"
+                >
+                  <X size={20} className="text-muted-foreground" />
+                </Pressable>
               </View>
               <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
                 Regenerate your roadmap with custom preferences. Enter what you want to focus on, skip, or prioritize.
@@ -721,6 +736,124 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   </Text>
                 </Pressable>
               </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      {/* Search & Update Modal */}
+      <Modal
+        transparent
+        visible={showSearchUpdateModal}
+        animationType="none"
+        onRequestClose={() => setShowSearchUpdateModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowSearchUpdateModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center gap-3">
+                  <View className="h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <RefreshCw size={24} className="text-primary" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-xl font-bold text-foreground">
+                      Check for Updates
+                    </Text>
+                    <Text className="text-sm text-muted-foreground mt-0.5">
+                      Choose which topics to check
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => setShowSearchUpdateModal(false)}
+                  className="h-8 w-8 items-center justify-center rounded-lg active:bg-secondary"
+                >
+                  <X size={20} className="text-muted-foreground" />
+                </Pressable>
+              </View>
+
+              <View className="gap-3 mb-6">
+                <Pressable
+                  onPress={async () => {
+                    setShowSearchUpdateModal(false);
+                    await handleCheckUpdates();
+                  }}
+                  disabled={completedSteps === 0}
+                  className={cn(
+                    "p-4 rounded-xl border-2 active:opacity-70",
+                    completedSteps === 0 
+                      ? "bg-secondary/50 border-border opacity-50" 
+                      : "bg-card border-primary/20"
+                  )}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-950">
+                      <CheckCircle size={20} className="text-green-700 dark:text-green-400" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-foreground">
+                        Completed Topics Only
+                      </Text>
+                      <Text className="text-sm text-muted-foreground mt-0.5">
+                        Check for updates in topics you've completed
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  onPress={async () => {
+                    setShowSearchUpdateModal(false);
+                    await handleWebSearch();
+                  }}
+                  className="p-4 rounded-xl border-2 bg-card border-primary/20 active:opacity-70"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950">
+                      <Search size={20} className="text-blue-700 dark:text-blue-400" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-foreground">
+                        All Topics
+                      </Text>
+                      <Text className="text-sm text-muted-foreground mt-0.5">
+                        Search for updates across all topics
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              </View>
+
+              <Pressable
+                onPress={() => setShowSearchUpdateModal(false)}
+                className="w-full h-12 items-center justify-center rounded-lg bg-secondary active:bg-secondary/70"
+              >
+                <Text className="text-base font-medium text-foreground">
+                  Cancel
+                </Text>
+              </Pressable>
             </View>
           </Animated.View>
         </Animated.View>
@@ -1076,7 +1209,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
             <View className="p-6">
               <View className="items-center mb-4">
                 <View className="bg-purple-100 dark:bg-purple-950 p-4 rounded-full mb-4">
-                  <Brain size={32} className="text-purple-600" />
+                  <RotateCcw size={32} className="text-purple-600" />
                 </View>
                 <Text className="text-xl font-bold text-foreground text-center mb-2">
                   Time to Revise!
@@ -1107,7 +1240,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                   onPress={handleReminderAccept}
                   className="w-full h-12 items-center justify-center rounded-lg bg-purple-600 active:opacity-90 flex-row gap-2"
                 >
-                  <Brain size={16} className="text-white" />
+                  <RotateCcw size={16} className="text-white" />
                   <Text className="text-base font-semibold text-white">
                     Start Revision
                   </Text>
@@ -1182,7 +1315,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
               <ScrollView className="max-h-[600px]" showsVerticalScrollIndicator={false}>
                 <View className="p-6">
                   <View className="flex-row items-center gap-2 mb-4">
-                    <Brain size={24} className="text-purple-600" />
+                    <RotateCcw size={24} className="text-purple-600" />
                     <Text className="text-xl font-bold text-foreground">
                       Quick Revision Summary
                     </Text>
@@ -1274,60 +1407,18 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <Animated.View entering={FadeIn.duration(400)} className="px-6 pt-6 pb-4">
-        <View className="flex-row items-start justify-between mb-4">
-          
-          <View className="flex-1 mr-4">
-            <Text className="text-2xl font-bold text-foreground mb-2">{roadmap.title}</Text>
-            {roadmap.description && (
-              <Text className="text-sm text-muted-foreground leading-relaxed">
-                {roadmap.description}
-              </Text>
-            )}
-            {roadmap.createdAt && formatDate(roadmap.createdAt) && (
-              <Text className="text-xs text-muted-foreground mt-2">
-                Created {formatDate(roadmap.createdAt)}
-              </Text>
-            )}
-          </View>
-          
-          <View className="flex-row gap-2">
-            <Pressable
-              onPress={() => setShowRegenerateModal(true)}
-              className="h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20 dark:bg-orange-500/30 border-2 border-orange-500/50 dark:border-orange-500/70 active:opacity-70"
-            >
-              <Wand2 size={20} className="text-orange-500 dark:text-orange-400" />
-            </Pressable>
-            <Pressable
-              onPress={handleWebSearch}
-              disabled={isSearching}
-              className="h-10 w-10 items-center justify-center rounded-lg bg-purple-500/20 dark:bg-purple-500/30 border-2 border-purple-500/50 dark:border-purple-500/70 active:opacity-70"
-            >
-              {isSearching ? (
-                <ActivityIndicator size="small" color="#a855f7" />
-              ) : (
-                <Search size={20} className="text-white-500 dark:text-white" />
-              )}
-            </Pressable>
-            {completedSteps > 0 && (
-              <Pressable
-                onPress={handleCheckUpdates}
-                disabled={checkTopicUpdatesMutation.isPending}
-                className="h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20 dark:bg-blue-500/30 border-2 border-blue-500/50 dark:border-blue-500/70 active:opacity-70"
-              >
-                {checkTopicUpdatesMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#3b82f6" />
-                ) : (
-                  <RefreshCw size={20} className="text-blue-500 dark:text-blue-400" />
-                )}
-              </Pressable>
-            )}
-            <Pressable
-              onPress={() => setShowDeleteDialog(true)}
-              className="h-10 w-10 items-center justify-center rounded-lg bg-red-500/20 dark:bg-red-500/30 border-2 border-red-500/50 dark:border-red-500/70 active:opacity-70"
-            >
-              <Trash2 size={20} className="text-red-500 dark:text-red-400" />
-            </Pressable>
-          </View>
+        <View className="mb-4">
+          <Text className="text-2xl font-bold text-foreground mb-2">{roadmap.title}</Text>
+          {roadmap.description && (
+            <Text className="text-sm text-muted-foreground leading-relaxed">
+              {roadmap.description}
+            </Text>
+          )}
+          {roadmap.createdAt && formatDate(roadmap.createdAt) && (
+            <Text className="text-xs text-muted-foreground mt-2">
+              Created {formatDate(roadmap.createdAt)}
+            </Text>
+          )}
         </View>
 
         {/* Progress Card */}
@@ -1365,6 +1456,41 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
             </View>
           )}
         </Card>
+
+        {/* Action Buttons */}
+        <View className="mt-4 flex-row gap-3">
+          <Pressable
+            onPress={() => setShowRegenerateModal(true)}
+            className="flex-1 h-11 flex-row items-center justify-center gap-2 rounded-lg bg-card border border-border active:bg-secondary"
+          >
+            <Wand2 size={18} className="text-foreground" />
+            <Text className="text-sm font-medium text-foreground">
+              Regenerate
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowSearchUpdateModal(true)}
+            disabled={isSearching || checkTopicUpdatesMutation.isPending}
+            className="flex-1 h-11 flex-row items-center justify-center gap-2 rounded-lg bg-card border border-border active:bg-secondary"
+          >
+            {isSearching || checkTopicUpdatesMutation.isPending ? (
+              <ActivityIndicator size="small" className="text-foreground" />
+            ) : (
+              <>
+                <RefreshCw size={18} className="text-foreground" />
+                <Text className="text-sm font-medium text-foreground">
+                  Updates
+                </Text>
+              </>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => setShowDeleteDialog(true)}
+            className="h-11 w-11 items-center justify-center rounded-lg bg-card border border-border active:bg-secondary"
+          >
+            <Trash2 size={18} className="text-muted-foreground" />
+          </Pressable>
+        </View>
       </Animated.View>
 
       {/* Roadmap Timeline */}
@@ -1532,7 +1658,7 @@ function RoadmapStepItem({
                     )}
                   </View>
                   {isCompleted && step.lastCompletedAt && formatDate(step.lastCompletedAt) && (
-                    <Text className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    <Text className="text-xs text-muted-foreground mt-1">
                       Completed {formatDate(step.lastCompletedAt)}
                     </Text>
                   )}
@@ -1576,10 +1702,10 @@ function RoadmapStepItem({
                       e.stopPropagation();
                       onRevise();
                     }}
-                    className="px-4 py-2 rounded-lg flex-row items-center gap-2 bg-purple-600 active:opacity-90"
+                    className="px-4 py-2 rounded-lg flex-row items-center gap-2 border border-border bg-card active:bg-secondary"
                   >
-                    <Brain size={14} className="text-white" />
-                    <Text className="text-sm font-medium text-white">
+                    <RotateCcw size={14} className="text-foreground" />
+                    <Text className="text-sm font-medium text-foreground">
                       Revise
                     </Text>
                   </Pressable>
@@ -1604,10 +1730,10 @@ function RoadmapStepItem({
                       e.stopPropagation();
                       onToggleCompletion();
                     }}
-                    className="px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950 active:opacity-70"
+                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary active:bg-secondary/70"
                   >
-                    <Text className="text-xs font-semibold text-green-700 dark:text-green-400">
-                      ✓ Completed
+                    <Text className="text-xs font-medium text-muted-foreground">
+                      Mark Incomplete
                     </Text>
                   </Pressable>
                 )}

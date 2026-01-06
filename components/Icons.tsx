@@ -17,6 +17,7 @@ import {
   Calendar,
   CalendarDays,
   Check,
+  CheckCircle,
   Settings,
   CheckSquare,
   ChevronDown,
@@ -55,6 +56,10 @@ import {
   Underline,
   UserPlus,
   Users,
+  Wand2,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
   X,
   Zap,
 } from "lucide-react-native";
@@ -96,6 +101,7 @@ interopIcon(ChevronDown);
 interopIcon(LayoutPanelLeft);
 interopIcon(MenuSquare);
 interopIcon(Check);
+interopIcon(CheckCircle);
 interopIcon(ChevronsDownUp);
 interopIcon(ChevronsUpDown);
 interopIcon(Copy);
@@ -125,6 +131,11 @@ interopIcon(Terminal);
 interopIcon(AlertTriangle);
 interopIcon(Code);
 interopIcon(CheckSquare);
+interopIcon(X);
+interopIcon(Wand2);
+interopIcon(RefreshCw);
+interopIcon(RotateCcw);
+interopIcon(Trash2);
 interopIcon(Zap);
 
 export {
@@ -146,6 +157,7 @@ export {
   Calendar,
   CalendarDays,
   Check,
+  CheckCircle,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -182,6 +194,10 @@ export {
   Underline,
   UserPlus,
   Users,
+  Wand2,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
   X,
   Zap,
 };

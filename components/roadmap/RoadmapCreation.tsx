@@ -8,7 +8,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useGenerateRoadmap } from '@/hooks/queries/useRoadmapQueries';
-import { RocketLoadingAnimation } from './RocketLoadingAnimation';
+import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { ArrowLeft, CheckCircle, X, WandSparkles, ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
 
@@ -77,7 +77,17 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
   if (isGenerating) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <RocketLoadingAnimation />
+        <LoadingAnimation 
+          title="Creating Your Roadmap"
+          messages={[
+            'Analyzing your topic...',
+            'Breaking down concepts...',
+            'Mapping prerequisites...',
+            'Structuring learning path...',
+            'Organizing modules...',
+            'Creating roadmap...',
+          ]}
+        />
       </View>
     );
   }
@@ -257,29 +267,30 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                 {showAdvanced && (
                   <Animated.View 
                     entering={FadeIn.duration(200)}
-                    className="mb-4 p-3 bg-secondary/50 rounded-lg"
+                    className="mb-4 p-4 bg-secondary/50 rounded-lg"
                   >
-                    <Text className="text-sm font-medium text-foreground mb-2">
+                    <Text className="text-sm font-medium text-foreground mb-3">
                       Learning Preferences (Optional)
                     </Text>
                     <Input
                       value={preferences}
                       onChangeText={setPreferences}
                       placeholder="e.g., Focus on practical projects, Include interview prep, Skip basics..."
-                      className="text-sm min-h-[80px]"
+                      className="text-sm min-h-[80px] mb-2"
                       editable={!isGenerating}
                       multiline
                       numberOfLines={3}
                       textAlignVertical="top"
                     />
-                    <Text className="text-xs text-muted-foreground mt-2">
-                      Tell us what you want to focus on, skip, or prioritize in your learning path.
+                    <Text className="text-xs text-muted-foreground leading-relaxed mb-9">
+                      Tell us what you want to focus on, skip, or prioritize in your career path.
+
                     </Text>
                   </Animated.View>
                 )}
 
                 {validationError && (
-                  <View className="mb-4">
+                  <View className="mt-4">
                     <ErrorDisplay
                       error={validationError}
                       onDismiss={() => setValidationError(null)}
@@ -288,7 +299,8 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
                   </View>
                 )}
                 {error && (
-                  <View className="mb-4">
+                  <View className="mt-4">
+
                     <ErrorDisplay
                       error={error}
                       onRetry={() => handleGenerateRoadmap()}

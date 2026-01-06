@@ -15,7 +15,7 @@ import { RoadmapCard } from '@/components/roadmap/RoadmapCard';
 import { RoadmapSkeleton } from '@/components/roadmap/RoadmapSkeleton';
 import { RoadmapEmptyState } from '@/components/roadmap/RoadmapEmptyState';
 import { ActivityIndicator } from 'react-native';
-import { Plus, ArrowLeft, Search, Rocket, Briefcase, BookOpen, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Plus, Search, Rocket, BookOpen } from 'lucide-react-native';
 
 type ScreenState = 
   | { type: 'dashboard' }
@@ -27,8 +27,6 @@ export default function RoadmapScreen() {
   const [deletingRoadmapId, setDeletingRoadmapId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [expandedCareerPaths, setExpandedCareerPaths] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'standalone' | 'career'>('standalone');
   const currentUserId = useCurrentUserId();
   const { isDarkColorScheme } = useColorScheme();
 
@@ -41,44 +39,18 @@ export default function RoadmapScreen() {
   } = useCategorizedRoadmaps(currentUserId || undefined);
 
   // Filter roadmaps based on search query
-  const filteredData = useMemo(() => {
+  const filteredRoadmaps = useMemo(() => {
     if (!categorizedData) return null;
     const query = searchQuery.toLowerCase();
     
-    const filteredStandalone = categorizedData.standalone.filter(r => 
+    const filtered = categorizedData.standalone.filter(r => 
       r.title.toLowerCase().includes(query)
     );
     
-    const filteredCareer = categorizedData.career
-      .map(group => ({
-        ...group,
-        roadmaps: group.roadmaps.filter(r => 
-          r.title.toLowerCase().includes(query) || 
-          group.careerPathName.toLowerCase().includes(query)
-        )
-      }))
-      .filter(group => group.roadmaps.length > 0);
-    
-    return {
-      standalone: filteredStandalone,
-      career: filteredCareer,
-      totalCount: filteredStandalone.length + filteredCareer.reduce((sum, g) => sum + g.roadmaps.length, 0)
-    };
+    return filtered;
   }, [categorizedData, searchQuery]);
   
   const deleteRoadmapMutation = useDeleteRoadmap();
-
-  const toggleCareerPath = (careerPathId: string) => {
-    setExpandedCareerPaths(prev => {
-      const next = new Set(prev);
-      if (next.has(careerPathId)) {
-        next.delete(careerPathId);
-      } else {
-        next.add(careerPathId);
-      }
-      return next;
-    });
-  };
 
   const handleRoadmapCreated = (roadmapId: string) => {
     // Navigate to the roadmap route
@@ -216,14 +188,14 @@ export default function RoadmapScreen() {
         )}
 
         {/* Empty State */}
-        {!isLoading && !error && (!categorizedData || (categorizedData.standalone.length === 0 && categorizedData.career.length === 0)) && (
+        {!isLoading && !error && (!categorizedData || categorizedData.standalone.length === 0) && (
           <View className="flex-1 items-center justify-center py-16">
             <RoadmapEmptyState />
           </View>
         )}
 
         {/* Main Content - Roadmaps */}
-        {!isLoading && !error && filteredData && filteredData.totalCount > 0 && (
+        {!isLoading && !error && filteredRoadmaps && filteredRoadmaps.length > 0 && (
           <View className="space-y-6">
             {/* Search Section */}
             <View>
@@ -240,99 +212,27 @@ export default function RoadmapScreen() {
               </View>
             </View>
 
-            {/* Tab Toggle Buttons */}
-            <View className="flex-row gap-3">
-              <Pressable
-                onPress={() => setActiveTab('standalone')}
-                className={`flex-1 flex-row items-center justify-center gap-2.5 py-3.5 rounded-xl border-2 ${
-                  activeTab === 'standalone' 
-                    ? 'bg-purple-500/15 border-purple-500' 
-                    : 'bg-secondary/40 border-border'
-                }`}
-              >
-                <BookOpen 
-                  size={20} 
-                  color={activeTab === 'standalone' ? '#a855f7' : isDarkColorScheme ? '#9ca3af' : '#6b7280'} 
-                />
-                <Text className={`font-semibold text-base ${
-                  activeTab === 'standalone' 
-                    ? 'text-purple-600 dark:text-purple-400' 
-                    : 'text-muted-foreground'
-                }`}>
-                  Standalone
-                </Text>
-                <View className={`px-2.5 py-1 rounded-full ${
-                  activeTab === 'standalone' 
-                    ? 'bg-purple-500/25' 
-                    : 'bg-muted'
-                }`}>
-                  <Text className={`text-xs font-bold ${
-                    activeTab === 'standalone' 
-                      ? 'text-purple-600 dark:text-purple-400' 
-                      : 'text-muted-foreground'
-                  }`}>
-                    {filteredData.standalone.length}
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setActiveTab('career')}
-                className={`flex-1 flex-row items-center justify-center gap-2.5 py-3.5 rounded-xl border-2 ${
-                  activeTab === 'career' 
-                    ? 'bg-blue-500/15 border-blue-500' 
-                    : 'bg-secondary/40 border-border'
-                }`}
-              >
-                <Briefcase 
-                  size={20} 
-                  color={activeTab === 'career' ? '#3b82f6' : isDarkColorScheme ? '#9ca3af' : '#6b7280'} 
-                />
-                <Text className={`font-semibold text-base ${
-                  activeTab === 'career' 
-                    ? 'text-blue-600 dark:text-blue-400' 
-                    : 'text-muted-foreground'
-                }`}>
-                  Career
-                </Text>
-                <View className={`px-2.5 py-1 rounded-full ${
-                  activeTab === 'career' 
-                    ? 'bg-blue-500/25' 
-                    : 'bg-muted'
-                }`}>
-                  <Text className={`text-xs font-bold ${
-                    activeTab === 'career' 
-                      ? 'text-blue-600 dark:text-blue-400' 
-                      : 'text-muted-foreground'
-                  }`}>
-                    {filteredData.career.reduce((sum, g) => sum + g.roadmaps.length, 0)}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-
             {/* Section Divider */}
             <View className="h-px bg-border" />
 
-            {/* Standalone Roadmaps Tab */}
-            {activeTab === 'standalone' && (
-              <View>
-                {/* Section Header */}
-                <View className="mb-4">
-                  <Text className="text-base font-medium text-muted-foreground">
-                    {filteredData.standalone.length === 0 
-                      ? 'No standalone roadmaps found' 
-                      : searchQuery 
-                        ? `Found ${filteredData.standalone.length} ${filteredData.standalone.length === 1 ? 'result' : 'results'}`
-                        : 'Your self-created learning paths'
-                    }
-                  </Text>
-                </View>
-                
-                {/* Roadmap Cards */}
-                {filteredData.standalone.length > 0 ? (
-                  <View className="space-y-4">
-                    {filteredData.standalone.map((roadmap, index) => (
+            {/* Roadmaps List */}
+            <View>
+              {/* Section Header */}
+              <View className="mb-4">
+                <Text className="text-base font-medium text-muted-foreground">
+                  {filteredRoadmaps.length === 0 
+                    ? 'No roadmaps found' 
+                    : searchQuery 
+                      ? `Found ${filteredRoadmaps.length} ${filteredRoadmaps.length === 1 ? 'result' : 'results'}`
+                      : 'Your learning paths'
+                  }
+                </Text>
+              </View>
+              
+              {/* Roadmap Cards */}
+              {filteredRoadmaps.length > 0 ? (
+                <View className="space-y-4">
+                  {filteredRoadmaps.map((roadmap, index) => (
                       <View key={roadmap.id}>
                         <View className="relative">
                           {/* Glow Effect Background */}
@@ -348,7 +248,7 @@ export default function RoadmapScreen() {
                             }}
                           />
                           {/* Card Content */}
-                          <View style={{ position: 'relative', zIndex: 1 }}>
+                          <View style={{ position: 'relative', zIndex: 1}}>
                             <RoadmapCard
                               roadmap={roadmap}
                               index={index}
@@ -365,7 +265,7 @@ export default function RoadmapScreen() {
                   <View className="items-center py-16 px-6">
                     <BookOpen size={56} className="text-muted-foreground/40 mb-4" />
                     <Text className="text-base font-medium text-muted-foreground text-center mb-2">
-                      {searchQuery ? 'No matches found' : 'No standalone roadmaps yet'}
+                      {searchQuery ? 'No matches found' : 'No roadmaps yet'}
                     </Text>
                     <Text className="text-sm text-muted-foreground/70 text-center">
                       {searchQuery 
@@ -376,115 +276,12 @@ export default function RoadmapScreen() {
                   </View>
                 )}
               </View>
-            )}
-
-            {/* Career Roadmaps Tab */}
-            {activeTab === 'career' && (
-              <View>
-                {/* Section Header */}
-                <View className="mb-4">
-                  <Text className="text-base font-medium text-muted-foreground">
-                    {filteredData.career.length === 0 
-                      ? 'No career roadmaps found' 
-                      : searchQuery 
-                        ? `Found ${filteredData.career.reduce((sum, g) => sum + g.roadmaps.length, 0)} ${filteredData.career.reduce((sum, g) => sum + g.roadmaps.length, 0) === 1 ? 'result' : 'results'}`
-                        : 'Organized by your career paths'
-                    }
-                  </Text>
-                </View>
-
-                {/* Career Groups */}
-                {filteredData.career.length > 0 ? (
-                  <View className="space-y-5">
-                    {filteredData.career.map((careerGroup) => {
-                      const isExpanded = expandedCareerPaths.has(careerGroup.careerPathId);
-                      
-                      return (
-                        <View key={careerGroup.careerPathId}>
-                          {/* Career Path Header */}
-                          <Pressable
-                            onPress={() => toggleCareerPath(careerGroup.careerPathId)}
-                            className="flex-row items-center justify-between p-4 rounded-xl bg-secondary/60 border border-border active:opacity-80"
-                          >
-                            <View className="flex-row items-center gap-3 flex-1">
-                              <View className="h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20">
-                                <Briefcase size={20} color="#3b82f6" />
-                              </View>
-                              <View className="flex-1">
-                                <Text className="font-semibold text-base text-foreground" numberOfLines={1}>
-                                  {careerGroup.careerPathName}
-                                </Text>
-                                <Text className="text-xs text-muted-foreground mt-0.5">
-                                  {careerGroup.roadmaps.length} {careerGroup.roadmaps.length === 1 ? 'topic' : 'topics'}
-                                </Text>
-                              </View>
-                            </View>
-                            {isExpanded ? (
-                              <ChevronUp size={20} className="text-muted-foreground" />
-                            ) : (
-                              <ChevronDown size={20} className="text-muted-foreground" />
-                            )}
-                          </Pressable>
-
-                          {/* Expanded Roadmaps */}
-                          {isExpanded && (
-                            <View className="mt-3 pl-5 space-y-4 border-l-2 border-blue-500/40 ml-5">
-                              {careerGroup.roadmaps.map((roadmap, index) => (
-                                <View key={roadmap.id}>
-                                  <View className="relative">
-                                    {/* Glow Effect Background */}
-                                    <View 
-                                      className="absolute -inset-[1px] rounded-2xl" 
-                                      style={{ 
-                                        backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                                        shadowColor: '#3b82f6',
-                                        shadowOffset: { width: 0, height: 4 },
-                                        shadowOpacity: 0.3,
-                                        shadowRadius: 12,
-                                        elevation: 8,
-                                      }}
-                                    />
-                                    {/* Card Content */}
-                                    <View style={{ position: 'relative', zIndex: 1 }}>
-                                      <RoadmapCard
-                                        roadmap={roadmap}
-                                        index={index}
-                                        onPress={() => router.push(`/roadmap/${roadmap.id}` as any)}
-                                        onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
-                                        isDeleting={deletingRoadmapId === roadmap.id}
-                                      />
-                                    </View>
-                                  </View>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <View className="items-center py-16 px-6">
-                    <Briefcase size={56} className="text-muted-foreground/40 mb-4" />
-                    <Text className="text-base font-medium text-muted-foreground text-center mb-2">
-                      {searchQuery ? 'No matches found' : 'No career roadmaps yet'}
-                    </Text>
-                    <Text className="text-sm text-muted-foreground/70 text-center">
-                      {searchQuery 
-                        ? `No roadmaps match "${searchQuery}". Try a different search.` 
-                        : 'Career roadmaps will appear here when you create them.'
-                      }
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-    </ScrollView>
-  </SafeAreaView>
-);
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
 
 // Render based on current screen state
 if (screenState.type === 'create') {

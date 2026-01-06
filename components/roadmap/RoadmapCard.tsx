@@ -110,7 +110,7 @@ export function RoadmapCard({ roadmap, onPress, onDelete, isDeleting, index = 0 
             </View>
             
             <Text className="text-xs text-muted-foreground">
-              <Text className="text-xs text-muted-foreground text-white">{roadmap.progress}%</Text> complete
+              <Text className="text-xs font-semibold text-foreground">{roadmap.progress}%</Text> complete
             </Text>
           </View>
 

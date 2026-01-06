@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useCreateCareerPath } from '@/hooks/queries/useCareerQueries';
-import { RocketLoadingAnimation } from '@/components/roadmap/RocketLoadingAnimation';
+import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { ArrowLeft, CheckCircle, X, WandSparkles, ChevronDown, ChevronUp, Settings2, Briefcase } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
 
@@ -84,7 +84,17 @@ export function CareerPathCreation({ onCareerPathCreated, onBack }: CareerPathCr
   if (isGenerating) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <RocketLoadingAnimation />
+        <LoadingAnimation 
+          title="Crafting Your Career Path"
+          messages={[
+            'Analyzing career requirements...',
+            'Mapping skills and competencies...',
+            'Identifying learning topics...',
+            'Structuring career roadmap...',
+            'Organizing learning modules...',
+            'Creating your career path...',
+          ]}
+        />
       </View>
     );
   }

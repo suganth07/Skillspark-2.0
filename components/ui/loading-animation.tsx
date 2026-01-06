@@ -13,30 +13,32 @@ import Animated, {
 import { Text } from '@/components/ui/text';
 import { Rocket } from 'lucide-react-native';
 
-interface RocketLoadingAnimationProps {
-  progress?: string;
+interface LoadingAnimationProps {
+  title?: string;
+  messages?: string[];
 }
 
-const thinkingMessages = [
-  'Analyzing your topic...',
-  'Breaking down concepts...',
-  'Mapping prerequisites...',
-  'Structuring learning path...',
-  'Organizing modules...',
-  'Creating roadmap...',
+const defaultMessages = [
+  'Processing your request...',
+  'Analyzing information...',
+  'Organizing content...',
+  'Almost there...',
 ];
 
-export function RocketLoadingAnimation({ progress }: RocketLoadingAnimationProps) {
+export function LoadingAnimation({ 
+  title = 'Please Wait',
+  messages = defaultMessages 
+}: LoadingAnimationProps) {
   const rocketY = useSharedValue(0);
-  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [messageIndex, setMessageIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setThinkingIndex((prev) => (prev + 1) % thinkingMessages.length);
+      setMessageIndex((prev) => (prev + 1) % messages.length);
     }, 2500);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [messages.length]);
 
   useEffect(() => {
     rocketY.value = withRepeat(
@@ -53,7 +55,7 @@ export function RocketLoadingAnimation({ progress }: RocketLoadingAnimationProps
     transform: [{ translateY: rocketY.value }],
   }));
 
-  const displayText = progress || thinkingMessages[thinkingIndex];
+  const displayText = messages[messageIndex];
 
   return (
     <View className="items-center justify-center py-12">
@@ -82,7 +84,7 @@ export function RocketLoadingAnimation({ progress }: RocketLoadingAnimationProps
       {/* Text */}
       <View className="mt-8 items-center px-6">
         <Text className="text-base font-semibold text-foreground mb-2">
-          Creating Your Roadmap
+          {title}
         </Text>
         <View className="h-12 justify-center">
           <Animated.View

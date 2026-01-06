@@ -8,7 +8,7 @@ import { Text } from '@/components/ui/text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorDisplay } from '@/components/ui/error-display';
-import { RocketLoadingAnimation } from '@/components/roadmap/RocketLoadingAnimation';
+import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { useCareerPathDetail, useGenerateCareerTopicRoadmap } from '@/hooks/queries/useCareerQueries';
 import { useUserRoadmaps } from '@/hooks/queries/useRoadmapQueries';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
@@ -140,10 +140,15 @@ export default function CareerPathDetailScreen() {
       <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View className="flex-1 items-center justify-center">
-          <RocketLoadingAnimation />
-          <Text className="mt-4 text-muted-foreground text-center px-6">
-            Generating roadmap for {selectedTopic?.name}...
-          </Text>
+          <LoadingAnimation 
+            title={`Creating ${selectedTopic?.name} Roadmap`}
+            messages={[
+              'Analyzing topic requirements...',
+              'Structuring learning modules...',
+              'Organizing content...',
+              'Creating your roadmap...',
+            ]}
+          />
         </View>
       </SafeAreaView>
     );

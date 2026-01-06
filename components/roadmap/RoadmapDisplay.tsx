@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
@@ -14,7 +15,7 @@ import { useRoadmapDetails, useDeleteRoadmap, useUpdateStepCompletion, useCheckT
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { geminiService } from '@/lib/gemini';
-import { createRoadmap } from '@/server/queries/roadmaps';
+import { regenerateRoadmap } from '@/server/queries/roadmaps';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -32,6 +33,7 @@ import {
   Wand2,
   X,
   RotateCcw,
+  AlertTriangle,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { cn } from '@/lib/utils';
@@ -285,65 +287,51 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const handleRegenerateRoadmap = async () => {
     if (!userId || !currentRoadmap?.roadmap.title) return;
 
-    // Extract the topic from title (remove " Learning Path")
-    const topic = currentRoadmap.roadmap.title.replace(' Learning Path', '');
-
     if (!regeneratePreferences.trim()) {
       Alert.alert('Preferences Required', 'Please enter your customization preferences to regenerate the roadmap.');
       return;
     }
 
-    Alert.alert(
-      'Regenerate Roadmap',
-      `This will replace your entire roadmap for "${topic}" with a new one based on your preferences. All progress will be lost. Continue?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Regenerate',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsRegenerating(true);
-              console.log(`🔄 Regenerating roadmap for: ${topic}`);
-              console.log(`📝 User preferences: ${regeneratePreferences}`);
+    // Extract the topic from title (remove " Learning Path")
+    const topic = currentRoadmap.roadmap.title.replace(' Learning Path', '');
 
-              // Step 1: Delete old roadmap using mutation hook
-              await deleteRoadmapMutation.mutateAsync({
-                userId: userId,
-                roadmapId: roadmapId
-              });
-              console.log('🗑️ Old roadmap deleted');
+    try {
+      setIsRegenerating(true);
+      console.log(`🔄 Regenerating roadmap for: ${topic}`);
+      console.log(`📝 User preferences: ${regeneratePreferences}`);
 
-              // Step 2: Generate knowledge graph with preferences
-              const knowledgeGraph = await geminiService.generateKnowledgeGraph(
-                topic,
-                regeneratePreferences.trim()
-              );
-              console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
+      // Step 1: Generate knowledge graph with preferences
+      const knowledgeGraph = await geminiService.generateKnowledgeGraph(
+        topic,
+        regeneratePreferences.trim()
+      );
+      console.log(`✅ Knowledge graph generated with ${knowledgeGraph.prerequisites.length} prerequisites`);
 
-              // Step 3: Create new roadmap (without generating quizzes)
-              const newRoadmapId = await createRoadmap(userId, knowledgeGraph, regeneratePreferences.trim());
-              console.log(`✨ New roadmap created: ${newRoadmapId}`);
+      // Step 2: Regenerate roadmap in place (keeps same ID)
+      await regenerateRoadmap(roadmapId, userId, knowledgeGraph, regeneratePreferences.trim());
+      console.log(`✨ Roadmap regenerated successfully`);
 
-              // Close modal and reset state
-              setShowRegenerateModal(false);
-              setRegeneratePreferences('');
-              setIsRegenerating(false);
+      // Close modal and reset state
+      setShowRegenerateModal(false);
+      setRegeneratePreferences('');
+      setIsRegenerating(false);
 
-              // Navigate immediately to new roadmap
-              router.replace(`/roadmap/${newRoadmapId}` as any);
-            } catch (error) {
-              setIsRegenerating(false);
-              console.error('Failed to regenerate roadmap:', error);
-              Alert.alert(
-                'Error',
-                error instanceof Error ? error.message : 'Failed to regenerate roadmap. Please try again.'
-              );
-            }
-          },
-        },
-      ]
-    );
+      // Refresh the current roadmap data
+      refetch();
+      
+      Alert.alert(
+        'Success',
+        'Your roadmap has been regenerated with your preferences!',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      setIsRegenerating(false);
+      console.error('Failed to regenerate roadmap:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to regenerate roadmap. Please try again.'
+      );
+    }
   };
 
   const handleToggleCompletion = async (step: RoadmapStep) => {
@@ -674,68 +662,73 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                 Regenerate your roadmap with custom preferences. Enter what you want to focus on, skip, or prioritize.
               </Text>
 
-              <View className="mb-6">
-                <Text className="text-sm font-medium text-foreground mb-2">
-                  Your Preferences
-                </Text>
-                <View className="min-h-[120px] p-3 rounded-lg border border-border bg-background">
-                  <TextInput
-                    value={regeneratePreferences}
-                    onChangeText={setRegeneratePreferences}
-                    placeholder="e.g., Skip basics, focus mainly on advanced patterns, include real-world examples..."
-                    placeholderTextColor="#9ca3af"
-                    multiline
-                    editable={!isRegenerating}
-                    className="text-sm text-foreground"
-                    style={{ minHeight: 100, textAlignVertical: 'top' }}
+              {isRegenerating ? (
+                <View className="py-8 items-center">
+                  <LoadingAnimation 
+                    title="Regenerating Roadmap"
+                    messages={[
+                      'Creating your personalized learning path...',
+                      'Analyzing your progress...',
+                      'Organizing topics...',
+                      'Almost ready...'
+                    ]}
                   />
                 </View>
-                <Text className="text-xs text-muted-foreground mt-2">
-                  💡 Examples: "Skip {'{topic}'}, focus mainly on {'{topic}'}," "Include interview prep," "Focus on practical projects"
-                </Text>
-              </View>
+              ) : (
+                <>
+                  <View className="mb-6">
+                    <Text className="text-sm font-medium text-foreground mb-2">
+                      Your Preferences
+                    </Text>
+                    <View className="min-h-[120px] p-3 rounded-lg border border-border bg-background">
+                      <TextInput
+                        value={regeneratePreferences}
+                        onChangeText={setRegeneratePreferences}
+                        placeholder="e.g., Skip basics, focus mainly on advanced patterns, include real-world examples..."
+                        placeholderTextColor="#9ca3af"
+                        multiline
+                        editable={!isRegenerating}
+                        className="text-sm text-foreground"
+                        style={{ minHeight: 100, textAlignVertical: 'top' }}
+                      />
+                    </View>
+                    <Text className="text-xs text-muted-foreground mt-2">
+                      Examples: "Skip {'{topic}'}, focus mainly on {'{topic}'}" or "Include interview prep" or "Focus on practical projects"
+                    </Text>
+                  </View>
 
-              <View className="flex-col gap-2">
-                <Pressable
-                  onPress={handleRegenerateRoadmap}
-                  disabled={isRegenerating || !regeneratePreferences.trim()}
-                  className={cn(
-                    "w-full h-12 items-center justify-center rounded-lg flex-row gap-2",
-                    isRegenerating || !regeneratePreferences.trim()
-                      ? "bg-orange-500/30"
-                      : "bg-orange-500 active:bg-orange-600"
-                  )}
-                >
-                  {isRegenerating ? (
-                    <>
-                      <ActivityIndicator size="small" color="#fff" />
-                      <Text className="text-base font-semibold text-white">
-                        Regenerating...
-                      </Text>
-                    </>
-                  ) : (
-                    <>
+                  <View className="flex-col gap-2">
+                    <Pressable
+                      onPress={handleRegenerateRoadmap}
+                      disabled={isRegenerating || !regeneratePreferences.trim()}
+                      className={cn(
+                        "w-full h-12 items-center justify-center rounded-lg flex-row gap-2",
+                        isRegenerating || !regeneratePreferences.trim()
+                          ? "bg-orange-500/30"
+                          : "bg-orange-500 active:bg-orange-600"
+                      )}
+                    >
                       <Wand2 size={20} className="text-white" />
                       <Text className="text-base font-semibold text-white">
                         Regenerate Roadmap
                       </Text>
-                    </>
-                  )}
-                </Pressable>
+                    </Pressable>
 
-                <Pressable
-                  onPress={() => {
-                    setShowRegenerateModal(false);
-                    setRegeneratePreferences('');
-                  }}
-                  disabled={isRegenerating}
-                  className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
-                >
-                  <Text className="text-base font-medium text-muted-foreground">
-                    Cancel
-                  </Text>
-                </Pressable>
-              </View>
+                    <Pressable
+                      onPress={() => {
+                        setShowRegenerateModal(false);
+                        setRegeneratePreferences('');
+                      }}
+                      disabled={isRegenerating}
+                      className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
+                    >
+                      <Text className="text-base font-medium text-muted-foreground">
+                        Cancel
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
             </View>
           </Animated.View>
         </Animated.View>
@@ -773,8 +766,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
           >
             <View className="p-6">
               <View className="flex-row items-center justify-between mb-4">
-                <View className="flex-row items-center gap-3">
-                  <View className="h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <View className="flex-row items-center gap-2 flex-1 mr-2">
+                  <View className="h-12 w-12 items-center justify-center rounded-full bg-primary/10 flex-shrink-0">
                     <RefreshCw size={24} className="text-primary" />
                   </View>
                   <View className="flex-1">
@@ -788,7 +781,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                 </View>
                 <Pressable
                   onPress={() => setShowSearchUpdateModal(false)}
-                  className="h-8 w-8 items-center justify-center rounded-lg active:bg-secondary"
+                  className="h-8 w-8 items-center justify-center rounded-lg active:bg-secondary flex-shrink-0"
                 >
                   <X size={20} className="text-muted-foreground" />
                 </Pressable>

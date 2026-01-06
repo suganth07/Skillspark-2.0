@@ -222,6 +222,125 @@ export async function createRoadmap(
   });
 }
 
+// Regenerate an existing roadmap with new knowledge graph while keeping the same ID
+export async function regenerateRoadmap(
+  roadmapId: string,
+  userId: string,
+  knowledgeGraph: KnowledgeGraph,
+  userPreferences?: string
+): Promise<void> {
+  return await db.transaction(async (tx) => {
+    // 1. Delete existing roadmap steps
+    await tx.delete(roadmapSteps).where(eq(roadmapSteps.roadmapId, roadmapId));
+
+    // 2. Update the roadmap metadata
+    await tx.update(roadmaps)
+      .set({
+        title: `${knowledgeGraph.mainTopic} Learning Path`,
+        description: knowledgeGraph.description,
+        status: 'active',
+        preferences: JSON.stringify({ 
+          topic: knowledgeGraph.mainTopic,
+          totalPrerequisites: knowledgeGraph.prerequisites.length,
+          userPreferences: userPreferences || null
+        }),
+        updatedAt: new Date()
+      })
+      .where(eq(roadmaps.id, roadmapId));
+
+    // 3. Create topics for each prerequisite (reuse existing topics where possible)
+    const topicIds: Record<string, string> = {};
+    let previousTopicId: string | null = null;
+    
+    for (const prereq of knowledgeGraph.prerequisites) {
+      const topicId = createId();
+      
+      // Check if topic already exists
+      const existingTopic = await tx.select({ id: topics.id })
+        .from(topics)
+        .where(eq(topics.name, prereq.name))
+        .limit(1);
+      
+      if (existingTopic[0]) {
+        // Update existing topic
+        topicIds[prereq.id] = existingTopic[0].id;
+        await tx.update(topics)
+          .set({
+            description: prereq.description,
+            previousTopicId: previousTopicId,
+            metadata: JSON.stringify({
+              difficulty: prereq.difficulty,
+              estimatedHours: prereq.estimatedHours,
+              prerequisiteOrder: prereq.order
+            })
+          })
+          .where(eq(topics.id, existingTopic[0].id));
+        previousTopicId = existingTopic[0].id;
+      } else {
+        // Insert new topic
+        topicIds[prereq.id] = topicId;
+        await tx.insert(topics).values({
+          id: topicId,
+          name: prereq.name,
+          description: prereq.description,
+          category: knowledgeGraph.mainTopic,
+          previousTopicId: previousTopicId,
+          metadata: JSON.stringify({
+            difficulty: prereq.difficulty,
+            estimatedHours: prereq.estimatedHours,
+            prerequisiteOrder: prereq.order
+          })
+        });
+        previousTopicId = topicId;
+      }
+    }
+
+    // 4. Create new roadmap steps
+    for (const prereq of knowledgeGraph.prerequisites) {
+      await tx.insert(roadmapSteps).values({
+        roadmapId,
+        order: prereq.order,
+        title: prereq.name,
+        content: `## ${prereq.name}\n\n${prereq.description}\n\n**Difficulty:** ${prereq.difficulty}\n**Estimated Time:** ${prereq.estimatedHours} hours`,
+        durationMinutes: prereq.estimatedHours * 60,
+        topicId: topicIds[prereq.id],
+        isCompleted: false
+      });
+    }
+
+    // 5. Update user knowledge tracking (preserve existing if available)
+    for (const prereq of knowledgeGraph.prerequisites) {
+      // Check if user knowledge already exists for this topic
+      const existingKnowledge = await tx
+        .select({ id: userKnowledge.id })
+        .from(userKnowledge)
+        .where(and(
+          eq(userKnowledge.userId, userId),
+          eq(userKnowledge.topicId, topicIds[prereq.id])
+        ))
+        .limit(1);
+
+      if (existingKnowledge[0]) {
+        // Reset status for regenerated roadmap
+        await tx.update(userKnowledge)
+          .set({
+            status: prereq.order === 1 ? 'available' : 'locked',
+            proficiencyLevel: 0
+          })
+          .where(eq(userKnowledge.id, existingKnowledge[0].id));
+      } else {
+        // Create new user knowledge entry
+        await tx.insert(userKnowledge).values({
+          userId,
+          topicId: topicIds[prereq.id],
+          proficiencyLevel: 0,
+          status: prereq.order === 1 ? 'available' : 'locked'
+        });
+      }
+    }
+  });
+}
+
 // Create quiz for a prerequisite
 export async function createPrerequisiteQuiz(
   roadmapId: string,

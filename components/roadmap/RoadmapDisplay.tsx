@@ -109,6 +109,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
   const [revisionQuizId, setRevisionQuizId] = useState<string | null>(null);
   const [revisionStep, setRevisionStep] = useState<'summary' | 'quiz'>('summary');
   const [generatingRevision, setGeneratingRevision] = useState(false);
+  const [revisionReminderQueue, setRevisionReminderQueue] = useState<RoadmapStep[]>([]);
+  const [showRevisionReminder, setShowRevisionReminder] = useState(false);
+  const [currentReminderStep, setCurrentReminderStep] = useState<RoadmapStep | null>(null);
   
   const userId = useCurrentUserId();
   const provider = useWebSearchProvider();
@@ -140,6 +143,46 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
       }
     }, [roadmapId, userId, refetch])
   );
+
+  // Check for topics needing revision (completed >= 30 seconds ago)
+  // TO CHANGE TO 1 WEEK: Replace 30 * 1000 with 7 * 24 * 60 * 60 * 1000
+  const checkForRevisionReminders = React.useCallback(() => {
+    if (!currentRoadmap?.steps || showRevisionReminder || revisionReminderQueue.length > 0) return;
+
+    const REVISION_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 30 seconds (for testing)
+    // For 1 week, use: const REVISION_THRESHOLD = 7 * 24 * 60 * 60 * 1000;
+    
+    const now = new Date().getTime();
+    const stepsNeedingRevision = currentRoadmap.steps.filter(step => {
+      if (!step.isCompleted || !step.lastCompletedAt || !step.topicId) return false;
+      
+      const completedTime = new Date(step.lastCompletedAt).getTime();
+      const timeSinceCompletion = now - completedTime;
+      
+      return timeSinceCompletion >= REVISION_THRESHOLD;
+    });
+
+    if (stepsNeedingRevision.length > 0) {
+      console.log(`📅 Found ${stepsNeedingRevision.length} topics needing revision`);
+      setRevisionReminderQueue(stepsNeedingRevision);
+      setCurrentReminderStep(stepsNeedingRevision[0]);
+      setShowRevisionReminder(true);
+    }
+  }, [currentRoadmap?.steps, showRevisionReminder, revisionReminderQueue.length]);
+
+  // Initial check on mount and data change
+  React.useEffect(() => {
+    checkForRevisionReminders();
+  }, [checkForRevisionReminders]);
+
+  // Periodic check every 10 seconds while roadmap is open
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      checkForRevisionReminders();
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [checkForRevisionReminders]);
 
   const handleTakeQuiz = async (step: RoadmapStep) => {
     if (!userId) return;
@@ -311,6 +354,56 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
     
     setShowRevisionModal(false);
     onTakeQuiz?.(revisionQuizId, `${selectedStep.title} - Revision`);
+  };
+
+  const handleReminderAccept = async () => {
+    if (!currentReminderStep) return;
+    
+    setShowRevisionReminder(false);
+    await handleStartRevision(currentReminderStep);
+  };
+
+  const handleReminderDismiss = async () => {
+    // Update lastCompletedAt to current time so it won't show again immediately
+    if (currentReminderStep && userId) {
+      try {
+        await updateStepCompletionMutation.mutateAsync({
+          stepId: currentReminderStep.id,
+          userId: userId,
+          roadmapId: roadmapId,
+          isCompleted: true, // Keep it completed
+        });
+        console.log(`✅ Updated lastCompletedAt for "${currentReminderStep.title}" to current time`);
+      } catch (err) {
+        console.error('Failed to update lastCompletedAt:', err);
+      }
+    }
+
+    if (revisionReminderQueue.length > 1) {
+      // Show next reminder in queue
+      const nextQueue = revisionReminderQueue.slice(1);
+      setRevisionReminderQueue(nextQueue);
+      setCurrentReminderStep(nextQueue[0]);
+      setShowRevisionReminder(true);
+    } else {
+      // No more reminders
+      setShowRevisionReminder(false);
+      setRevisionReminderQueue([]);
+      setCurrentReminderStep(null);
+    }
+  };
+
+  const handleRevisionQuizComplete = () => {
+    // After quiz completes, show next reminder if any
+    if (revisionReminderQueue.length > 1) {
+      const nextQueue = revisionReminderQueue.slice(1);
+      setRevisionReminderQueue(nextQueue);
+      setCurrentReminderStep(nextQueue[0]);
+      setShowRevisionReminder(true);
+    } else {
+      setRevisionReminderQueue([]);
+      setCurrentReminderStep(null);
+    }
   };
 
   const handleWebSearch = async () => {
@@ -753,6 +846,90 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onDelete 
                 <Text className="text-xs text-primary text-center font-medium">
                   🎯 Preparing your assessment
                 </Text>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      {/* Revision Reminder Modal */}
+      <Modal
+        transparent
+        visible={showRevisionReminder}
+        animationType="none"
+        onRequestClose={handleReminderDismiss}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={handleReminderDismiss}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-sm overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="items-center mb-4">
+                <View className="bg-purple-100 dark:bg-purple-950 p-4 rounded-full mb-4">
+                  <Brain size={32} className="text-purple-600" />
+                </View>
+                <Text className="text-xl font-bold text-foreground text-center mb-2">
+                  Time to Revise!
+                </Text>
+                {currentReminderStep && (
+                  <>
+                    <Text className="text-base font-semibold text-foreground text-center mb-2">
+                      {currentReminderStep.title}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                      You completed this topic {formatDate(currentReminderStep.lastCompletedAt)}. 
+                      A quick revision will help reinforce your knowledge!
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {revisionReminderQueue.length > 1 && (
+                <View className="mb-4 px-3 py-2 bg-purple-50 dark:bg-purple-950/50 rounded-lg">
+                  <Text className="text-xs text-purple-700 dark:text-purple-400 text-center">
+                    📚 {revisionReminderQueue.length} topics ready for revision
+                  </Text>
+                </View>
+              )}
+
+              <View className="space-y-3">
+                <Pressable
+                  onPress={handleReminderAccept}
+                  className="w-full h-12 items-center justify-center rounded-lg bg-purple-600 active:opacity-90 flex-row gap-2"
+                >
+                  <Brain size={16} className="text-white" />
+                  <Text className="text-base font-semibold text-white">
+                    Start Revision
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={handleReminderDismiss}
+                  className="w-full h-12 items-center justify-center rounded-lg border border-border bg-background active:bg-secondary"
+                >
+                  <Text className="text-base font-medium text-foreground">
+                    {revisionReminderQueue.length > 1 ? 'Next Topic' : 'Maybe Later'}
+                  </Text>
+                </Pressable>
               </View>
             </View>
           </Animated.View>

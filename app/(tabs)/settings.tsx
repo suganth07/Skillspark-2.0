@@ -23,7 +23,7 @@ export default function Settings() {
         </View>
         
         {/* User Accounts Section */}
-        <View className="px-6 pb-6">
+        <View className="px-6 pb-4">
           <UserManagement />
         </View>
         

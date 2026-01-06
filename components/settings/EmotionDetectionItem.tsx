@@ -17,8 +17,8 @@ export function EmotionDetectionItem() {
           : 'Enable to track your learning emotions'
       }
       itemLeft={(props) => (
-        <View className="h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/30">
-          <Brain size={20} className="text-purple-600 dark:text-purple-400" />
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-800/60">
+          <Brain size={20} className="text-purple-600 dark:text-purple-200" />
         </View>
       )}
       itemRight={(props) => (

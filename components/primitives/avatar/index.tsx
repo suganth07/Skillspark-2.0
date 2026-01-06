@@ -104,7 +104,7 @@ const Fallback = React.forwardRef<ViewRef, SlottableViewProps>(
   ({asChild, ...props}, ref) => {
     const {alt, status} = useRootContext();
 
-    if (status !== "error") {
+    if (status === "loaded") {
       return null;
     }
     const Component = asChild ? Slot.View : View;

@@ -36,7 +36,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
   return (
     <View className="space-y-3">
       <View className="flex-row items-center gap-3 mb-2">
-        <Globe className="h-5 w-5 text-primary" />
+        <Globe className="h-5 w-5 text-foreground" />
         <View className="flex-1">
           <Text className="text-base font-semibold">Web Search Provider</Text>
           <Text className="text-sm text-muted-foreground">
@@ -45,7 +45,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
         </View>
       </View>
 
-      <View className="space-y-2">
+      <View className="gap-3">
         {providers.map((provider) => {
           const Icon = provider.icon;
           const isAvailable = isProviderAvailable(provider.id);

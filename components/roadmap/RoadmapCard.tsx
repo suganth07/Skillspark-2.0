@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ChevronRight, BookOpen, CheckCircle, Clock, TrendingUp, Trash2 } from 'lucide-react-native';
 import { cn } from '@/lib/utils';

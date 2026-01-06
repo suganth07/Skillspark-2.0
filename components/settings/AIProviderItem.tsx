@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from '@/components/ui/text';
-import { Brain, Sparkles } from 'lucide-react-native';
+import { Zap, Sparkles } from 'lucide-react-native';
 import { useAIProvider, useSetAIProvider, useIsProviderAvailable, type AIProvider } from '@/hooks/stores/useAIProviderStore';
 
 interface AIProviderItemProps {
@@ -13,7 +13,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
   const setProvider = useSetAIProvider();
   const isProviderAvailable = useIsProviderAvailable();
 
-  const providers: Array<{ id: AIProvider; name: string; description: string; icon: typeof Brain }> = [
+  const providers: Array<{ id: AIProvider; name: string; description: string; icon: typeof Zap }> = [
     {
       id: 'gemini',
       name: 'Google Gemini',
@@ -24,7 +24,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
       id: 'groq',
       name: 'Groq (Llama 3.3)',
       description: 'Ultra-fast inference with Llama',
-      icon: Brain,
+      icon: Zap,
     },
   ];
 
@@ -36,7 +36,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
   return (
     <View className="space-y-3">
       <View className="flex-row items-center gap-3 mb-2">
-        <Brain className="h-5 w-5 text-primary" />
+        <Sparkles size={20} className="text-foreground" />
         <View className="flex-1">
           <Text className="text-base font-semibold">AI Provider</Text>
           <Text className="text-sm text-muted-foreground">
@@ -45,7 +45,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
         </View>
       </View>
 
-      <View className="space-y-2">
+      <View className="gap-3">
         {providers.map((provider) => {
           const Icon = provider.icon;
           const isAvailable = isProviderAvailable(provider.id);

@@ -17,8 +17,8 @@ export function GeneratedVideosItem() {
           : 'Enable to get AI-generated video content'
       }
       itemLeft={(props) => (
-        <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-          <Video size={20} className="text-blue-600 dark:text-blue-400" />
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-800/60">
+          <Video size={20} className="text-blue-600 dark:text-blue-200" />
         </View>
       )}
       itemRight={(props) => (

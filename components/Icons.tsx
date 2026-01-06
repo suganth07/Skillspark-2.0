@@ -55,6 +55,7 @@ import {
   UserPlus,
   Users,
   X,
+  Zap,
 } from "lucide-react-native";
 import {cssInterop} from "nativewind";
 function interopIcon(icon: LucideIcon) {
@@ -122,6 +123,7 @@ interopIcon(Terminal);
 interopIcon(AlertTriangle);
 interopIcon(Code);
 interopIcon(CheckSquare);
+interopIcon(Zap);
 
 export {
   Activity,
@@ -178,4 +180,5 @@ export {
   UserPlus,
   Users,
   X,
+  Zap,
 };

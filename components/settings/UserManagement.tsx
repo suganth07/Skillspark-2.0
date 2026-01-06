@@ -114,10 +114,10 @@ export function UserManagement() {
               >
                 {/* User Info */}
                 <View className="flex-row items-center flex-1 gap-3">
-                  <Avatar alt={user.name!} className="h-10 w-10">
-                    <AvatarImage source={{ uri: user.avatarUrl || undefined }} />
+                  <Avatar alt={user.name!} className="h-10 w-10 bg-primary/10">
+                    {user.avatarUrl && <AvatarImage source={{ uri: user.avatarUrl }} />}
                     <AvatarFallback>
-                      <Text className="text-sm">{user.name?.[0]?.toUpperCase()}</Text>
+                      <Text className="text-sm font-medium text-primary">{user.name?.[0]?.toUpperCase()}</Text>
                     </AvatarFallback>
                   </Avatar>
                   <View className="flex-1">
@@ -144,7 +144,7 @@ export function UserManagement() {
                     onPress={() => setDeleteUserId(user.id)}
                     className="h-8 w-8 items-center justify-center rounded active:bg-muted"
                   >
-                    <Trash2 size={18} color="#6b7280" />
+                    <Trash2 size={18} className="text-muted-foreground" />
                   </Pressable>
                 )}
               </Pressable>

@@ -124,6 +124,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [revisionQuizId, setRevisionQuizId] = useState<string | null>(null);
   const [revisionStep, setRevisionStep] = useState<'summary' | 'quiz'>('summary');
   const [generatingRevision, setGeneratingRevision] = useState(false);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
   const [revisionReminderQueue, setRevisionReminderQueue] = useState<RoadmapStep[]>([]);
   const [showRevisionReminder, setShowRevisionReminder] = useState(false);
   const [currentReminderStep, setCurrentReminderStep] = useState<RoadmapStep | null>(null);
@@ -416,7 +417,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
     if (!userId || !currentRoadmap) return;
 
     if (!step.topicId) {
-      Alert.alert('Error', 'Cannot start revision: Topic ID missing');
+      setRevisionError('Cannot start revision: Topic ID missing');
+      setShowRevisionModal(true);
       return;
     }
 
@@ -425,6 +427,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       setGeneratingRevision(true);
       setShowRevisionModal(true);
       setRevisionStep('summary');
+      setRevisionError(null);
 
       const result = await generateRevisionMutation.mutateAsync({
         userId: userId,
@@ -441,12 +444,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       setGeneratingRevision(false);
     } catch (error) {
       setGeneratingRevision(false);
-      setShowRevisionModal(false);
       console.error('Failed to generate revision:', error);
-      Alert.alert(
-        'Error',
-        'Failed to generate revision content. Please try again.',
-        [{ text: 'OK' }]
+      setRevisionError(
+        error instanceof Error ? error.message : 'Failed to generate revision content. Please try again.'
       );
     }
   };
@@ -1140,6 +1140,23 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
                     'Analyzing key concepts...',
                     'Almost ready...'
                   ]}
+                />
+              </View>
+            ) : revisionError ? (
+              <View className="p-6">
+                <ErrorDisplay
+                  error={revisionError}
+                  onRetry={() => {
+                    if (selectedStep) {
+                      setRevisionError(null);
+                      handleStartRevision(selectedStep);
+                    }
+                  }}
+                  onDismiss={() => {
+                    setShowRevisionModal(false);
+                    setRevisionError(null);
+                  }}
+                  variant="inline"
                 />
               </View>
             ) : revisionStep === 'summary' && revisionSummary ? (

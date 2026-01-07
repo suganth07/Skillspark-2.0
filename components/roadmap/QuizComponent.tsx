@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Alert, Pressable } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { View, Alert, Pressable, Modal, ActivityIndicator } from 'react-native';
+import Animated, { FadeInDown, FadeIn, ZoomIn, FadeOut } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { ErrorDisplay } from '@/components/ui/error-display';
@@ -33,6 +33,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [showResults, setShowResults] = useState(false);
   const [timeStarted, setTimeStarted] = useState<Date>(new Date());
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
   
   const { currentUser, currentUserId } = useUserManagement();
   
@@ -61,35 +62,29 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
 
   const handleSubmitQuiz = async () => {
     if (!currentUserId || !currentQuiz) return;
+    setShowSubmitModal(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!currentUserId || !currentQuiz) return;
 
     setSubmitError(null);
+    setShowSubmitModal(false);
 
-    Alert.alert(
-      'Submit Quiz',
-      'Are you sure you want to submit your answers? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Submit', 
-          onPress: async () => {
-            try {
-              const { result } = await submitQuizMutation.mutateAsync({
-                userId: currentUserId,
-                quizId,
-                answers,
-                roadmapId
-              });
-              setQuizResult(result);
-              setShowResults(true);
-              onQuizComplete?.(result);
-            } catch (err) {
-              console.error('Failed to submit quiz:', err);
-              setSubmitError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+    try {
+      const { result } = await submitQuizMutation.mutateAsync({
+        userId: currentUserId,
+        quizId,
+        answers,
+        roadmapId
+      });
+      setQuizResult(result);
+      setShowResults(true);
+      onQuizComplete?.(result);
+    } catch (err) {
+      console.error('Failed to submit quiz:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.');
+    }
   };
 
   const renderQuestion = (question: any, index: number) => {
@@ -301,6 +296,88 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const progressPercentage = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
 
   return (
+    <>
+      {/* Submit Confirmation Modal */}
+      <Modal
+        transparent
+        visible={showSubmitModal}
+        animationType="none"
+        onRequestClose={() => setShowSubmitModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowSubmitModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-sm overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              <View className="items-center mb-4">
+                <View className="bg-orange-100 dark:bg-orange-950 p-4 rounded-full mb-4">
+                  <Check size={32} className="text-orange-600" />
+                </View>
+                <Text className="text-xl font-bold text-foreground text-center mb-2">
+                  Submit Quiz?
+                </Text>
+                <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                  Are you sure you want to submit your answers? This action cannot be undone.
+                </Text>
+              </View>
+
+              <View className="space-y-3">
+                <Pressable
+                  onPress={handleConfirmSubmit}
+                  disabled={submitQuizMutation.isPending}
+                  className={cn(
+                    "w-full h-12 items-center justify-center rounded-lg flex-row gap-2",
+                    submitQuizMutation.isPending
+                      ? "bg-orange-500/30"
+                      : "bg-orange-500 active:bg-orange-600"
+                  )}
+                >
+                  {submitQuizMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Check size={20} className="text-white" />
+                      <Text className="text-base font-semibold text-white">
+                        Submit Quiz
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setShowSubmitModal(false)}
+                  disabled={submitQuizMutation.isPending}
+                  className="w-full h-12 items-center justify-center rounded-lg border border-border bg-background active:bg-secondary"
+                >
+                  <Text className="text-base font-medium text-foreground">
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
     <ScrollView className="flex-1 bg-background" showsVerticalScrollIndicator={false}>
       <View className="px-6 pt-6 pb-4">
         {/* Submit Error */}
@@ -376,5 +453,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
         </View>
       </View>
     </ScrollView>
+    </>
   );
 }

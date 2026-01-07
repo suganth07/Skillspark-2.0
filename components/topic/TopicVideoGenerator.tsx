@@ -214,7 +214,7 @@ export function TopicVideoGenerator({
     <Card>
       <CardHeader>
         <View className="flex-row items-center space-x-2 mb-2">
-          <Video className="h-5 w-5 text-blue-600" />
+          <Video className="h-5 w-5 text-primary" />
           <CardTitle>AI Video Explanation</CardTitle>
         </View>
         <Text className="text-sm text-muted-foreground">
@@ -236,8 +236,8 @@ export function TopicVideoGenerator({
             onPress={handleGenerateVideo}
             className="w-full flex-row items-center justify-center space-x-2"
           >
-            <Video className="h-4 w-4 text-white" />
-            <Text className="text-white font-medium">Generate Video</Text>
+            <Video className="h-4 w-4 text-primary-foreground" />
+            <Text className="text-primary-foreground font-medium">Generate Video</Text>
           </Button>
         )}
 

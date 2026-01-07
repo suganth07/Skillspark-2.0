@@ -259,9 +259,9 @@ export function APIKeysItem() {
           ListFooterComponent={
             <View>
               {/* Info Box */}
-              <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 mt-2 mb-4">
-                <Text className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
-                  💡 Your API keys are stored securely on your device and never
+              <Card className="p-4 bg-secondary border-2 border-border mt-2 mb-4">
+                <Text className="text-sm text-foreground leading-relaxed">
+                  Your API keys are stored securely on your device and never
                   shared with third parties. Required keys are needed for core
                   features to work.
                 </Text>

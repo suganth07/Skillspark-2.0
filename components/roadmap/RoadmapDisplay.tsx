@@ -2,11 +2,13 @@ import React, { useState, useCallback, useRef } from 'react';
 import { View, Pressable, ActivityIndicator, Modal, Alert, TextInput } from 'react-native';
 import Animated, { FadeInDown, FadeIn, ZoomIn, FadeOut } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
+import * as SecureStore from 'expo-secure-store';
 import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
 import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
@@ -136,6 +138,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showSearchUpdateModal, setShowSearchUpdateModal] = useState(false);
   const [searchUpdateType, setSearchUpdateType] = useState<'all' | 'completed' | null>(null);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const pendingRevisionCompletion = useRef(false);
   
   const userId = useCurrentUserId();
@@ -541,6 +544,15 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const handleRefreshWebSearch = async () => {
     if (!roadmap) return;
 
+    // Check if web search API key is configured (either langsearch or googleserper)
+    const langSearchKey = await SecureStore.getItemAsync('api_key_langsearch');
+    const googleSerperKey = await SecureStore.getItemAsync('api_key_googleserper');
+    
+    if ((!langSearchKey || !langSearchKey.trim()) && (!googleSerperKey || !googleSerperKey.trim())) {
+      setShowApiKeyDialog(true);
+      return;
+    }
+
     setIsSearching(true);
 
     try {
@@ -662,6 +674,15 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
         description="Are you sure you want to delete this roadmap? This action cannot be undone."
         confirmLabel="Delete"
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* API Key Required Dialog */}
+      <APIKeyRequiredDialog
+        open={showApiKeyDialog}
+        onOpenChange={setShowApiKeyDialog}
+        title="API Key Required"
+        description="Web search requires either LangSearch or Google Serper API key. Please configure one in Settings."
+        onGoToSettings={() => router.push('/(tabs)/settings')}
       />
 
       {/* Regenerate Roadmap Modal */}

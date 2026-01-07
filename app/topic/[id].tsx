@@ -16,10 +16,13 @@ import { TopicDetailSkeleton } from '@/components/topic/TopicDetailSkeleton';
 import { TopicSearchResultsModal } from '@/components/topic/TopicSearchResultsModal';
 import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
 import { BottomSheet } from '@/components/primitives/bottomSheet/bottom-sheet.native';
+import { QuizComponent } from '@/components/roadmap/QuizComponent';
+import { QuizResults } from '@/components/roadmap/QuizResults';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, useRegenerateSelectedSubtopics, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
+import { useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
 import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
@@ -68,6 +71,12 @@ export default function TopicDetailScreen() {
   const [regenerateInstructions, setRegenerateInstructions] = useState('');
   const [isRegeneratingSubtopics, setIsRegeneratingSubtopics] = useState(false);
   
+  // Quiz state
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizId, setQuizId] = useState<string | null>(null);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [showQuizResults, setShowQuizResults] = useState(false);
+  
   // Collapsible sections state
   const [isBestPracticesExpanded, setIsBestPracticesExpanded] = useState(false);
   const [isCommonPitfallsExpanded, setIsCommonPitfallsExpanded] = useState(false);
@@ -114,6 +123,9 @@ export default function TopicDetailScreen() {
 
   // Mutation to regenerate selected subtopics
   const regenerateSelectedSubtopicsMutation = useRegenerateSelectedSubtopics();
+  
+  // Mutation to generate quiz
+  const generateQuizMutation = useGenerateQuiz();
 
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
@@ -294,6 +306,120 @@ export default function TopicDetailScreen() {
 
   const getSubtopicVersion = (subtopicId: string): ContentVersion => {
     return subtopicVersions[subtopicId] || 'default';
+  };
+
+  const handleTakeTest = async () => {
+    if (!currentTopicDetail || !currentUserId) return;
+    
+    const { topic } = currentTopicDetail;
+    
+    setIsGeneratingQuiz(true);
+    
+    try {
+      // First, check if there's already a quiz for this topic
+      const roadmap = await import('@/server/queries/topics').then(m => 
+        m.getRoadmapByTopicId(topic.id, currentUserId)
+      );
+      
+      if (!roadmap) {
+        Alert.alert(
+          'No Roadmap Found',
+          'This topic is not part of any roadmap. Please access it through a roadmap to take a quiz.',
+          [{ text: 'OK' }]
+        );
+        setIsGeneratingQuiz(false);
+        return;
+      }
+      
+      // Check if quiz already exists for this topic
+      const { db } = await import('@/db/drizzle');
+      const { quizzes, quizAttempts } = await import('@/db/schema');
+      const { eq, and } = await import('drizzle-orm');
+      
+      const existingQuiz = await db
+        .select({
+          id: quizzes.id,
+        })
+        .from(quizzes)
+        .where(and(
+          eq(quizzes.topicId, topic.id),
+          eq(quizzes.roadmapId, roadmap.id)
+        ))
+        .limit(1);
+      
+      if (existingQuiz.length > 0) {
+        // Check if user has attempted this quiz
+        const attempt = await db
+          .select()
+          .from(quizAttempts)
+          .where(and(
+            eq(quizAttempts.quizId, existingQuiz[0].id),
+            eq(quizAttempts.userId, currentUserId)
+          ))
+          .limit(1);
+        
+        // If quiz exists and not attempted, reuse it
+        if (attempt.length === 0) {
+          console.log('📋 Reusing existing unattempted quiz:', existingQuiz[0].id);
+          setQuizId(existingQuiz[0].id);
+          setShowQuiz(true);
+          setIsGeneratingQuiz(false);
+          return;
+        }
+      }
+      
+      // Get roadmap steps to find the step for this topic
+      const { steps } = await import('@/server/queries/roadmaps').then(m => 
+        m.getRoadmapWithSteps(roadmap.id, currentUserId)
+      );
+      
+      const step = steps.find(s => s.topicId === topic.id);
+      
+      if (!step) {
+        Alert.alert(
+          'Error',
+          'Could not find the roadmap step for this topic.',
+          [{ text: 'OK' }]
+        );
+        setIsGeneratingQuiz(false);
+        return;
+      }
+      
+      // Generate new quiz
+      const result = await generateQuizMutation.mutateAsync({
+        userId: currentUserId,
+        roadmapId: roadmap.id,
+        stepId: step.id,
+        prerequisiteName: topic.name
+      });
+      
+      setQuizId(result.quizId);
+      setShowQuiz(true);
+    } catch (error) {
+      console.error('Error generating quiz:', error);
+      Alert.alert(
+        'Quiz Generation Failed',
+        error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+  
+  const handleAnalyze = () => {
+    Alert.alert(
+      'Analyze Feature',
+      'Topic analysis feature coming soon! This will provide insights into your learning progress.',
+      [{ text: 'OK' }]
+    );
+  };
+  
+  const handleQuizComplete = () => {
+    setShowQuiz(false);
+    setShowQuizResults(false);
+    // Refetch topic data to get updated performance
+    refetch();
   };
 
   const handleWebSearch = async () => {
@@ -1492,6 +1618,57 @@ export default function TopicDetailScreen() {
               )}
             </View>
           )}
+          
+          {/* Bottom Action Buttons */}
+          <View className="mt-8 mb-6">
+            <View className="flex-row items-center gap-3">
+              {/* Take a Test Button */}
+              <Pressable
+                onPress={handleTakeTest}
+                disabled={isGeneratingQuiz}
+                className="flex-1"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 14,
+                  borderRadius: 6,
+                  backgroundColor: isDarkColorScheme ? '#18181b' : '#f4f4f5',
+                  opacity: isGeneratingQuiz ? 0.5 : 1,
+                }}
+              >
+                {isGeneratingQuiz ? (
+                  <ActivityIndicator size="small" color={isDarkColorScheme ? '#fafafa' : '#18181b'} />
+                ) : (
+                  <BookOpen size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
+                )}
+                <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b', letterSpacing: 0.3 }}>
+                  {isGeneratingQuiz ? 'Preparing Quiz...' : 'Take a Test'}
+                </Text>
+              </Pressable>
+              
+              {/* Analyze Button */}
+              <Pressable
+                onPress={handleAnalyze}
+                className="flex-1"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 14,
+                  borderRadius: 6,
+                  backgroundColor: isDarkColorScheme ? '#18181b' : '#f4f4f5',
+                }}
+              >
+                <Sparkles size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b', letterSpacing: 0.3 }}>
+                  Analyze
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </ScrollView>
 
@@ -1769,6 +1946,85 @@ export default function TopicDetailScreen() {
         description={apiKeyDialogMessage}
         onGoToSettings={() => router.push('/(tabs)/settings')}
       />
+      
+      {/* Quiz Modal */}
+      <Modal
+        visible={showQuiz}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowQuiz(false)}
+      >
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+          <View className="flex-row items-center px-4 py-3 border-b border-border">
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  'Exit Quiz?',
+                  'Are you sure you want to exit? Your progress will not be saved.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Exit', style: 'destructive', onPress: () => setShowQuiz(false) }
+                  ]
+                );
+              }}
+              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+            >
+              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            </Pressable>
+            <Text className="flex-1 text-center text-lg font-semibold pr-9">
+              {topic.name} - Quiz
+            </Text>
+          </View>
+          {quizId && (
+            <QuizComponent
+              quizId={quizId}
+              onQuizComplete={(result) => {
+                setShowQuiz(false);
+                setShowQuizResults(true);
+              }}
+              onBack={() => setShowQuiz(false)}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+      
+      {/* Quiz Results Modal */}
+      <Modal
+        visible={showQuizResults}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowQuizResults(false);
+          handleQuizComplete();
+        }}
+      >
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+          <View className="flex-row items-center px-4 py-3 border-b border-border">
+            <Pressable
+              onPress={() => {
+                setShowQuizResults(false);
+                handleQuizComplete();
+              }}
+              className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+            >
+              <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+            </Pressable>
+            <Text className="flex-1 text-center text-lg font-semibold pr-9">
+              Quiz Results
+            </Text>
+          </View>
+          {quizId && currentUserId && (
+            <QuizResults
+              userId={currentUserId}
+              quizId={quizId}
+              onClose={() => {
+                setShowQuizResults(false);
+                handleQuizComplete();
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

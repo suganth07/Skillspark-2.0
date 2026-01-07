@@ -36,6 +36,7 @@ import {
   Fan,
   GalleryHorizontal,
   Github,
+  GraduationCap,
   Info,
   Italic,
   Lamp,
@@ -140,6 +141,7 @@ interopIcon(RotateCcw);
 interopIcon(Trash2);
 interopIcon(Zap);
 interopIcon(Star);
+interopIcon(GraduationCap);
 
 export {
   Activity,

@@ -286,6 +286,7 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
         skipProcessing: true,
+        isImageMirror: false,
       });
       
       if (!photo?.uri) {
@@ -432,6 +433,8 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
           ref={cameraRef}
           style={{ width: 1, height: 1 }}
           facing="front"
+          enableShutterSound={false}
+        />
         />
       </View>
 

@@ -24,6 +24,7 @@ import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { getItem, setItem, removeItem } from '@/lib/storage';
 import { useColorScheme } from '@/lib/useColorScheme';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
+import { ToneChangeModal } from '@/components/emotion/ToneChangeModal';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2, Settings2, ArrowLeft, MessageSquare } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
@@ -133,6 +134,10 @@ export default function TopicDetailScreen() {
   const lastDistractionTime = useRef<number>(0);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const lastToneSwitchTime = useRef<number>(0);
+  
+  // Tone change modal state
+  const [showToneChangeModal, setShowToneChangeModal] = useState(false);
+  const [newToneToShow, setNewToneToShow] = useState<'simplified' | 'story'>('simplified');
   
   // Bottom sheet ref for search results
   const searchSheetRef = useRef<BottomSheetModal>(null);
@@ -848,12 +853,9 @@ export default function TopicDetailScreen() {
                           console.log(`✅ Updating ${Object.keys(updatedVersions).length} subtopic(s) to ${targetTone} mode`);
                           setSubtopicVersions(prev => ({ ...prev, ...updatedVersions }));
                           
-                          Alert.alert(
-                            '📚 Content Adapted',
-                            `Based on your engagement, we've switched to ${targetTone === 'story' ? 'Story mode (more engaging)' : 'Simplified mode (easier to understand)'} to help you learn better!`,
-                            [{ text: 'Got it!' }],
-                            { cancelable: true }
-                          );
+                          // Show modal instead of alert
+                          setNewToneToShow(targetTone);
+                          setShowToneChangeModal(true);
                         } else {
                           console.log('ℹ️ All expanded subtopics already in target tone');
                         }
@@ -1966,6 +1968,13 @@ export default function TopicDetailScreen() {
           onRefresh={handleWebSearch}
         />
       </BottomSheet>
+
+      {/* Tone Change Modal */}
+      <ToneChangeModal
+        isOpen={showToneChangeModal}
+        onClose={() => setShowToneChangeModal(false)}
+        newTone={newToneToShow}
+      />
     </SafeAreaView>
   );
 }

@@ -762,7 +762,7 @@ export default function TopicDetailScreen() {
                 setCurrentEmotion(emotion);
                 
                 // Detect if user is looking away/distracted
-                if (emotion === 'looking_away' && confidence > 0.5) {
+                if ((emotion === 'looking_away' && confidence > 0.5) || (emotion === 'distracted') || (emotion === 'drowsy' && confidence > 0.7)) {
                   const now = Date.now();
                   // Prevent multiple alerts within 30 seconds
                   if (now - lastDistractionTime.current > 30000) {

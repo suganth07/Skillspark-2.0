@@ -16,6 +16,9 @@ import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { geminiService } from '@/lib/gemini';
 import { regenerateRoadmap } from '@/server/queries/roadmaps';
+import { TopicUpdatesModal } from '@/components/roadmap/TopicUpdatesModal';
+import { WebSearchResultsModal } from '@/components/roadmap/WebSearchResultsModal';
+import { BottomSheet } from '@/components/primitives/bottomSheet/bottom-sheet.native';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -40,6 +43,9 @@ import { cn } from '@/lib/utils';
 
 // Component to render markdown text with clickable links
 function MarkdownText({ text }: { text: string }) {
+  // Filter out "read more" text (case insensitive)
+  const cleanedText = text.replace(/\s*read more\s*/gi, '').trim();
+  
   const parts: Array<{ text: string; url?: string }> = [];
   
   // Parse markdown links: [text](url)
@@ -47,10 +53,10 @@ function MarkdownText({ text }: { text: string }) {
   let lastIndex = 0;
   let match;
   
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(cleanedText)) !== null) {
     // Add text before the link
     if (match.index > lastIndex) {
-      parts.push({ text: text.substring(lastIndex, match.index) });
+      parts.push({ text: cleanedText.substring(lastIndex, match.index) });
     }
     // Add the link
     parts.push({ text: match[1], url: match[2] });
@@ -58,12 +64,12 @@ function MarkdownText({ text }: { text: string }) {
   }
   
   // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push({ text: text.substring(lastIndex) });
+  if (lastIndex < cleanedText.length) {
+    parts.push({ text: cleanedText.substring(lastIndex) });
   }
   
   if (parts.length === 0) {
-    parts.push({ text });
+    parts.push({ text: cleanedText });
   }
   
   return (
@@ -108,8 +114,10 @@ interface RoadmapDisplayProps {
 export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisionQuizComplete, onDelete }: RoadmapDisplayProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
-  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
+  const [isLoadingUpdates, setIsLoadingUpdates] = useState(false);
+  const updatesSheetRef = useRef<any>(null);
+  const webSearchSheetRef = useRef<any>(null);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionSummary, setRevisionSummary] = useState<any>(null);
@@ -131,7 +139,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [generatingQuizForStep, setGeneratingQuizForStep] = useState<string | null>(null);
   const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const router = useRouter();
 
   // TanStack Query hooks - automatic caching and refetching
@@ -354,9 +361,16 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
     }
   };
 
-  const handleCheckUpdates = async () => {
+  // Just open the modal - shows cached data
+  const handleShowUpdates = () => {
+    updatesSheetRef.current?.present();
+  };
+
+  // Actually fetch new updates from the internet
+  const handleRefreshUpdates = async () => {
     if (!userId) return;
 
+    setIsLoadingUpdates(true);
     try {
       const result = await checkTopicUpdatesMutation.mutateAsync({
         roadmapId,
@@ -364,11 +378,14 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       });
 
       if (result.hasUpdates) {
+        console.log('✅ Found updates:', result.updates.length, 'topics');
         setTopicUpdates(result.updates);
-        setShowUpdatesModal(true);
       } else {
+        console.log('ℹ️ No new updates found');
+        // Don't clear topicUpdates - let modal show cached data
+        // Just show a toast/alert
         Alert.alert(
-          'No Updates',
+          'No New Updates',
           'All your completed topics are up to date! 🎉',
           [{ text: 'OK' }]
         );
@@ -390,6 +407,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
           [{ text: 'OK' }]
         );
       }
+    } finally {
+      setIsLoadingUpdates(false);
     }
   };
 
@@ -483,8 +502,13 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const handleWebSearch = async () => {
     if (!roadmap) return;
 
+    webSearchSheetRef.current?.present();
+  };
+
+  const handleRefreshWebSearch = async () => {
+    if (!roadmap) return;
+
     setIsSearching(true);
-    setShowWebSearchModal(true);
 
     try {
       console.log(`🔍 Starting web search for roadmap: ${roadmap.title}`);
@@ -499,7 +523,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
           `No recent updates or changes were found for ${roadmap.title}.`,
           [{ text: 'OK' }]
         );
-        setShowWebSearchModal(false);
       }
     } catch (error) {
       console.error('❌ Web search failed:', error);
@@ -508,7 +531,6 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
         error instanceof Error ? error.message : 'Failed to search for updates. Please try again.',
         [{ text: 'OK' }]
       );
-      setShowWebSearchModal(false);
     } finally {
       setIsSearching(false);
     }
@@ -789,9 +811,9 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
 
               <View className="gap-3 mb-6">
                 <Pressable
-                  onPress={async () => {
+                  onPress={() => {
                     setShowSearchUpdateModal(false);
-                    await handleCheckUpdates();
+                    handleShowUpdates();
                   }}
                   disabled={completedSteps === 0}
                   className={cn(
@@ -931,196 +953,30 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
         </Animated.View>
       </Modal>
 
-      {/* Topic Updates Modal */}
-      <Modal
-        transparent
-        visible={showUpdatesModal}
-        animationType="none"
-        onRequestClose={() => setShowUpdatesModal(false)}
-        statusBarTranslucent
-      >
-        <Animated.View
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(200)}
-          className="flex-1 items-center justify-center px-6"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-        >
-          <Pressable 
-            className="absolute inset-0" 
-            onPress={() => setShowUpdatesModal(false)}
-          />
-          
-          <Animated.View
-            entering={ZoomIn.duration(300).springify()}
-            className="bg-card rounded-2xl w-full max-w-md overflow-hidden max-h-[80%]"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.3,
-              shadowRadius: 20,
-              elevation: 10,
-            }}
-          >
-            <View className="p-6">
-              <View className="flex-row items-center gap-2 mb-2">
-                <Sparkles size={24} className="text-primary" />
-                <Text className="text-xl font-bold text-foreground">
-                  New Updates Found!
-                </Text>
-              </View>
-              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                These topics have new updates since you completed them. Would you like to explore what's new?
-              </Text>
-
-              <ScrollView className="max-h-64 mb-6" showsVerticalScrollIndicator={false}>
-                {topicUpdates.map((update, index) => (
-                  <View key={index} className="mb-4 p-4 bg-secondary/50 rounded-lg">
-                    <Text className="text-base font-semibold text-foreground mb-2">
-                      {update.topicName}
-                    </Text>
-                    {update.newSubtopics.length > 0 && (
-                      <View>
-                        <Text className="text-xs text-muted-foreground mb-2">
-                          Latest updates:
-                        </Text>
-                        {update.newSubtopics.slice(0, 5).map((subtopic: string, idx: number) => (
-                          <View key={idx} className="mb-2">
-                            <MarkdownText text={subtopic} />
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-
-              <Pressable
-                onPress={() => {
-                  setShowUpdatesModal(false);
-                  // Use topicId directly from the update
-                  if (topicUpdates.length > 0 && topicUpdates[0].topicId) {
-                    // Pass web search results as route params with topicId
-                    router.push({
-                      pathname: '/topic/[id]',
-                      params: {
-                        id: topicUpdates[0].topicId,
-                        webSearchResults: JSON.stringify(topicUpdates[0].newSubtopics),
-                        topicName: topicUpdates[0].topicName,
-                        generateWebContent: 'true'
-                      }
-                    });
-                  } else {
-                    Alert.alert(
-                      'Error',
-                      'Could not find topic ID. Please try again.',
-                      [{ text: 'OK' }]
-                    );
-                  }
-                }}
-                className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90 mb-3"
-              >
-                <Text className="text-base font-semibold text-primary-foreground">
-                  Generate Content
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setShowUpdatesModal(false)}
-                className="w-full h-12 items-center justify-center rounded-lg active:opacity-70"
-              >
-                <Text className="text-base font-medium text-muted-foreground">
-                  Maybe Later
-                </Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </Animated.View>
-      </Modal>
+      {/* Topic Updates Bottom Sheet */}
+      <BottomSheet>
+        <TopicUpdatesModal
+          visible={true}
+          updates={topicUpdates}
+          isLoading={isLoadingUpdates}
+          onClose={() => updatesSheetRef.current?.dismiss()}
+          onRefresh={handleRefreshUpdates}
+          roadmapId={roadmapId}
+          sheetRef={updatesSheetRef}
+        />
+      </BottomSheet>
 
       {/* Web Search Results Modal */}
-      <Modal
-        transparent
-        visible={showWebSearchModal}
-        animationType="none"
-        onRequestClose={() => setShowWebSearchModal(false)}
-        statusBarTranslucent
-      >
-        <Animated.View
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(200)}
-          className="flex-1 items-center justify-center px-6"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-        >
-          <Pressable 
-            className="absolute inset-0" 
-            onPress={() => setShowWebSearchModal(false)}
-          />
-          
-          <Animated.View
-            entering={ZoomIn.duration(300).springify()}
-            className="bg-card rounded-2xl w-full max-w-md overflow-hidden max-h-[80%]"
-            style={{
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.3,
-              shadowRadius: 20,
-              elevation: 10,
-            }}
-          >
-            <View className="p-6">
-              <View className="flex-row items-center gap-2 mb-2">
-                <Search size={24} className="text-purple-600" />
-                <Text className="text-xl font-bold text-foreground">
-                  Web Search Results
-                </Text>
-              </View>
-              <Text className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                Latest updates and information about {roadmap?.title}
-              </Text>
-
-              {isSearching ? (
-                <View className="items-center py-8">
-                  <ActivityIndicator size="large" />
-                  <Text className="mt-4 text-sm text-muted-foreground">Searching the web...</Text>
-                </View>
-              ) : (
-                <ScrollView className="max-h-96 mb-6" showsVerticalScrollIndicator={false}>
-                  {webSearchResults.length > 0 ? (
-                    <View className="space-y-3">
-                      <View className="flex-row items-center space-x-2 mb-3">
-                        <ExternalLink className="h-4 w-4 text-primary" />
-                        <Text className="text-sm font-semibold text-foreground">
-                          Found {webSearchResults.length} Updates
-                        </Text>
-                      </View>
-                      {webSearchResults.map((update, idx) => (
-                        <View key={idx} className="mb-2 p-3 bg-secondary/50 rounded-lg">
-                          <MarkdownText text={update} />
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <View className="items-center py-8">
-                      <Text className="text-sm text-muted-foreground text-center">
-                        No updates found
-                      </Text>
-                    </View>
-                  )}
-                </ScrollView>
-              )}
-
-              <Pressable
-                onPress={() => setShowWebSearchModal(false)}
-                className="w-full h-12 items-center justify-center rounded-lg bg-primary active:opacity-90"
-              >
-                <Text className="text-base font-semibold text-primary-foreground">
-                  Close
-                </Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </Animated.View>
-      </Modal>
+      <BottomSheet ref={webSearchSheetRef}>
+        <WebSearchResultsModal
+          sheetRef={webSearchSheetRef}
+          results={webSearchResults}
+          isSearching={isSearching}
+          roadmapTitle={roadmap?.title ?? ''}
+          roadmapId={roadmapId}
+          onRefresh={handleRefreshWebSearch}
+        />
+      </BottomSheet>
 
       {/* Quiz Generation Loading Modal */}
       <Modal

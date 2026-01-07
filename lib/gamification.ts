@@ -53,9 +53,11 @@ export const LEVEL_THRESHOLDS = calculateLevelThresholds();
 export function calculateLevel(xp: number): number {
   if (xp < 0) return 1;
   
+  // LEVEL_THRESHOLDS[i] represents XP needed to reach level i+1
+  // So if xp >= LEVEL_THRESHOLDS[9] (900), player is at level 10
   for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
     if (xp >= LEVEL_THRESHOLDS[i]) {
-      return Math.min(i, 50); // Cap at level 50
+      return Math.min(i + 1, 50); // Return level (index + 1), cap at level 50
     }
   }
   

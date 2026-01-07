@@ -1,20 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Text } from '@/components/ui/text';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-  withSpring,
-  withDelay,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
 import { cn } from '@/lib/utils';
 import { 
+  calculateLevel,
   calculateLevelProgress,
   getXPForNextLevel,
-  getXPForCurrentLevel,
   formatXP,
 } from '@/lib/gamification';
 import { Star } from '@/components/Icons';
@@ -33,7 +31,7 @@ export function XPGainAnimation({
   visible, 
   oldXP, 
   newXP, 
-  level,
+  level: levelProp,
   onComplete 
 }: XPGainAnimationProps) {
   const { colorScheme } = useColorScheme();
@@ -44,41 +42,51 @@ export function XPGainAnimation({
   const translateY = useSharedValue(-100);
   const opacity = useSharedValue(0);
 
-  const currentLevelXP = getXPForCurrentLevel(level);
+  // Calculate actual levels from XP to ensure consistency
+  const oldLevel = calculateLevel(oldXP);
+  const newLevel = calculateLevel(newXP);
+  // Use the new level for display (handles level-up case)
+  const level = newLevel;
   const nextLevelXP = getXPForNextLevel(level);
-  const xpNeededForLevel = nextLevelXP - currentLevelXP;
   
-  const oldProgress = calculateLevelProgress(oldXP, level);
-  const newProgress = calculateLevelProgress(newXP, level);
   const xpGained = newXP - oldXP;
-  const xpRemaining = nextLevelXP - newXP;
+  const isGain = xpGained > 0;
+  
+  // Calculate proper progress for the new level
+  // If leveled up, start progress from 0 for the new level
+  const didLevelUp = newLevel > oldLevel;
+  const oldProgress = didLevelUp ? 0 : calculateLevelProgress(oldXP, newLevel);
+  const newProgress = calculateLevelProgress(newXP, newLevel);
 
   useEffect(() => {
     if (visible) {
-      // Simple slide down from top
+      // Reset values
+      setDisplayXP(oldXP);
+      progressWidth.value = oldProgress;
+      
+      // Slide down animation
       translateY.value = withTiming(0, { 
         duration: 250, 
         easing: Easing.out(Easing.ease)
       });
       opacity.value = withTiming(1, { duration: 200 });
 
-      // Animate progress bar - simpler timing
-      progressWidth.value = oldProgress;
+      // Animate progress bar from old to new progress
       progressWidth.value = withTiming(newProgress, {
-        duration: 1500,
-        easing: Easing.out(Easing.ease),
+        duration: 1200,
+        easing: Easing.out(Easing.cubic),
       });
 
-      // Animate XP counter - fewer steps for better performance
-      const duration = 1500;
+      // Animate XP counter
+      const duration = 1200;
       const steps = 40;
       const increment = (newXP - oldXP) / steps;
       let current = 0;
 
       const interval = setInterval(() => {
         current++;
-        const nextValue = Math.min(oldXP + (increment * current), newXP);
-        setDisplayXP(Math.floor(nextValue));
+        const nextValue = Math.round(oldXP + (increment * current));
+        setDisplayXP(nextValue);
 
         if (current >= steps) {
           clearInterval(interval);
@@ -87,11 +95,14 @@ export function XPGainAnimation({
       }, duration / steps);
 
       // Auto-dismiss after animation
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         handleComplete();
-      }, 3000);
+      }, 2500);
 
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
     }
   }, [visible, oldXP, newXP, oldProgress, newProgress]);
 
@@ -108,7 +119,7 @@ export function XPGainAnimation({
   }));
 
   const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressWidth.value}%`,
+    width: `${Math.max(0, Math.min(100, progressWidth.value))}%`,
   }));
 
   if (!visible) return null;
@@ -122,12 +133,7 @@ export function XPGainAnimation({
         <Animated.View style={containerStyle}>
           <Pressable onPress={handleComplete}>
             <View 
-              className={cn(
-                "rounded-2xl p-4 shadow-lg",
-                isDark 
-                  ? "bg-card border border-border" 
-                  : "bg-card border border-border"
-              )}
+              className="rounded-2xl p-4 shadow-lg bg-card border border-border"
               style={{
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },
@@ -139,46 +145,47 @@ export function XPGainAnimation({
               {/* XP Gained Header */}
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center gap-2">
-                  <View className={cn(
-                    "w-8 h-8 rounded-full items-center justify-center",
-                    isDark ? "bg-purple-500/20" : "bg-purple-500/20"
-                  )}>
+                  <View className="w-8 h-8 rounded-full items-center justify-center bg-purple-500/20">
                     <Star size={18} className="text-purple-500" fill="rgb(168, 85, 247)" />
                   </View>
                   <Text className={cn(
-                    "text-base font-bold",
-                    xpGained > 0 ? "text-purple-600" : "text-red-600"
+                    "text-lg font-bold",
+                    isGain ? "text-purple-500" : "text-red-500"
                   )}>
-                    {xpGained > 0 ? '+' : ''}{xpGained} XP
+                    {isGain ? '+' : ''}{xpGained} XP
                   </Text>
                 </View>
                 
-                <Text className="text-sm font-semibold">
-                  {formatXP(displayXP)} XP
+                <Text className="text-sm font-medium text-muted-foreground">
+                  Level {level}
                 </Text>
               </View>
 
-              {/* Progress Bar */}
-              <View className="mb-2">
+              {/* Progress Bar - Game-like style */}
+              <View className="relative">
                 <View className={cn(
-                  "w-full h-2 rounded-full overflow-hidden",
-                  isDark ? "bg-muted" : "bg-muted"
+                  "w-full h-3 rounded-full overflow-hidden",
+                  isDark ? "bg-muted/50" : "bg-muted"
                 )}>
                   <Animated.View
                     style={progressStyle}
-                    className="h-full bg-primary rounded-full"
+                    className={cn(
+                      "h-full rounded-full",
+                      isGain ? "bg-purple-500" : "bg-red-500"
+                    )}
                   />
                 </View>
-              </View>
-
-              {/* Level Info */}
-              <View className="flex-row items-center justify-between">
-                <Text className="text-xs text-muted-foreground">
-                  Level {level}
-                </Text>
-                <Text className="text-xs font-medium text-primary">
-                  {formatXP(xpRemaining)} to Level {level + 1}
-                </Text>
+                
+                {/* XP Counter below progress bar */}
+                <View className="flex-row justify-end mt-1.5">
+                  <Text className="text-xs font-medium text-muted-foreground">
+                    <Text className="text-foreground font-semibold">
+                      {formatXP(displayXP)}
+                    </Text>
+                    {' / '}
+                    {formatXP(nextLevelXP)} XP
+                  </Text>
+                </View>
               </View>
             </View>
           </Pressable>

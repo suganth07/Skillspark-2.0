@@ -384,13 +384,6 @@ export class EmotionDetector {
       looking_at_camera: lookingAtCamera,
     };
 
-    // Sanity check log for debugging
-    console.log("🧭 Pose check:", {
-      tiltAngle: Math.abs(tiltAngle).toFixed(2),
-      rotationRatio: Math.abs(rotationRatio).toFixed(3),
-      lookingAtCamera,
-    });
-
     // ========================================
     // DECISION TREE - EXACT PYTHON THRESHOLDS
     // ========================================

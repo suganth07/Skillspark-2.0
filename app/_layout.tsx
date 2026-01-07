@@ -31,7 +31,7 @@ function XPTracker({ children }: { children: React.ReactNode }) {
   const { showLevelUp } = useLevelUp();
 
   useEffect(() => {
-    if (currentUser?.xp !== undefined && currentUserId) {
+    if (currentUser?.xp !== undefined && currentUser.xp !== null && currentUserId) {
       const currentXP = currentUser.xp;
       const currentLevel = currentUser.level || 1;
       
@@ -59,7 +59,7 @@ function XPTracker({ children }: { children: React.ReactNode }) {
             oldLevel,
             xpGained,
             action: xpGained > 0 ? 'Great work!' : 'XP adjusted',
-            oldXP,
+            oldXP: oldXP,
             newXP: currentXP,
           });
         }
@@ -163,8 +163,8 @@ export default function RootLayout() {
                   <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
                   <GestureHandlerRootView style={{ flex: 1 }}>
                     <BottomSheetModalProvider>
-                      <Stack>
-                        <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
+                      <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="(tabs)" options={{ title: "SkillSpark" }} />
                       </Stack>
                     </BottomSheetModalProvider>
                   </GestureHandlerRootView>

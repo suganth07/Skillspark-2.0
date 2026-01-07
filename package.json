@@ -2,7 +2,6 @@
   "name": "skillspark",
   "main": "expo-router/entry",
   "version": "1.0.0",
-  "homepage": "https://expostarter.com",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "expo start",

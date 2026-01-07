@@ -1,4 +1,5 @@
 {
+  "name": "FaceLandmarks",
   "platforms": ["ios", "android"],
   "ios": {
     "modules": ["FaceLandmarksModule"]

@@ -10,6 +10,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
 import { LoadingAnimation } from '@/components/ui/loading-animation';
+import { RoadmapDetailSkeleton } from '@/components/roadmap/RoadmapDetailSkeleton';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Progress } from '@/components/ui/progress';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
@@ -582,19 +583,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   };
 
   if (isLoading) {
-    return (
-      <View className="flex-1 bg-background justify-center items-center px-6">
-        <LoadingAnimation 
-          title="Loading Roadmap"
-          messages={[
-            'Fetching your learning path...',
-            'Loading progress data...',
-            'Preparing roadmap steps...',
-            'Almost ready...',
-          ]}
-        />
-      </View>
-    );
+    return <RoadmapDetailSkeleton />;
   }
 
   if (error) {

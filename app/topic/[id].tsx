@@ -504,16 +504,9 @@ export default function TopicDetailScreen() {
             <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
           </Pressable>
         </View>
-        <View className="flex-1 justify-center items-center px-6">
-          <LoadingAnimation 
-            title="Loading Topic"
-            messages={[
-              'Fetching topic details...',
-              'Preparing learning content...',
-              'Almost ready...',
-            ]}
-          />
-        </View>
+        <ScrollView className="flex-1">
+          <TopicDetailSkeleton />
+        </ScrollView>
       </SafeAreaView>
     );
   }

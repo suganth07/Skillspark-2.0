@@ -38,8 +38,13 @@ export async function searchTopicUpdates(
   console.log(`🔍 Searching updates for: ${topicName}`);
 
   try {
-    const formattedDate = completedDate ? completedDate.toISOString().split('T')[0] : '2024';
-    const query = `${topicName} latest updates new features changes breaking changes since ${formattedDate}`;
+    // Build a focused query for latest research, updates, and findings
+    const currentYear = new Date().getFullYear();
+    const lastYear = currentYear - 1;
+    const formattedDate = completedDate ? completedDate.toISOString().split('T')[0] : `${lastYear}`;
+    
+    // More targeted query focusing on recent developments, research, and news
+    const query = `${topicName} latest research findings updates news ${currentYear} ${lastYear} recent developments breakthrough`;
     
     console.log(`📡 Calling LangSearch Web Search API for: "${query}"`);
 
@@ -56,9 +61,10 @@ export async function searchTopicUpdates(
         },
         body: JSON.stringify({
           query: query,
-          freshness: 'onLimit', // Prioritize recent content
+          freshness: 'month', // Prioritize content from last month
           summary: true, // Get full summaries
           count: 10, // Get top 10 results
+          language: 'en', // Force English results
         }),
         signal: controller.signal,
       });
@@ -155,94 +161,96 @@ function extractActualUpdatesFromResults(
     return [];
   }
 
-  // Extract actual specific content from top results
-  for (let i = 0; i < Math.min(results.length, 5); i++) {
+  // Extract actual specific content from top results - focus on research and updates
+  for (let i = 0; i < Math.min(results.length, 6); i++) {
     const result = results[i];
     const title = result.title;
     const snippet = result.snippet;
     const url = result.url;
     
-    // Extract the most relevant sentence or key update from the snippet
-    const sentences = snippet.split(/[.!?]\s+/).filter(s => s.trim().length > 20);
+    // Split into sentences and filter out very short ones
+    const sentences = snippet.split(/[.!?]\s+/).filter(s => s.trim().length > 30);
     
-    // Find sentences that mention updates, changes, features, etc.
-    const relevantSentences = sentences.filter(sentence => {
+    // Find sentences that mention research, findings, updates, breakthroughs
+    const researchKeywords = [
+      'research', 'study', 'findings', 'discovered', 'breakthrough', 'innovation',
+      'published', 'scientists', 'researchers', 'experts', 'analysis', 'data shows'
+    ];
+    
+    const updateKeywords = [
+      'new', 'latest', 'recent', 'update', 'announced', 'released', 'launched',
+      'introduced', 'unveiled', 'breakthrough', 'advancement', 'development'
+    ];
+
+    // Prioritize research-focused sentences
+    let relevantSentences = sentences.filter(sentence => {
       const lower = sentence.toLowerCase();
-      return (
-        lower.includes('new') ||
-        lower.includes('update') ||
-        lower.includes('feature') ||
-        lower.includes('release') ||
-        lower.includes('version') ||
-        lower.includes('change') ||
-        lower.includes('improve') ||
-        lower.includes('add') ||
-        lower.includes('introduce') ||
-        lower.includes('announce') ||
-        lower.includes('launch')
-      );
+      return researchKeywords.some(keyword => lower.includes(keyword));
     });
 
+    // If no research sentences, look for update-related content
+    if (relevantSentences.length === 0) {
+      relevantSentences = sentences.filter(sentence => {
+        const lower = sentence.toLowerCase();
+        return updateKeywords.some(keyword => lower.includes(keyword));
+      });
+    }
+
+    // Use the best sentence we found
     if (relevantSentences.length > 0) {
-      // Take the first relevant sentence and clean it up
       let update = relevantSentences[0].trim();
       
-      // Limit length to keep it concise
-      if (update.length > 100) {
-        update = update.substring(0, 100).trim() + '...';
+      // Clean up and ensure proper English
+      update = update.replace(/\s+/g, ' '); // Remove extra whitespace
+      
+      // Ensure it ends with punctuation
+      if (!update.endsWith('.') && !update.endsWith('!') && !update.endsWith('?')) {
+        update += '.';
+      }
+      
+      // Limit length to keep it readable
+      if (update.length > 150) {
+        update = update.substring(0, 147).trim() + '...';
       }
       
       // Format as Markdown with clickable link
       if (url) {
-        try {
-          const domain = new URL(url).hostname.replace('www.', '');
-          // Markdown format: text [link text](url)
-          updates.push(`${update} [Read more](${url})`);
-        } catch {
-          updates.push(update);
-        }
+        updates.push(`${update} [Read more](${url})`);
       } else {
         updates.push(update);
       }
-    } else if (title && title.toLowerCase() !== topicName.toLowerCase()) {
-      // If no relevant sentences, use the title if it's informative
+    } else if (title && title.length > 10) {
+      // Fallback to title if it's informative
       let update = title;
-      if (update.length > 100) {
-        update = update.substring(0, 100).trim() + '...';
+      
+      // Clean up title
+      update = update.replace(/\s+/g, ' ').trim();
+      
+      if (update.length > 120) {
+        update = update.substring(0, 117).trim() + '...';
       }
       
       if (url) {
-        try {
-          const domain = new URL(url).hostname.replace('www.', '');
-          updates.push(`${update} [Read more](${url})`);
-        } catch {
-          updates.push(update);
-        }
+        updates.push(`${update} [Read more](${url})`);
       } else {
         updates.push(update);
       }
     }
   }
 
-  // If we couldn't extract specific updates, provide at least the titles with sources
-  if (updates.length === 0 && results.length > 0) {
-    for (let i = 0; i < Math.min(results.length, 4); i++) {
-      const result = results[i];
-      let update = result.title;
-      
-      if (result.url) {
-        try {
-          updates.push(`${update} [Read more](${result.url})`);
-        } catch {
-          updates.push(update);
-        }
-      } else {
-        updates.push(update);
-      }
-    }
-  }
+  // Deduplicate very similar updates
+  const uniqueUpdates = updates.filter((update, index) => {
+    const updateLower = update.toLowerCase().replace(/\[read more\].*$/i, '').trim();
+    return !updates.slice(0, index).some(prev => {
+      const prevLower = prev.toLowerCase().replace(/\[read more\].*$/i, '').trim();
+      // Check if updates are very similar (>70% overlap)
+      const similarity = updateLower.includes(prevLower.substring(0, 50)) || 
+                         prevLower.includes(updateLower.substring(0, 50));
+      return similarity;
+    });
+  });
 
-  return updates;
+  return uniqueUpdates.slice(0, 5); // Return top 5 unique updates
 }
 
 /* =======================

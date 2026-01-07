@@ -183,28 +183,52 @@ export function TopicUpdatesModal({
       {/* Content */}
       {isLoading && displayUpdates.length === 0 ? (
         <BottomSheetView hadHeader={true}>
-          <View className="px-4">
-            {[1, 2, 3].map((i) => (
+          <View className="px-4 py-2">
+            {[1, 2, 3, 4].map((i) => (
               <View 
                 key={i} 
-                className="mb-3 rounded-lg p-3 border"
+                className="mb-4 rounded-lg overflow-hidden border shadow-sm"
                 style={{
-                  backgroundColor: isDarkColorScheme ? 'rgba(63, 63, 70, 0.5)' : 'rgba(244, 244, 245, 0.5)',
+                  backgroundColor: isDarkColorScheme ? '#27272a' : '#ffffff',
                   borderColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
                 }}
               >
+                <View className="p-4">
+                  <View 
+                    className="h-4 rounded-md mb-3" 
+                    style={{ 
+                      width: i === 1 ? '85%' : i === 2 ? '70%' : i === 3 ? '90%' : '75%', 
+                      backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' 
+                    }} 
+                  />
+                  <View 
+                    className="h-4 rounded-md mb-3" 
+                    style={{ 
+                      width: '95%', 
+                      backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' 
+                    }} 
+                  />
+                  <View 
+                    className="h-4 rounded-md mb-2" 
+                    style={{ 
+                      width: i === 2 ? '60%' : '80%', 
+                      backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' 
+                    }} 
+                  />
+                </View>
+                <View style={{ height: 1, backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} />
                 <View 
-                  className="h-4 rounded mb-2" 
-                  style={{ width: '75%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
-                />
-                <View 
-                  className="h-4 rounded mb-2" 
-                  style={{ width: '100%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
-                />
-                <View 
-                  className="h-4 rounded" 
-                  style={{ width: '50%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
-                />
+                  className="py-3 px-4 items-center"
+                  style={{ backgroundColor: isDarkColorScheme ? 'rgba(63, 63, 70, 0.3)' : 'rgba(244, 244, 245, 0.5)' }}
+                >
+                  <View 
+                    className="h-3 rounded-md" 
+                    style={{ 
+                      width: 80, 
+                      backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' 
+                    }} 
+                  />
+                </View>
               </View>
             ))}
           </View>

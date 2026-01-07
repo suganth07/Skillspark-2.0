@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, ActivityIndicator, Alert } from 'react-native';
+import { View, ActivityIndicator, Alert, Pressable } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { getItem, setItem, removeItem } from '@/lib/storage';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
-import { Video, Trash2 } from 'lucide-react-native';
+import { Video, Trash2, RefreshCw } from '@/components/Icons';
 import { Video as ExpoVideo, ResizeMode } from 'expo-av';
 import { geminiService } from '@/lib/gemini';
 import { heygenGenerateVideo, waitForHeygenVideoUrl } from '@/server/heygenClient';
@@ -54,6 +55,20 @@ export function TopicVideoGenerator({
   const loadExistingVideo = useCallback(async () => {
     try {
       setVideoStatus('loading-existing');
+      
+      // Check if there's an ongoing generation
+      const storageKey = `video_generation_${topicId}`;
+      const savedState = getItem<{ status: VideoGenerationStatus; error?: string }>(storageKey);
+      
+      if (savedState && savedState.status !== 'idle' && savedState.status !== 'completed' && savedState.status !== 'error') {
+        console.log('📹 Restoring video generation state:', savedState.status);
+        setVideoStatus(savedState.status);
+        if (savedState.error) {
+          setVideoError(savedState.error);
+        }
+        return;
+      }
+      
       const existingVideo = await getExistingTopicVideo(topicId, userId);
 
       if (existingVideo) {
@@ -63,6 +78,8 @@ export function TopicVideoGenerator({
           setVideoUrl(existingVideo.localFilePath);
           setIsLocalVideo(true);
           setVideoStatus('completed');
+          // Clear any saved generation state
+          removeItem(storageKey);
           return;
         }
 
@@ -71,6 +88,8 @@ export function TopicVideoGenerator({
       }
 
       setVideoStatus('idle');
+      // Clear any saved generation state
+      removeItem(storageKey);
     } catch (err) {
       console.error('Error loading existing video:', err);
       setVideoStatus('idle');
@@ -83,6 +102,16 @@ export function TopicVideoGenerator({
       loadExistingVideo();
     }
   }, [topicId, userId, loadExistingVideo]);
+
+  // Save video generation state to storage when status changes
+  useEffect(() => {
+    const storageKey = `video_generation_${topicId}`;
+    if (videoStatus !== 'idle' && videoStatus !== 'completed' && videoStatus !== 'loading-existing') {
+      setItem(storageKey, { status: videoStatus, error: videoError });
+    } else if (videoStatus === 'completed' || videoStatus === 'idle') {
+      removeItem(storageKey);
+    }
+  }, [videoStatus, videoError, topicId]);
 
   const handleGenerateVideo = useCallback(async () => {
     try {
@@ -169,10 +198,15 @@ export function TopicVideoGenerator({
       setVideoUrl(localFilePath);
       setIsLocalVideo(true);
       setVideoStatus('completed');
+      // Clear storage state on success
+      removeItem(`video_generation_${topicId}`);
     } catch (err) {
       console.error('📹 Video generation error:', err);
-      setVideoError(err instanceof Error ? err.message : String(err));
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setVideoError(errorMsg);
       setVideoStatus('error');
+      // Save error state to storage
+      setItem(`video_generation_${topicId}`, { status: 'error', error: errorMsg });
     }
   }, [topicId, userId, topicName, subtopics]);
 
@@ -182,6 +216,8 @@ export function TopicVideoGenerator({
       setVideoUrl(null);
       setVideoStatus('idle');
       setIsLocalVideo(false);
+      // Clear storage state
+      removeItem(`video_generation_${topicId}`);
       console.log('🗑️ Video deleted successfully');
     } catch (err) {
       console.error('Error deleting video:', err);
@@ -211,14 +247,14 @@ export function TopicVideoGenerator({
 
   return (
     <>
-    <Card>
+    <Card className="mb-4">
       <CardHeader>
-        <View className="flex-row items-center space-x-2 mb-2">
+        <View className="flex-row items-center gap-2 space-x-2 mb-2">
           <Video className="h-5 w-5 text-primary" />
           <CardTitle>AI Video Explanation</CardTitle>
         </View>
         <Text className="text-sm text-muted-foreground">
-          Generate a short AI video (~10 seconds) explaining this topic
+          Generate a short AI video explaining this topic
         </Text>
       </CardHeader>
       <CardContent>
@@ -234,9 +270,8 @@ export function TopicVideoGenerator({
         {videoStatus === 'idle' && !videoUrl && (
           <Button
             onPress={handleGenerateVideo}
-            className="w-full flex-row items-center justify-center space-x-2"
+            className="w-full"
           >
-            <Video className="h-4 w-4 text-primary-foreground" />
             <Text className="text-primary-foreground font-medium">Generate Video</Text>
           </Button>
         )}
@@ -308,22 +343,19 @@ export function TopicVideoGenerator({
                 isLooping={false}
               />
             </View>
-            <View className="flex-row justify-between">
-              <Button
-                variant="destructive"
+            <View className="flex-row justify-end gap-3 mt-3">
+              <Pressable
                 onPress={handleDeleteVideo}
-                className="flex-row items-center space-x-1"
+                className="p-2 rounded-lg border border-destructive/30 bg-destructive/10 active:bg-destructive/20"
               >
-                <Trash2 className="h-4 w-4 text-white" />
-                <Text className="text-white">Delete</Text>
-              </Button>
-              <Button
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Pressable>
+              <Pressable
                 onPress={handleGenerateVideo}
-                className="flex-row items-center space-x-1"
+                className="p-2 rounded-lg border border-border bg-secondary active:bg-secondary/70"
               >
-                <Video className="h-4 w-4 text-white" />
-                <Text className="text-white">Regenerate</Text>
-              </Button>
+                <RefreshCw className="h-4 w-4 text-foreground" />
+              </Pressable>
             </View>
           </View>
         )}

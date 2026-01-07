@@ -4,7 +4,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Key, ChevronRight } from 'lucide-react-native';
+import { SuccessDialog } from '@/components/ui/success-dialog';
+import { Key, ChevronRight } from '@/components/Icons';
 import { useColorScheme } from '@/lib/useColorScheme';
 import {
   BottomSheet,
@@ -69,6 +70,7 @@ export function APIKeysItem() {
   const [tempKeys, setTempKeys] = useState<Record<string, string>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   
   // Get refresh functions from stores
   const refreshAIProviders = useRefreshProviderAvailability();
@@ -133,7 +135,7 @@ export function APIKeysItem() {
       await refreshWebSearchProviders();
       
       close();
-      Alert.alert('Success', 'API keys saved securely!', [{ text: 'OK' }]);
+      setShowSuccessDialog(true);
     } catch (error) {
       console.error('Failed to save API keys:', error);
       Alert.alert('Error', 'Failed to save API keys. Please try again.', [{ text: 'OK' }]);
@@ -286,6 +288,14 @@ export function APIKeysItem() {
           }
         />
       </BottomSheetContent>
+
+      {/* Success Dialog */}
+      <SuccessDialog
+        open={showSuccessDialog}
+        onOpenChange={setShowSuccessDialog}
+        title="Success"
+        description="API keys saved securely on your device locally!"
+      />
     </BottomSheet>
   );
 }

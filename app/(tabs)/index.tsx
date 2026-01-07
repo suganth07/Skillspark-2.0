@@ -39,8 +39,7 @@ export default function Home() {
   const totalRoadmaps = roadmaps?.length || 0;
   const completedRoadmaps = roadmaps?.filter((r: RoadmapWithProgress) => r.status === 'completed')?.length || 0;
   const inProgressRoadmaps = roadmaps?.filter((r: RoadmapWithProgress) => 
-    // r.status === 'in-progress' || (r.completedSteps > 0 && r.status !== 'completed')
-  r.status === 'active' && r.completedSteps > 0 && r.status !== 'completed'
+    r.status === 'active' && r.completedSteps > 0
   )?.length || 0;
   const totalProgress = roadmaps?.reduce((sum: number, r: RoadmapWithProgress) => sum + (r.completedSteps || 0), 0) || 0;
 
@@ -186,8 +185,8 @@ export default function Home() {
               const isCompleted = roadmap.status === 'completed';
               
               const gradientColors = isCompleted
-                ? ['#10b981', '#059669', '#047857'] // Green gradient for completed
-                : ['#7c3aed', '#6d28d9', '#5b21b6']; // Purple gradient for in-progress
+                ? ['#10b981', '#059669', '#047857'] as const // Green gradient for completed
+                : ['#7c3aed', '#6d28d9', '#5b21b6'] as const; // Purple gradient for in-progress
               
               return (
                 <View

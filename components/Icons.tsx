@@ -39,6 +39,7 @@ import {
   GraduationCap,
   Info,
   Italic,
+  Key,
   Lamp,
   LayoutPanelLeft,
   LifeBuoy,
@@ -59,6 +60,7 @@ import {
   Underline,
   UserPlus,
   Users,
+  Video,
   Wand2,
   RefreshCw,
   RotateCcw,
@@ -142,6 +144,8 @@ interopIcon(Trash2);
 interopIcon(Zap);
 interopIcon(Star);
 interopIcon(GraduationCap);
+interopIcon(Video);
+interopIcon(Key);
 
 export {
   Activity,
@@ -181,6 +185,7 @@ export {
   GalleryHorizontal,
   Info,
   Italic,
+  Key,
   Lamp,
   LayoutPanelLeft,
   LifeBuoy,
@@ -201,6 +206,7 @@ export {
   Underline,
   UserPlus,
   Users,
+  Video,
   Wand2,
   RefreshCw,
   RotateCcw,

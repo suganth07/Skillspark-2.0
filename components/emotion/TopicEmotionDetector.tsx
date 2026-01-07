@@ -1,102 +1,50 @@
-
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, Dimensions, Image, Platform } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Text } from '@/components/ui/text';
-import { Card } from '@/components/ui/card';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { Brain, Camera } from 'lucide-react-native';
-
-import * as ImageManipulator from 'expo-image-manipulator';
-import { Buffer } from 'buffer';
-import jpeg from 'jpeg-js';
-
-
 /**
- * Bilinear resize to match Python PIL's Image.resize() behavior
- * This ensures pixel values match between RN and Python
- * Non-blocking version that yields control back to UI
+ * TopicEmotionDetector.tsx
+ * 
+ * Real-time emotion detection during learning using MediaPipe Face Landmarker.
+ * Captures a photo every 10 seconds and analyzes facial landmarks to determine
+ * emotional state (engaged, drowsy, confused, frustrated, bored, looking_away).
+ * 
+ * IMPORTANT: This component requires a Dev Client (not Expo Go) because it uses
+ * native MediaPipe modules. Run with: npx expo prebuild && npx expo run:android
  */
-async function bilinearResize(
-  srcData: Uint8Array,
-  srcWidth: number,
-  srcHeight: number,
-  dstWidth: number,
-  dstHeight: number,
-  channels: number = 3
-): Promise<Uint8Array> {
-  const dst = new Uint8Array(dstWidth * dstHeight * channels);
-  
-  const xRatio = srcWidth / dstWidth;
-  const yRatio = srcHeight / dstHeight;
-  
-  // Process in chunks to avoid blocking UI
-  const CHUNK_SIZE = 20; // Process 20 rows at a time
-  
-  for (let rowStart = 0; rowStart < dstHeight; rowStart += CHUNK_SIZE) {
-    const rowEnd = Math.min(rowStart + CHUNK_SIZE, dstHeight);
-    
-    // Process chunk
-    for (let dstY = rowStart; dstY < rowEnd; dstY++) {
-      for (let dstX = 0; dstX < dstWidth; dstX++) {
-        // Map destination pixel to source coordinates
-        const srcX = dstX * xRatio;
-        const srcY = dstY * yRatio;
-        
-        // Get the four surrounding pixels
-        const x0 = Math.floor(srcX);
-        const y0 = Math.floor(srcY);
-        const x1 = Math.min(x0 + 1, srcWidth - 1);
-        const y1 = Math.min(y0 + 1, srcHeight - 1);
-        
-        // Calculate interpolation weights
-        const xWeight = srcX - x0;
-        const yWeight = srcY - y0;
-        
-        // For each channel
-        for (let c = 0; c < channels; c++) {
-          // Get the four pixel values
-          const p00 = srcData[(y0 * srcWidth + x0) * channels + c];
-          const p10 = srcData[(y0 * srcWidth + x1) * channels + c];
-          const p01 = srcData[(y1 * srcWidth + x0) * channels + c];
-          const p11 = srcData[(y1 * srcWidth + x1) * channels + c];
-          
-          // Bilinear interpolation
-          const top = p00 * (1 - xWeight) + p10 * xWeight;
-          const bottom = p01 * (1 - xWeight) + p11 * xWeight;
-          const value = top * (1 - yWeight) + bottom * yWeight;
-          
-          dst[(dstY * dstWidth + dstX) * channels + c] = Math.round(value);
-        }
-      }
-    }
-    
-    // Yield control back to UI thread after each chunk
-    if (rowEnd < dstHeight) {
-      await new Promise(resolve => setImmediate(resolve));
-    }
-  }
-  
-  return dst;
-}
 
-// Conditionally import TFLite only if the native module is available
-let useTensorflowModel: any = null;
-let isTfliteAvailable = false;
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+  Platform,
+} from "react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { Text } from "@/components/ui/text";
+import { Card } from "@/components/ui/card";
+import Animated, { FadeIn } from "react-native-reanimated";
+import { Brain, Camera, AlertCircle } from "lucide-react-native";
 
+// Import native face landmarks module
+import { FaceLandmarks, type FaceLandmarksResult } from "@/modules/face-landmarks/src";
+// Import emotion detector with Python-ported logic
+import {
+  EmotionDetector,
+  normalizeLandmarks,
+  type EmotionResult as EmotionDetectorResult,
+} from "@/lib/emotion/EmotionDetector";
+
+// Check if native module is available
+let isFaceLandmarksAvailable = false;
 try {
-  // Only attempt to import on native platforms where it should work
-  if (Platform.OS !== 'web') {
-    const tflite = require('react-native-fast-tflite');
-    useTensorflowModel = tflite.useTensorflowModel;
-    isTfliteAvailable = true;
+  if (Platform.OS !== "web") {
+    // Try to access the module - will throw if not available
+    isFaceLandmarksAvailable = FaceLandmarks !== null && FaceLandmarks !== undefined;
   }
 } catch (error) {
-  console.warn('TensorFlow Lite native module not available:', error);
-  isTfliteAvailable = false;
+  console.warn("FaceLandmarks native module not available:", error);
+  isFaceLandmarksAvailable = false;
 }
 
-interface EmotionResult {
+interface EmotionResultState {
   emotion: string;
   confidence: number;
   timestamp: Date;
@@ -106,292 +54,212 @@ interface TopicEmotionDetectorProps {
   onEmotionDetected?: (emotion: string, confidence: number) => void;
 }
 
-/**
- * IMPORTANT:
- * - This component requires a Dev Client (not Expo Go), because fast-tflite is native.
- * - Ensure metro.config.js includes "tflite" in assetExts.
- */
-
-// Keep your label order EXACTLY as your model output order.
-// If you have labels.txt and it's different, update this array.
-const EMOTIONS = ['wbored', 'confused', 'drowsy', 'engaged', 'frustrated', 'looking_away'];
+// Emotion labels - matches Python output
+const EMOTIONS = [
+  "engaged",
+  "drowsy",
+  "confused",
+  "frustrated",
+  "bored",
+  "looking_away",
+];
 
 const DETECTION_INTERVAL = 10000; // 10 seconds
-const { width: screenWidth } = Dimensions.get('window');
 
-function argMax(arr: ArrayLike<number>) {
-  let bestIdx = 0;
-  let bestVal = arr[0] ?? -Infinity;
-  for (let i = 1; i < arr.length; i++) {
-    const v = arr[i]!;
-    if (v > bestVal) {
-      bestVal = v;
-      bestIdx = i;
-    }
-  }
-  return { index: bestIdx, value: bestVal };
-}
-
-function softmax(logits: ArrayLike<number>) {
-  // stable softmax
-  let max = -Infinity;
-  for (let i = 0; i < logits.length; i++) max = Math.max(max, logits[i] as number);
-  const exps = new Float32Array(logits.length);
-  let sum = 0;
-  for (let i = 0; i < logits.length; i++) {
-    const e = Math.exp((logits[i] as number) - max);
-    exps[i] = e;
-    sum += e;
-  }
-  for (let i = 0; i < exps.length; i++) exps[i] = exps[i] / (sum || 1);
-  return exps;
-}
-
-async function photoToRgbUint8(uri: string, targetWidth: number, targetHeight: number) {
-  console.log('📷 Processing and resizing image:', uri);
-  
-  // Resize and convert to JPEG in a single operation
-  const result = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: targetWidth, height: targetHeight } }],
-    { 
-      compress: 1,
-      format: ImageManipulator.SaveFormat.JPEG,
-      base64: true,
-    }
-  );
-
-  console.log('📷 Image dimensions:', result.width, 'x', result.height);
-
-  if (!result.base64) throw new Error('No base64 returned');
-  
-  const jpgBytes = Buffer.from(result.base64, 'base64');
-  const decoded = jpeg.decode(jpgBytes, { useTArray: true, formatAsRGBA: true });
-
-  // Convert RGBA -> RGB (image is already at target size from ImageManipulator)
-  const rgba = decoded.data;
-  const rgb = new Uint8Array(decoded.width * decoded.height * 3);
-  
-  let j = 0;
-  for (let i = 0; i < rgba.length; i += 4) {
-    rgb[j++] = rgba[i]; // R
-    rgb[j++] = rgba[i + 1]; // G
-    rgb[j++] = rgba[i + 2]; // B
-  }
-
-  console.log('📷 Converted to RGB, size:', decoded.width, 'x', decoded.height);
-  if (decoded.width !== targetWidth || decoded.height !== targetHeight) {
-    console.warn(`⚠️ Size mismatch: expected ${targetWidth}x${targetHeight}, got ${decoded.width}x${decoded.height}`);
-  }
-
-  // Log first few RGB triplets for comparison with Python
-  console.log('📷 First 3 pixels (RGB):', 
-    `[${rgb[0]}, ${rgb[1]}, ${rgb[2]}]`,
-    `[${rgb[3]}, ${rgb[4]}, ${rgb[5]}]`,
-    `[${rgb[6]}, ${rgb[7]}, ${rgb[8]}]`
-  );
-
-  return rgb;
-}
-
-export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetectorProps) {
+export function TopicEmotionDetector({
+  onEmotionDetected,
+}: TopicEmotionDetectorProps) {
   const [permission, requestPermission] = useCameraPermissions();
-  const [emotion, setEmotion] = useState<EmotionResult | null>(null);
+  const [emotion, setEmotion] = useState<EmotionResultState | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [countdown, setCountdown] = useState(DETECTION_INTERVAL / 1000);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
-
-  // Choose ONE model:
-  // - int8 dynamic: usually fastest, input often uint8 (0..255)
-  // - fp16: often expects float32 normalized (0..1) depending on conversion
-  const modelAsset = useMemo(
-    () => isTfliteAvailable ? require('@/assets/model/engagement6_fp16.tflite') : null,
-    []
-  );
   
-  // Only use TensorFlow model if available
-  const tflite = isTfliteAvailable && useTensorflowModel && modelAsset ? useTensorflowModel(modelAsset) : null;
-  const model = tflite?.state === 'loaded' ? tflite.model : undefined;
+  // Initialize emotion detector
+  const emotionDetector = useRef(new EmotionDetector()).current;
 
-  // ---- tweak these to match your model ----
-  const INPUT_W = 224;
-  const INPUT_H = 224;
-
-  // MobileNetV3 preprocess_input expects [0-255] range, not [0-1]
-  const USE_FLOAT_INPUT_0_255 = true;
-  // ----------------------------------------
-
-  // Early return if TFLite is not available
-  if (!isTfliteAvailable) {
-    return (
-      <Card className="mx-4 mb-4 border-yellow-500">
-        <View className="p-4">
-          <View className="flex-row items-center space-x-2 mb-2">
-            <Brain className="h-5 w-5 text-yellow-600" />
-            <Text className="font-semibold text-yellow-700">Emotion Detection Unavailable</Text>
-          </View>
-          <Text className="text-sm text-muted-foreground">
-            Emotion detection requires a development build with native modules. This feature is not available in Expo Go.
-          </Text>
-        </View>
-      </Card>
-    );
-  }
-
-  useEffect(() => {
-    // Use test image instead of camera
-    const interval = setInterval(() => {
-      detectEmotion();
-      setCountdown(DETECTION_INTERVAL / 1000);
-    }, DETECTION_INTERVAL);
-
-    const initialTimeout = setTimeout(() => {
-      detectEmotion();
-    }, 2000);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(initialTimeout);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? DETECTION_INTERVAL / 1000 : prev - 1));
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  const detectEmotion = async () => {
+  // Main emotion detection function
+  const detectEmotion = useCallback(async () => {
     if (isProcessing) return;
-
-    if (!model) {
-      // model still loading
+    if (!cameraRef.current) {
+      console.warn("Camera ref not available");
       return;
     }
 
     setIsProcessing(true);
+    setError(null);
 
     try {
       // Capture photo from camera
-      if (!cameraRef.current) {
-        console.warn('Camera ref not available');
-        setIsProcessing(false);
-        return;
-      }
-
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
         skipProcessing: true,
       });
-      
+
       if (!photo?.uri) {
-        console.warn('No photo captured');
+        console.warn("No photo captured");
         setIsProcessing(false);
         return;
       }
 
       setCapturedImage(photo.uri);
+      console.log("📷 Photo captured:", photo.uri);
 
-      const rgb = await photoToRgbUint8(photo.uri, INPUT_W, INPUT_H);
+      // Detect face landmarks using native module
+      const result: FaceLandmarksResult =
+        await FaceLandmarks.detectFromImageAsync(photo.uri);
 
-      // MobileNetV3 preprocess_input expects Float32 with [0-255] range
-      // The model will internally convert to [-1, 1]
-      const inputTensor = USE_FLOAT_INPUT_0_255
-        ? Float32Array.from(rgb)  // Convert uint8 [0-255] to float32 [0-255]
-        : rgb;
+      console.log(
+        `📊 Face detection result: ${result.landmarks.length} landmarks, ${result.width}x${result.height}`
+      );
 
-      // Log input tensor stats
-      let min = Infinity, max = -Infinity, sum = 0;
-      for (let i = 0; i < inputTensor.length; i++) {
-        const val = inputTensor[i];
-        if (val < min) min = val;
-        if (val > max) max = val;
-        sum += val;
+      if (result.landmarks.length === 0) {
+        // No face detected
+        const unknownResult: EmotionResultState = {
+          emotion: "unknown",
+          confidence: 0,
+          timestamp: new Date(),
+        };
+        setEmotion(unknownResult);
+        onEmotionDetected?.("unknown", 0);
+        console.log("⚠️ No face detected in image");
+        setIsProcessing(false);
+        return;
       }
-      const mean = sum / inputTensor.length;
-      console.log('📊 Input tensor stats:', {
-        type: inputTensor.constructor.name,
-        length: inputTensor.length,
-        min,
-        max,
-        mean: mean.toFixed(3),
-        first10: Array.from(inputTensor.slice(0, 10)),
-      });
 
-      // Run inference
-      const outputs = model.runSync([inputTensor]);
-      
-      // Model outputs probabilities directly
-      const probs = outputs[0] as Float32Array;
-      
-      // Log all probabilities with labels
-      console.log('📊 Model output probabilities:');
-      EMOTIONS.forEach((emotion, i) => {
-        console.log(`   ${i}: ${emotion} = ${(probs[i] * 100).toFixed(2)}%`);
-      });
-      
-      const { index } = argMax(probs);
-      const predicted = EMOTIONS[index] ?? 'unknown';
-      const confidence = probs[index] ?? 0;
-      
-      console.log(`🎯 Winner: index=${index}, emotion=${predicted}, confidence=${(confidence * 100).toFixed(2)}%`);
+      // Convert normalized landmarks to pixel coordinates (matches Python)
+      const pixelLandmarks = normalizeLandmarks(
+        result.width,
+        result.height,
+        result.landmarks
+      );
 
-      const result: EmotionResult = {
-        emotion: predicted,
-        confidence,
+      console.log(
+        `📊 Converted ${pixelLandmarks.length} landmarks to pixel coordinates`
+      );
+
+      // Run emotion detection using rule-based logic
+      const emotionResult: EmotionDetectorResult =
+        emotionDetector.detectFromLandmarks(pixelLandmarks);
+
+      console.log(
+        `🎯 Emotion detected: ${emotionResult.emotion} (${(emotionResult.confidence * 100).toFixed(1)}%)`
+      );
+      console.log("📊 Features:", JSON.stringify(emotionResult.features, null, 2));
+
+      const result_state: EmotionResultState = {
+        emotion: emotionResult.emotion,
+        confidence: emotionResult.confidence,
         timestamp: new Date(),
       };
 
-      setEmotion(result);
-      onEmotionDetected?.(result.emotion, result.confidence);
-
-      console.log('✅ TFLite Emotion detected:', result);
-    } catch (error) {
-      console.error('Error detecting emotion:', error);
+      setEmotion(result_state);
+      onEmotionDetected?.(emotionResult.emotion, emotionResult.confidence);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("Error detecting emotion:", errorMessage);
+      setError(errorMessage);
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [isProcessing, emotionDetector, onEmotionDetected]);
 
+  // Set up detection interval
+  useEffect(() => {
+    if (!isFaceLandmarksAvailable) return;
+
+    // Initial detection after 2 seconds
+    const initialTimeout = setTimeout(() => {
+      detectEmotion();
+    }, 2000);
+
+    // Regular detection every 10 seconds
+    const interval = setInterval(() => {
+      detectEmotion();
+      setCountdown(DETECTION_INTERVAL / 1000);
+    }, DETECTION_INTERVAL);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(initialTimeout);
+    };
+  }, [detectEmotion]);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) =>
+        prev <= 1 ? DETECTION_INTERVAL / 1000 : prev - 1
+      );
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Helper functions for UI
   const getEmotionColor = (emotionName: string): string => {
     const colors: Record<string, string> = {
-      engaged: '#4CAF50',
-      confused: '#FF9800',
-      frustrated: '#F44336',
-      drowsy: '#9C27B0',
-      wbored: '#2196F3',
-      looking_away: '#607D8B',
+      engaged: "#4CAF50",
+      confused: "#FF9800",
+      frustrated: "#F44336",
+      drowsy: "#9C27B0",
+      bored: "#2196F3",
+      looking_away: "#607D8B",
+      unknown: "#999999",
     };
-    return colors[emotionName] || '#999';
+    return colors[emotionName] || "#999";
   };
 
   const getEmotionEmoji = (emotionName: string): string => {
     const emojis: Record<string, string> = {
-      engaged: '😊',
-      confused: '😕',
-      frustrated: '😤',
-      drowsy: '😴',
-      wbored: '😐',
-      looking_away: '👀',
+      engaged: "😊",
+      confused: "😕",
+      frustrated: "😤",
+      drowsy: "😴",
+      bored: "😐",
+      looking_away: "👀",
+      unknown: "❓",
     };
-    return emojis[emotionName] || '😐';
+    return emojis[emotionName] || "😐";
   };
 
   const getEmotionLabel = (emotionName: string): string => {
     const labels: Record<string, string> = {
-      engaged: 'Engaged',
-      confused: 'Confused',
-      frustrated: 'Frustrated',
-      drowsy: 'Drowsy',
-      wbored: 'Bored',
-      looking_away: 'Distracted',
+      engaged: "Engaged",
+      confused: "Confused",
+      frustrated: "Frustrated",
+      drowsy: "Drowsy",
+      bored: "Bored",
+      looking_away: "Distracted",
+      unknown: "No Face Detected",
     };
     return labels[emotionName] || emotionName;
   };
+
+  // Early return if native module is not available
+  if (!isFaceLandmarksAvailable) {
+    return (
+      <Card className="mx-4 mb-4 border-yellow-500">
+        <View className="p-4">
+          <View className="flex-row items-center space-x-2 mb-2">
+            <AlertCircle className="h-5 w-5 text-yellow-600" />
+            <Text className="font-semibold text-yellow-700 ml-2">
+              Emotion Detection Unavailable
+            </Text>
+          </View>
+          <Text className="text-sm text-muted-foreground">
+            Emotion detection requires a development build with native modules.
+            This feature is not available in Expo Go.
+          </Text>
+          <Text className="text-xs text-muted-foreground mt-2">
+            Run: npx expo prebuild && npx expo run:android
+          </Text>
+        </View>
+      </Card>
+    );
+  }
 
   // Handle camera permissions
   if (!permission) {
@@ -399,7 +267,9 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
       <Card className="mx-4 mb-4">
         <View className="p-4">
           <ActivityIndicator size="small" />
-          <Text className="text-sm text-muted-foreground mt-2">Checking camera permissions...</Text>
+          <Text className="text-sm text-muted-foreground mt-2">
+            Checking camera permissions...
+          </Text>
         </View>
       </Card>
     );
@@ -411,13 +281,21 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
         <View className="p-4">
           <View className="flex-row items-center space-x-2 mb-2">
             <Camera className="h-5 w-5 text-yellow-600" />
-            <Text className="font-semibold text-yellow-700">Camera Permission Required</Text>
+            <Text className="font-semibold text-yellow-700 ml-2">
+              Camera Permission Required
+            </Text>
           </View>
           <Text className="text-sm text-muted-foreground mb-3">
-            This feature needs camera access to monitor your learning engagement.
+            This feature needs camera access to monitor your learning
+            engagement.
           </Text>
-          <View className="bg-primary px-4 py-2 rounded-lg" onTouchEnd={requestPermission}>
-            <Text className="text-primary-foreground text-center font-medium">Grant Permission</Text>
+          <View
+            className="bg-primary px-4 py-2 rounded-lg"
+            onTouchEnd={requestPermission}
+          >
+            <Text className="text-primary-foreground text-center font-medium">
+              Grant Permission
+            </Text>
           </View>
         </View>
       </Card>
@@ -427,12 +305,11 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
   return (
     <View className="mb-6">
       {/* Hidden camera for capturing photos */}
-      <View style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}>
+      <View style={{ position: "absolute", opacity: 0, width: 1, height: 1 }}>
         <CameraView
           ref={cameraRef}
           style={{ width: 1, height: 1 }}
           facing="front"
-          enableShutterSound={false}
           mirror={false}
         />
       </View>
@@ -441,23 +318,39 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
         <View className="p-4">
           <View className="flex-row items-center justify-between mb-3">
             <View className="flex-row items-center gap-2">
-              <Brain size={18} className="text-purple-600 dark:text-purple-400" />
+              <Brain
+                size={18}
+                className="text-purple-600 dark:text-purple-400"
+              />
               <Text className="text-sm font-semibold">Learning Engagement</Text>
             </View>
 
             <View className="flex-row items-center gap-2 bg-secondary px-3 py-1.5 rounded-full">
               <Camera size={14} className="text-foreground" />
-              <Text className="text-xs font-medium">
-                {tflite.state !== 'loaded' ? 'Loading model…' : `Next: ${countdown}s`}
-              </Text>
+              <Text className="text-xs font-medium">Next: {countdown}s</Text>
             </View>
           </View>
 
+          {error && (
+            <View className="bg-red-50 dark:bg-red-900/20 p-2 rounded-lg mb-3">
+              <Text className="text-xs text-red-600 dark:text-red-400">
+                {error}
+              </Text>
+            </View>
+          )}
+
           {emotion && (
-            <Animated.View entering={FadeIn.duration(300)} className="flex-row items-center gap-3">
+            <Animated.View
+              entering={FadeIn.duration(300)}
+              className="flex-row items-center gap-3"
+            >
               {capturedImage && (
                 <View className="relative">
-                  <Image source={{ uri: capturedImage }} style={styles.thumbnail} className="rounded-lg" />
+                  <Image
+                    source={{ uri: capturedImage }}
+                    style={styles.thumbnail}
+                    className="rounded-lg"
+                  />
                   {isProcessing && (
                     <View style={styles.thumbnailOverlay}>
                       <ActivityIndicator size="small" color="#fff" />
@@ -468,14 +361,22 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
 
               <View className="flex-1">
                 <View className="flex-row items-center gap-2 mb-1">
-                  <Text style={{ fontSize: 24 }}>{getEmotionEmoji(emotion.emotion)}</Text>
-                  <Text className="text-base font-bold" style={{ color: getEmotionColor(emotion.emotion) }}>
+                  <Text style={{ fontSize: 24 }}>
+                    {getEmotionEmoji(emotion.emotion)}
+                  </Text>
+                  <Text
+                    className="text-base font-bold"
+                    style={{ color: getEmotionColor(emotion.emotion) }}
+                  >
                     {getEmotionLabel(emotion.emotion)}
                   </Text>
                 </View>
 
                 <View className="flex-row items-center gap-2">
-                  <View className="h-2 flex-1 rounded-full bg-secondary overflow-hidden" style={{ maxWidth: 120 }}>
+                  <View
+                    className="h-2 flex-1 rounded-full bg-secondary overflow-hidden"
+                    style={{ maxWidth: 120 }}
+                  >
                     <View
                       className="h-full rounded-full"
                       style={{
@@ -484,7 +385,9 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
                       }}
                     />
                   </View>
-                  <Text className="text-xs text-muted-foreground">{(emotion.confidence * 100).toFixed(0)}%</Text>
+                  <Text className="text-xs text-muted-foreground">
+                    {(emotion.confidence * 100).toFixed(0)}%
+                  </Text>
                 </View>
               </View>
             </Animated.View>
@@ -495,13 +398,15 @@ export function TopicEmotionDetector({ onEmotionDetected }: TopicEmotionDetector
               {isProcessing ? (
                 <>
                   <ActivityIndicator size="small" />
-                  <Text className="text-sm text-muted-foreground">Analyzing your engagement…</Text>
+                  <Text className="text-sm text-muted-foreground">
+                    Analyzing your engagement…
+                  </Text>
                 </>
               ) : (
                 <>
                   <Camera size={16} className="text-muted-foreground" />
                   <Text className="text-sm text-muted-foreground">
-                    {tflite.state !== 'loaded' ? 'Loading ML model…' : 'Detecting your learning engagement…'}
+                    Detecting your learning engagement…
                   </Text>
                 </>
               )}
@@ -518,13 +423,13 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderWidth: 2,
-    borderColor: 'rgba(147, 51, 234, 0.3)',
+    borderColor: "rgba(147, 51, 234, 0.3)",
   },
   thumbnailOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 8,
   },
 });

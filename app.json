@@ -1,13 +1,5 @@
 {
   "expo": {
-    "plugins": [
-      [
-        "react-native-fast-tflite",
-        {
-          "enableCoreMLDelegate": true,
-          "enableAndroidGpuLibraries": true
-        }
-      ]
-    ]
+    "plugins": []
   }
 }

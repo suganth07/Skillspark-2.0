@@ -6,8 +6,8 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.sourceExts.push("sql");
 
-// Add wasm asset support
-config.resolver.assetExts.push("tflite","txt","wasm");
+// Add asset extensions for MediaPipe model and web assembly
+config.resolver.assetExts.push("task", "txt", "wasm");
 
 config.resolver.unstable_conditionNames = [
   "browser",

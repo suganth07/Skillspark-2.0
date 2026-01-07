@@ -47,7 +47,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-font", 
     "expo-web-browser",
     "expo-secure-store",
-    "react-native-fast-tflite",
     [
       "expo-camera",
       {

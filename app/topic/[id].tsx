@@ -796,7 +796,7 @@ export default function TopicDetailScreen() {
                           console.log(`✅ Updating ${Object.keys(updatedVersions).length} subtopic(s) to ${targetTone} mode`);
                           setSubtopicVersions(prev => ({ ...prev, ...updatedVersions }));
                           
-                          // Show modal instead of alert
+                          // Show modal notification
                           setNewToneToShow(targetTone);
                           setShowToneChangeModal(true);
                         } else {

@@ -24,11 +24,35 @@ echo -e "${GREEN}✓${NC} Found package.json"
 # Step 2: Download MediaPipe model if not present
 MODEL_FILE="face_landmarker.task"
 MODEL_URL="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+EXPECTED_SIZE=3758596
 
 if [ ! -f "$MODEL_FILE" ]; then
     echo -e "${YELLOW}📥 Downloading MediaPipe Face Landmarker model...${NC}"
-    curl -L "$MODEL_URL" -o "$MODEL_FILE"
-    echo -e "${GREEN}✓${NC} Model downloaded: $MODEL_FILE"
+    
+    # Download with error handling
+    if ! curl -L "$MODEL_URL" -o "$MODEL_FILE"; then
+        echo -e "${RED}❌ Error: Failed to download model from $MODEL_URL${NC}"
+        echo -e "${RED}   Please check your internet connection and try again.${NC}"
+        exit 1
+    fi
+    
+    # Verify file exists
+    if [ ! -f "$MODEL_FILE" ]; then
+        echo -e "${RED}❌ Error: Model file $MODEL_FILE was not created after download.${NC}"
+        exit 1
+    fi
+    
+    # Verify file size
+    ACTUAL_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null)
+    if [ "$ACTUAL_SIZE" != "$EXPECTED_SIZE" ]; then
+        echo -e "${RED}❌ Error: Model file size mismatch!${NC}"
+        echo -e "${RED}   Expected: $EXPECTED_SIZE bytes${NC}"
+        echo -e "${RED}   Actual:   $ACTUAL_SIZE bytes${NC}"
+        echo -e "${RED}   The download may be corrupted. Please delete $MODEL_FILE and try again.${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Model downloaded and verified: $MODEL_FILE ($ACTUAL_SIZE bytes)"
 else
     echo -e "${GREEN}✓${NC} Model already exists: $MODEL_FILE"
 fi
@@ -36,8 +60,8 @@ fi
 # Step 3: Run expo prebuild if android folder doesn't exist
 if [ ! -d "android" ]; then
     echo -e "${YELLOW}🔨 Running expo prebuild to generate Android project...${NC}"
-    bun expo run:android --no-build-cache
-    echo -e "${GREEN}✓${NC} Android project generated"
+    bun expo prebuild
+    echo -e "${GREEN}✓${NC} Android project generated with expo prebuild"
 else
     echo -e "${GREEN}✓${NC} Android project already exists"
 fi

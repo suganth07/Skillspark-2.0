@@ -23,6 +23,7 @@ import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
 import { useTopicDetail, usePersistTopicContent, useRegenerateSingleTone, useGenerateWebSearchContent, useRegenerateSelectedSubtopics, type SubtopicPerformance } from '@/hooks/queries/useTopicQueries';
 import { useGenerateQuiz } from '@/hooks/queries/useRoadmapQueries';
+import { useQuizWorkflow } from '@/hooks/queries/useQuizWorkflow';
 import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
@@ -71,10 +72,8 @@ export default function TopicDetailScreen() {
   const [regenerateInstructions, setRegenerateInstructions] = useState('');
   const [isRegeneratingSubtopics, setIsRegeneratingSubtopics] = useState(false);
   
-  // Quiz state
+  // Quiz UI state (workflow state is now in useQuizWorkflow hook)
   const [showQuiz, setShowQuiz] = useState(false);
-  const [quizId, setQuizId] = useState<string | null>(null);
-  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [showQuizResults, setShowQuizResults] = useState(false);
   const [showExitQuizModal, setShowExitQuizModal] = useState(false);
   
@@ -129,8 +128,8 @@ export default function TopicDetailScreen() {
   // Mutation to regenerate selected subtopics
   const regenerateSelectedSubtopicsMutation = useRegenerateSelectedSubtopics();
   
-  // Mutation to generate quiz
-  const generateQuizMutation = useGenerateQuiz();
+  // Quiz workflow hook - handles existence checking and generation
+  const { isGenerating: isGeneratingQuiz, quizId, error: quizError, initiateQuiz, reset: resetQuizWorkflow } = useQuizWorkflow();
 
   // Show regeneration loading when fetching but already have data (refetching/regenerating)
   const isRegenerating = isFetching && !isLoading;
@@ -314,89 +313,20 @@ export default function TopicDetailScreen() {
     
     const { topic } = currentTopicDetail;
     
-    try {
-      // First, check if there's already a quiz for this topic
-      const roadmap = await import('@/server/queries/topics').then(m => 
-        m.getRoadmapByTopicId(topic.id, currentUserId)
-      );
-      
-      if (!roadmap) {
-        setErrorMessage('This topic is not part of any roadmap. Please access it through a roadmap to take a quiz.');
-        return;
-      }
-      
-      // Check if quiz already exists for this topic
-      const { db } = await import('@/db/drizzle');
-      const { quizzes, quizAttempts } = await import('@/db/schema');
-      const { eq, and } = await import('drizzle-orm');
-      
-      const existingQuiz = await db
-        .select({
-          id: quizzes.id,
-        })
-        .from(quizzes)
-        .where(and(
-          eq(quizzes.topicId, topic.id),
-          eq(quizzes.roadmapId, roadmap.id)
-        ))
-        .limit(1);
-      
-      if (existingQuiz.length > 0) {
-        // Check if user has attempted this quiz
-        const attempt = await db
-          .select()
-          .from(quizAttempts)
-          .where(and(
-            eq(quizAttempts.quizId, existingQuiz[0].id),
-            eq(quizAttempts.userId, currentUserId)
-          ))
-          .limit(1);
-        
-        // If quiz exists and not attempted, reuse it
-        if (attempt.length === 0) {
-          console.log('📋 Reusing existing unattempted quiz:', existingQuiz[0].id);
-          setQuizId(existingQuiz[0].id);
-          setShowQuiz(true);
-          return;
-        }
-      }
-      
-      // Show quiz modal with loading state immediately
-      setQuizId(null);
-      setShowQuiz(true);
-      setIsGeneratingQuiz(true);
-      
-      // Get roadmap steps to find the step for this topic
-      const { steps } = await import('@/server/queries/roadmaps').then(m => 
-        m.getRoadmapWithSteps(roadmap.id, currentUserId)
-      );
-      
-      const step = steps.find(s => s.topicId === topic.id);
-      
-      if (!step) {
-        setShowQuiz(false);
-        setIsGeneratingQuiz(false);
-        setErrorMessage('Could not find the roadmap step for this topic.');
-        return;
-      }
-      
-      // Generate new quiz in background
-      const result = await generateQuizMutation.mutateAsync({
-        userId: currentUserId,
-        roadmapId: roadmap.id,
-        stepId: step.id,
-        prerequisiteName: topic.name
-      });
-      
-      setQuizId(result.quizId);
-      setIsGeneratingQuiz(false);
-    } catch (error) {
-      console.error('Error generating quiz:', error);
-      setShowQuiz(false);
-      setIsGeneratingQuiz(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.');
-    }
+    // Show quiz modal immediately with loading state
+    setShowQuiz(true);
+    
+    // Initiate quiz workflow (checks existence, generates if needed)
+    await initiateQuiz(topic.id, topic.name, currentUserId);
   };
+  
+  // Sync quiz error state
+  useEffect(() => {
+    if (quizError) {
+      setShowQuiz(false);
+      setErrorMessage(quizError);
+    }
+  }, [quizError]);
   
   const handleAnalyze = () => {
     setSuccessMessage('Topic analysis feature coming soon! This will provide insights into your learning progress.');
@@ -405,6 +335,7 @@ export default function TopicDetailScreen() {
   const handleQuizComplete = () => {
     setShowQuiz(false);
     setShowQuizResults(false);
+    resetQuizWorkflow(); // Reset quiz workflow state
     // Refetch topic data to get updated performance
     refetch();
   };
@@ -1964,7 +1895,7 @@ export default function TopicDetailScreen() {
               onPress={() => {
                 if (isGeneratingQuiz) {
                   setShowQuiz(false);
-                  setIsGeneratingQuiz(false);
+                  resetQuizWorkflow();
                 } else {
                   setShowExitQuizModal(true);
                 }

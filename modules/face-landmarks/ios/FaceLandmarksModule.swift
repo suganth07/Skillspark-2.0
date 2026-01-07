@@ -27,8 +27,8 @@ public class FaceLandmarksModule: Module {
                     }
                     image = loadedImage
                 } else {
-                    // Remote or content URI - load data
-                    let data = try Data(contentsOf: url)
+                    // Remote or content URI - load data asynchronously
+                    let (data, _) = try await URLSession.shared.data(from: url)
                     guard let loadedImage = UIImage(data: data) else {
                         throw NSError(domain: "FaceLandmarks", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not decode image data from URI: \(uri)"])
                     }

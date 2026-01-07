@@ -7,11 +7,11 @@ Pod::Spec.new do |s|
   s.homepage       = 'https://github.com/skillspark'
   s.license        = 'MIT'
   s.platforms      = { :ios => '15.0' }
-  s.source         = { :git => '' }
+  s.source         = { :git => 'https://github.com/TharunCodes07/SkillSpark.git', :tag => s.version }
   s.swift_version  = '5.4'
   
   s.source_files   = '**/*.swift'
   
   s.dependency 'ExpoModulesCore'
-  s.dependency 'MediaPipeTasksVision', '~> 0.10.14'
+  s.dependency 'MediaPipeTasksVision', '~> 0.10.21'
 end

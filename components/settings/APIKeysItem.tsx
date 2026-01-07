@@ -118,13 +118,20 @@ export function APIKeysItem() {
 
     // Save all keys to SecureStore
     try {
+      let deletionErrors = false;
+      
       for (const api of API_KEYS) {
         const key = tempKeys[api.id]?.trim() || '';
         if (key) {
           await SecureStore.setItemAsync(`api_key_${api.id}`, key);
         } else {
           // Delete key if empty
-          await SecureStore.deleteItemAsync(`api_key_${api.id}`);
+          try {
+            await SecureStore.deleteItemAsync(`api_key_${api.id}`);
+          } catch (deleteError) {
+            console.error(`Failed to delete API key ${api.id}:`, deleteError);
+            deletionErrors = true;
+          }
         }
       }
 
@@ -136,6 +143,10 @@ export function APIKeysItem() {
       
       close();
       setShowSuccessDialog(true);
+      
+      if (deletionErrors) {
+        Alert.alert('Warning', 'Some API keys could not be deleted, but other changes were saved.', [{ text: 'OK' }]);
+      }
     } catch (error) {
       console.error('Failed to save API keys:', error);
       Alert.alert('Error', 'Failed to save API keys. Please try again.', [{ text: 'OK' }]);

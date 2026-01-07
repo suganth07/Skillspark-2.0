@@ -13,7 +13,7 @@ interface AIProviderStoreState {
   refreshKey: number;
   
   // Actions
-  setProvider: (provider: AIProvider) => void;
+  setProvider: (provider: AIProvider) => Promise<void>;
   
   // Provider availability check (async)
   isProviderAvailable: (provider: AIProvider) => Promise<boolean>;

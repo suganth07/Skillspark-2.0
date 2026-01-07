@@ -36,15 +36,25 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
 
   // Check availability on mount
   useEffect(() => {
+    let isMounted = true;
+    
     const checkAvailability = async () => {
       const langsearchAvailable = await isProviderAvailable('langsearch');
       const serperAvailable = await isProviderAvailable('serper');
-      setAvailability({
-        langsearch: langsearchAvailable,
-        serper: serperAvailable,
-      });
+      
+      if (isMounted) {
+        setAvailability({
+          langsearch: langsearchAvailable,
+          serper: serperAvailable,
+        });
+      }
     };
+    
     checkAvailability();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [refreshKey]);
 
   const handleProviderSelect = async (providerId: WebSearchProvider) => {

@@ -5,5 +5,11 @@ declare module "svd-js" {
     q: number[];
   }
 
-  export function SVD(matrix: number[][]): SVDResult;
+  export function SVD(
+    matrix: number[][], 
+    withu?: boolean, 
+    withv?: boolean, 
+    eps?: number, 
+    tol?: number
+  ): SVDResult;
 }

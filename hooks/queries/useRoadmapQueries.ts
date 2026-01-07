@@ -309,15 +309,25 @@ export function useSubmitQuiz() {
       roadmapId?: string;
     }) => {
       const result = await submitQuizAttempt(userId, quizId, answers, roadmapId);
-      return { result, userId, roadmapId };
+      return { ...result, userId, roadmapId, quizId };
     },
-    onSuccess: async ({ userId, roadmapId }) => {
+    onSuccess: async ({ userId, roadmapId, leveledUp, oldLevel, newLevel, xpGained, score }) => {
       // Use centralized cache invalidation for comprehensive cross-invalidation
       await cacheInvalidation.invalidateQuizSubmission(
         userId,
         '',  // quizId not available in result, will trigger broader invalidation
         roadmapId
       );
+      // Invalidate user data to refresh XP/level display
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.users.all
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.users.current(userId)
+      });
+
+      // Return level-up info to be handled by the component
+      return { leveledUp, oldLevel, newLevel, xpGained, action: `Scored ${score}% on quiz!` };
     },
   });
 }
@@ -358,10 +368,10 @@ export function useUpdateStepCompletion() {
       roadmapId: string; 
       isCompleted: boolean;
     }) => {
-      await updateStepCompletion(stepId, userId, isCompleted);
-      return { stepId, userId, roadmapId, isCompleted };
+      const result = await updateStepCompletion(stepId, userId, isCompleted);
+      return { ...result, stepId, userId, roadmapId, isCompleted };
     },
-    onSuccess: async ({ userId, roadmapId }) => {
+    onSuccess: async ({ userId, roadmapId, leveledUp, oldLevel, newLevel, xpGained, isCompleted }) => {
       // Invalidate both list and detail queries to update progress
       queryClient.invalidateQueries({ 
         queryKey: queryKeys.roadmaps.list(userId) 
@@ -369,6 +379,16 @@ export function useUpdateStepCompletion() {
       queryClient.invalidateQueries({ 
         queryKey: queryKeys.roadmaps.detail(roadmapId, userId) 
       });
+      // Invalidate user data to refresh XP/level display
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.users.all
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.users.current(userId)
+      });
+
+      // Return level-up info to be handled by the component
+      return { leveledUp, oldLevel, newLevel, xpGained, action: isCompleted ? 'Completed step!' : 'Marked incomplete' };
     },
   });
 }

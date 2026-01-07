@@ -18,7 +18,60 @@ import { Inter_400Regular, Inter_600SemiBold, useFonts } from '@expo-google-font
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import { DrizzleStudioDevPlugin } from "@/components/DrizzleStudioDevPlugin";
-import { useUserStore } from "@/hooks/stores/useUserStore";
+import { useUserStore, useCurrentUserId } from "@/hooks/stores/useUserStore";
+import { LevelUpProvider, useLevelUp } from "@/components/gamification/LevelUpProvider";
+import { useCurrentUser } from "@/hooks/queries/useUserQueries";
+
+// Component to track XP changes and trigger animations
+function XPTracker({ children }: { children: React.ReactNode }) {
+  const currentUserId = useCurrentUserId();
+  const { data: currentUser } = useCurrentUser(currentUserId || undefined);
+  const prevXPRef = React.useRef<number | null>(null);
+  const prevUserIdRef = React.useRef<string | null>(null);
+  const { showLevelUp } = useLevelUp();
+
+  useEffect(() => {
+    if (currentUser?.xp !== undefined && currentUserId) {
+      const currentXP = currentUser.xp;
+      const currentLevel = currentUser.level || 1;
+      
+      // If user changed, just update refs without showing animation
+      if (prevUserIdRef.current !== null && prevUserIdRef.current !== currentUserId) {
+        prevXPRef.current = currentXP;
+        prevUserIdRef.current = currentUserId;
+        return;
+      }
+      
+      // Check if XP changed (not on initial load)
+      if (prevXPRef.current !== null && prevXPRef.current !== currentXP) {
+        const oldXP = prevXPRef.current;
+        const xpGained = currentXP - oldXP;
+        
+        // Only show if significant change (not just small adjustments)
+        if (Math.abs(xpGained) >= 20) {
+          // Check if leveled up
+          const { calculateLevel } = require('@/lib/gamification');
+          const oldLevel = calculateLevel(oldXP);
+          const newLevel = calculateLevel(currentXP);
+          
+          showLevelUp({
+            newLevel,
+            oldLevel,
+            xpGained,
+            action: xpGained > 0 ? 'Great work!' : 'XP adjusted',
+            oldXP,
+            newXP: currentXP,
+          });
+        }
+      }
+      
+      prevXPRef.current = currentXP;
+      prevUserIdRef.current = currentUserId;
+    }
+  }, [currentUser?.xp, currentUser?.level, currentUserId, showLevelUp]);
+
+  return <>{children}</>;
+}
 
 // Component to handle user initialization inside DatabaseProvider
 function AppInitializer({ children, onReady }: { children: React.ReactNode; onReady: () => void }) {
@@ -104,17 +157,21 @@ export default function RootLayout() {
         <DatabaseProvider>
           <AppInitializer onReady={() => setAppReady(true)}>
             {__DEV__ && Platform.OS !== "web" ? <DrizzleStudioDevPlugin /> : null}
-            <ThemeProvider value={colorScheme === "dark" ? DARK_THEME : LIGHT_THEME}>
-              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <BottomSheetModalProvider>
-                  <Stack>
-                    <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
-                  </Stack>
-                </BottomSheetModalProvider>
-              </GestureHandlerRootView>
-            </ThemeProvider>
-            <PortalHost />
+            <LevelUpProvider>
+              <XPTracker>
+                <ThemeProvider value={colorScheme === "dark" ? DARK_THEME : LIGHT_THEME}>
+                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <BottomSheetModalProvider>
+                      <Stack>
+                        <Stack.Screen name="(tabs)" options={{ title: "SkillSpark", headerShown: false }} />
+                      </Stack>
+                    </BottomSheetModalProvider>
+                  </GestureHandlerRootView>
+                </ThemeProvider>
+                <PortalHost />
+              </XPTracker>
+            </LevelUpProvider>
           </AppInitializer>
         </DatabaseProvider>
       </QueryProvider>

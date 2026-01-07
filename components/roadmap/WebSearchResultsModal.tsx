@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { Search, ExternalLink, RefreshCw } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { getItem, setItem } from '@/lib/storage';
+import { useColorScheme } from '@/lib/useColorScheme';
 import {
   BottomSheetContent,
   BottomSheetHeader,
@@ -75,6 +76,7 @@ interface WebSearchResultsModalProps {
   roadmapTitle?: string;
   roadmapId: string;
   onRefresh: () => Promise<void>;
+  visible?: boolean;
 }
 
 const STORAGE_KEY_PREFIX = 'web_search_results_';
@@ -85,11 +87,14 @@ export function WebSearchResultsModal({
   isSearching,
   roadmapTitle,
   roadmapId,
-  onRefresh
+  onRefresh,
+  visible = true
 }: WebSearchResultsModalProps) {
+  const { isDarkColorScheme } = useColorScheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cachedResults, setCachedResults] = useState<string[]>([]);
   const [hasAutoRefreshed, setHasAutoRefreshed] = useState(false);
+  const hasLoadedCache = useRef(false);
   const storageKey = `${STORAGE_KEY_PREFIX}${roadmapId}`;
 
   const handleRefresh = useCallback(async () => {
@@ -108,21 +113,28 @@ export function WebSearchResultsModal({
     }
   }, [onRefresh]);
 
-  // Load cached results when modal opens
+  // Load cached results when modal opens (only once)
   useEffect(() => {
-    const cached = getItem<string[]>(storageKey);
-    if (cached && cached.length > 0) {
-      console.log('📦 Loaded cached web search results:', cached.length);
-      setCachedResults(cached);
-    } else {
-      console.log('📦 No cached web search results found');
-      if (!hasAutoRefreshed && !isSearching) {
-        console.log('🔄 Auto-refreshing web search on first open...');
-        setHasAutoRefreshed(true);
-        handleRefresh();
+    if (visible && !hasLoadedCache.current) {
+      hasLoadedCache.current = true;
+      const cached = getItem<string[]>(storageKey);
+      if (cached && cached.length > 0) {
+        console.log('📦 Loaded cached web search results:', cached.length);
+        setCachedResults(cached);
+      } else {
+        console.log('📦 No cached web search results found');
+        if (!hasAutoRefreshed && !isSearching) {
+          console.log('🔄 Auto-refreshing web search on first open...');
+          setHasAutoRefreshed(true);
+          handleRefresh();
+        }
       }
     }
-  }, [storageKey, roadmapId, hasAutoRefreshed, isSearching, handleRefresh]);
+    // Reset the flag when modal closes
+    if (!visible) {
+      hasLoadedCache.current = false;
+    }
+  }, [visible]);
 
   // Save results to cache when they change
   useEffect(() => {
@@ -152,18 +164,27 @@ export function WebSearchResultsModal({
     };
 
     return (
-      <View className="mb-3 bg-card rounded-lg overflow-hidden border border-border shadow-sm">
+      <View 
+        className="mb-3 rounded-lg overflow-hidden border shadow-sm"
+        style={{
+          backgroundColor: isDarkColorScheme ? '#27272a' : '#ffffff',
+          borderColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
+        }}
+      >
         <View className="p-3">
           <MarkdownText text={item} />
         </View>
         {url && (
           <>
-            <View className="h-px bg-border" />
+            <View style={{ height: 1, backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} />
             <Pressable
               onPress={handleReadMore}
-              className="py-2.5 px-3 items-center active:opacity-70 bg-secondary/30"
+              className="py-2.5 px-3 items-center active:opacity-70"
+              style={{ backgroundColor: isDarkColorScheme ? 'rgba(63, 63, 70, 0.3)' : 'rgba(244, 244, 245, 0.5)' }}
             >
-              <Text className="text-xs font-semibold text-primary">View Source</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkColorScheme ? '#818cf8' : '#4f46e5' }}>
+                View Source
+              </Text>
             </Pressable>
           </>
         )}
@@ -180,15 +201,18 @@ export function WebSearchResultsModal({
       <BottomSheetHeader>
         <View className="py-3">
           <View className="flex-row items-center gap-2 mb-1">
-            <View className="bg-secondary p-2 rounded-md">
-              <Search size={20} className="text-foreground" />
+            <View 
+              className="p-2 rounded-md"
+              style={{ backgroundColor: isDarkColorScheme ? '#27272a' : '#f4f4f5' }}
+            >
+              <Search size={20} color={isDarkColorScheme ? '#818cf8' : '#6366f1'} />
             </View>
-            <Text className="text-lg font-bold text-foreground">
+            <Text style={{ fontSize: 18, fontWeight: '700', color: isDarkColorScheme ? '#fafafa' : '#18181b' }}>
               Web Search Results
             </Text>
           </View>
           {roadmapTitle && (
-            <Text className="text-xs text-muted-foreground ml-11">
+            <Text style={{ fontSize: 12, color: isDarkColorScheme ? '#71717a' : '#a1a1aa', marginLeft: 44 }}>
               {roadmapTitle}
             </Text>
           )}
@@ -199,10 +223,26 @@ export function WebSearchResultsModal({
         <BottomSheetView hadHeader={true}>
           <View className="px-4">
             {[1, 2, 3].map((i) => (
-              <View key={i} className="mb-3 bg-secondary/50 rounded-lg p-3 border border-border">
-                <View className="h-4 bg-muted rounded mb-2 w-3/4" />
-                <View className="h-4 bg-muted rounded mb-2 w-full" />
-                <View className="h-4 bg-muted rounded w-1/2" />
+              <View 
+                key={i} 
+                className="mb-3 rounded-lg p-3 border"
+                style={{
+                  backgroundColor: isDarkColorScheme ? 'rgba(63, 63, 70, 0.5)' : 'rgba(244, 244, 245, 0.5)',
+                  borderColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
+                }}
+              >
+                <View 
+                  className="h-4 rounded mb-2" 
+                  style={{ width: '75%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
+                />
+                <View 
+                  className="h-4 rounded mb-2" 
+                  style={{ width: '100%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
+                />
+                <View 
+                  className="h-4 rounded" 
+                  style={{ width: '50%', backgroundColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7' }} 
+                />
               </View>
             ))}
           </View>
@@ -210,11 +250,11 @@ export function WebSearchResultsModal({
       ) : displayResults.length === 0 ? (
         <BottomSheetView hadHeader={true}>
           <View className="items-center py-16 px-8">
-            <Search size={48} className="text-blue-600 mb-4" />
-            <Text className="text-xl font-bold text-foreground text-center mb-2">
+            <Search size={48} color={isDarkColorScheme ? '#6366f1' : '#4f46e5'} />
+            <Text style={{ fontSize: 20, fontWeight: '700', color: isDarkColorScheme ? '#fafafa' : '#18181b', textAlign: 'center', marginTop: 16, marginBottom: 8 }}>
               No Results Found
             </Text>
-            <Text className="text-sm text-muted-foreground text-center">
+            <Text style={{ fontSize: 14, color: isDarkColorScheme ? '#71717a' : '#a1a1aa', textAlign: 'center' }}>
               No updates were found for this roadmap
             </Text>
           </View>
@@ -234,24 +274,33 @@ export function WebSearchResultsModal({
               <Pressable
                 onPress={handleRefresh}
                 disabled={isRefreshing || isSearching}
-                className={`flex-row items-center justify-center gap-2 py-3 px-4 rounded-lg mb-4 ${
-                  isRefreshing || isSearching 
-                    ? 'bg-secondary/50' 
-                    : 'bg-primary active:opacity-90'
-                }`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  marginBottom: 16,
+                  backgroundColor: isRefreshing || isSearching 
+                    ? (isDarkColorScheme ? '#27272a' : '#f4f4f5')
+                    : (isDarkColorScheme ? '#6366f1' : '#4f46e5'),
+                  opacity: isRefreshing || isSearching ? 0.6 : 1,
+                }}
               >
-                <RefreshCw 
-                  key={isRefreshing ? 'spinning' : 'static'}
-                  size={16} 
-                  className={`${isRefreshing ? 'animate-spin' : ''} text-primary-foreground`}
-                />
-                <Text className="text-sm font-bold text-primary-foreground">
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <RefreshCw size={16} color="#ffffff" />
+                )}
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#ffffff' }}>
                   {isRefreshing ? 'Searching...' : 'Search Again'}
                 </Text>
               </Pressable>
               <View className="flex-row items-center gap-2 mb-4 px-1">
-                <ExternalLink size={14} className="text-muted-foreground" />
-                <Text className="text-sm font-semibold text-foreground">
+                <ExternalLink size={14} color={isDarkColorScheme ? '#71717a' : '#a1a1aa'} />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b' }}>
                   Found {displayResults.length} {displayResults.length === 1 ? 'Update' : 'Updates'}
                 </Text>
               </View>

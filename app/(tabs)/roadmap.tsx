@@ -52,6 +52,10 @@ export default function RoadmapScreen() {
   
   const deleteRoadmapMutation = useDeleteRoadmap();
 
+  const handleRoadmapPress = (roadmapId: string) => {
+    router.push(`/roadmap/${roadmapId}` as any);
+  };
+
   const handleRoadmapCreated = (roadmapId: string) => {
     // Navigate to the roadmap route
     router.push(`/roadmap/${roadmapId}` as any);
@@ -252,7 +256,7 @@ export default function RoadmapScreen() {
                             <RoadmapCard
                               roadmap={roadmap}
                               index={index}
-                              onPress={() => router.push(`/roadmap/${roadmap.id}` as any)}
+                              onPress={() => handleRoadmapPress(roadmap.id)}
                               onDelete={() => handleDeleteRoadmap(roadmap.id, roadmap.title)}
                               isDeleting={deletingRoadmapId === roadmap.id}
                             />

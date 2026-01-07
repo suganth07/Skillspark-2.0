@@ -11,8 +11,12 @@ import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
 import {GeneratedVideosItem} from '@/components/settings/GeneratedVideosItem';
 import {AIProviderItem} from '@/components/settings/AIProviderItem';
 import {WebSearchProviderItem} from '@/components/settings/WebSearchProviderItem';
+import {XPProgressBar} from '@/components/gamification/XPProgress';
+import {useUserManagement} from '@/hooks/stores/useUserStore';
 
 export default function Settings() {
+  const { currentUser } = useUserManagement();
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView className="flex-1 w-full">
@@ -21,6 +25,21 @@ export default function Settings() {
           <Text className="text-2xl font-semibold mb-1">Settings</Text>
           <Muted>Manage your account and preferences</Muted>
         </View>
+
+        {/* Current User Progress Section */}
+        {currentUser && (
+          <View className="px-6 pb-6">
+            <View className="p-4 bg-card rounded-lg border border-border">
+              <Text className="text-lg font-semibold mb-3">Your Progress</Text>
+              <XPProgressBar 
+                xp={currentUser.xp || 0}
+                level={currentUser.level || 1}
+                showDetails={true}
+                size="md"
+              />
+            </View>
+          </View>
+        )}
         
         {/* User Accounts Section */}
         <View className="px-6 pb-4">

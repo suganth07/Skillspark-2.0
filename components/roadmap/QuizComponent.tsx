@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Check, X, Clock } from '@/components/Icons';
 import { Brain } from '@/lib/icons/Brain';
 import { cn } from '@/lib/utils';
+import { useLevelUp } from '@/components/gamification/LevelUpProvider';
 
 interface QuizComponentProps {
   quizId: string;
@@ -36,6 +37,7 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   
   const { currentUser, currentUserId } = useUserManagement();
+  const { showLevelUp } = useLevelUp();
   
   // TanStack Query hooks - automatic caching
   const { 
@@ -72,15 +74,43 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
     setShowSubmitModal(false);
 
     try {
-      const { result } = await submitQuizMutation.mutateAsync({
+      const result = await submitQuizMutation.mutateAsync({
         userId: currentUserId,
         quizId,
         answers,
         roadmapId
       });
+      
       setQuizResult(result);
       setShowResults(true);
       onQuizComplete?.(result);
+
+      // Show XP gain or level-up animation if XP was gained
+      if (result.xpGained > 0) {
+        if (result.leveledUp) {
+          // Show XP gain animation first, then level up
+          showLevelUp({
+            newLevel: result.newLevel,
+            oldLevel: result.oldLevel,
+            xpGained: result.xpGained,
+            action: result.action || `Scored ${result.score}% on quiz!`,
+            oldXP: (result as any).oldXP,
+            newXP: (result as any).newXP,
+          });
+        } else {
+          // Just show XP gain animation
+          if ((result as any).oldXP !== undefined && (result as any).newXP !== undefined) {
+            showLevelUp({
+              newLevel: result.newLevel,
+              oldLevel: result.oldLevel,
+              xpGained: result.xpGained,
+              action: result.action || `Scored ${result.score}% on quiz!`,
+              oldXP: (result as any).oldXP,
+              newXP: (result as any).newXP,
+            });
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to submit quiz:', err);
       setSubmitError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.');

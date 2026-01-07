@@ -19,6 +19,7 @@ import { regenerateRoadmap } from '@/server/queries/roadmaps';
 import { TopicUpdatesModal } from '@/components/roadmap/TopicUpdatesModal';
 import { WebSearchResultsModal } from '@/components/roadmap/WebSearchResultsModal';
 import { BottomSheet } from '@/components/primitives/bottomSheet/bottom-sheet.native';
+import { useLevelUp } from '@/components/gamification/LevelUpProvider';
 import type { RoadmapStep } from '@/server/queries/roadmaps';
 import { 
   CheckCircle, 
@@ -116,6 +117,8 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [topicUpdates, setTopicUpdates] = useState<any[]>([]);
   const [isLoadingUpdates, setIsLoadingUpdates] = useState(false);
+  const [isUpdatesSheetVisible, setIsUpdatesSheetVisible] = useState(false);
+  const [isWebSearchSheetVisible, setIsWebSearchSheetVisible] = useState(false);
   const updatesSheetRef = useRef<any>(null);
   const webSearchSheetRef = useRef<any>(null);
   const [selectedStep, setSelectedStep] = useState<RoadmapStep | null>(null);
@@ -141,6 +144,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const router = useRouter();
+  const { showLevelUp } = useLevelUp();
 
   // TanStack Query hooks - automatic caching and refetching
   const { 
@@ -346,12 +350,39 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
     if (!userId) return;
 
     try {
-      await updateStepCompletionMutation.mutateAsync({
+      const result = await updateStepCompletionMutation.mutateAsync({
         stepId: step.id,
         userId: userId,
         roadmapId: roadmapId,
         isCompleted: !step.isCompleted,
       });
+
+      // Show XP gain or level-up animation
+      if (result && result.xpGained !== 0) {
+        if (result.leveledUp) {
+          // Show XP gain animation first, then level up
+          showLevelUp({
+            newLevel: result.newLevel,
+            oldLevel: result.oldLevel,
+            xpGained: result.xpGained,
+            action: result.action || (step.isCompleted ? 'Marked incomplete' : 'Completed step!'),
+            oldXP: (result as any).oldXP,
+            newXP: (result as any).newXP,
+          });
+        } else {
+          // Just show XP gain animation
+          if ((result as any).oldXP !== undefined && (result as any).newXP !== undefined) {
+            showLevelUp({
+              newLevel: result.newLevel,
+              oldLevel: result.oldLevel,
+              xpGained: result.xpGained,
+              action: result.action || (step.isCompleted ? 'Marked incomplete' : 'Completed step!'),
+              oldXP: (result as any).oldXP,
+              newXP: (result as any).newXP,
+            });
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to update step completion:', err);
       Alert.alert(
@@ -364,6 +395,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
 
   // Just open the modal - shows cached data
   const handleShowUpdates = () => {
+    setIsUpdatesSheetVisible(true);
     updatesSheetRef.current?.present();
   };
 
@@ -502,6 +534,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
   const handleWebSearch = async () => {
     if (!roadmap) return;
 
+    setIsWebSearchSheetVisible(true);
     webSearchSheetRef.current?.present();
   };
 
@@ -954,12 +987,18 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       </Modal>
 
       {/* Topic Updates Bottom Sheet */}
-      <BottomSheet>
+      <BottomSheet 
+        ref={updatesSheetRef}
+        onDismiss={() => setIsUpdatesSheetVisible(false)}
+      >
         <TopicUpdatesModal
-          visible={true}
+          visible={isUpdatesSheetVisible}
           updates={topicUpdates}
           isLoading={isLoadingUpdates}
-          onClose={() => updatesSheetRef.current?.dismiss()}
+          onClose={() => {
+            setIsUpdatesSheetVisible(false);
+            updatesSheetRef.current?.dismiss();
+          }}
           onRefresh={handleRefreshUpdates}
           roadmapId={roadmapId}
           sheetRef={updatesSheetRef}
@@ -967,7 +1006,10 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
       </BottomSheet>
 
       {/* Web Search Results Modal */}
-      <BottomSheet ref={webSearchSheetRef}>
+      <BottomSheet 
+        ref={webSearchSheetRef}
+        onDismiss={() => setIsWebSearchSheetVisible(false)}
+      >
         <WebSearchResultsModal
           sheetRef={webSearchSheetRef}
           results={webSearchResults}
@@ -975,6 +1017,7 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
           roadmapTitle={roadmap?.title ?? ''}
           roadmapId={roadmapId}
           onRefresh={handleRefreshWebSearch}
+          visible={isWebSearchSheetVisible}
         />
       </BottomSheet>
 

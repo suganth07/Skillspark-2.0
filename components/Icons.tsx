@@ -51,6 +51,7 @@ import {
   PlusCircle,
   Search,
   Sparkles,
+  Star,
   Sun,
   Table,
   Terminal,
@@ -138,6 +139,7 @@ interopIcon(RefreshCw);
 interopIcon(RotateCcw);
 interopIcon(Trash2);
 interopIcon(Zap);
+interopIcon(Star);
 
 export {
   Activity,
@@ -190,6 +192,7 @@ export {
   PlusCircle,
   Search,
   Sparkles,
+  Star,
   Sun,
   Table,
   Terminal,

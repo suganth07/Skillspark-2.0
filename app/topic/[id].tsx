@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, ActivityIndicator, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Audio } from 'expo-av';
@@ -8,7 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadingAnimation } from '@/components/ui/loading-animation';
+import { TopicDetailSkeleton } from '@/components/topic/TopicDetailSkeleton';
+import { TopicSearchResultsModal } from '@/components/topic/TopicSearchResultsModal';
+import { BottomSheet } from '@/components/primitives/bottomSheet/bottom-sheet.native';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
 import { useIsGeneratedVideosEnabled } from '@/hooks/stores/useGeneratedVideosStore';
@@ -17,10 +22,12 @@ import type { TopicExplanation } from '@/lib/gemini';
 import { searchTopicUpdates } from '@/lib/webSearchService';
 import { useWebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 import { getItem, setItem, removeItem } from '@/lib/storage';
+import { useColorScheme } from '@/lib/useColorScheme';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2 } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2, Settings2, ArrowLeft, MessageSquare } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 
 type ContentVersion = 'default' | 'simplified' | 'story';
 
@@ -95,6 +102,7 @@ export default function TopicDetailScreen() {
   const isEmotionDetectionEnabled = useIsEmotionDetectionEnabled();
   const isGeneratedVideosEnabled = useIsGeneratedVideosEnabled();
   const provider = useWebSearchProvider();
+  const { isDarkColorScheme } = useColorScheme();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [subtopicVersions, setSubtopicVersions] = useState<Record<string, ContentVersion>>({});
   const [hasPersistedContent, setHasPersistedContent] = useState(false);
@@ -107,9 +115,16 @@ export default function TopicDetailScreen() {
   const [webSearchSubtopicVersions, setWebSearchSubtopicVersions] = useState<Record<string, ContentVersion>>({});
   const [contentView, setContentView] = useState<'old' | 'new'>('old'); // Toggle between old and new content
   const [selectedSubtopics, setSelectedSubtopics] = useState<Set<string>>(new Set());
+  const [isAskDoubtMode, setIsAskDoubtMode] = useState(false);
+  const [showToneSwitcher, setShowToneSwitcher] = useState<Set<string>>(new Set());
+  const [showWebSearchToneSwitcher, setShowWebSearchToneSwitcher] = useState<Set<string>>(new Set());
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regenerateInstructions, setRegenerateInstructions] = useState('');
   const [isRegeneratingSubtopics, setIsRegeneratingSubtopics] = useState(false);
+  
+  // Collapsible sections state
+  const [isBestPracticesExpanded, setIsBestPracticesExpanded] = useState(false);
+  const [isCommonPitfallsExpanded, setIsCommonPitfallsExpanded] = useState(false);
   
   // Distraction detection state
   const [showDistractionAlert, setShowDistractionAlert] = useState(false);
@@ -118,6 +133,9 @@ export default function TopicDetailScreen() {
   const lastDistractionTime = useRef<number>(0);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const lastToneSwitchTime = useRef<number>(0);
+  
+  // Bottom sheet ref for search results
+  const searchSheetRef = useRef<BottomSheetModal>(null);
   
   // Ref to track current expanded sections (for emotion callback access)
   const expandedSectionsRef = useRef<Set<string>>(new Set());
@@ -328,7 +346,8 @@ export default function TopicDetailScreen() {
     if (!currentTopicDetail) return;
     
     setIsSearching(true);
-    setShowSearchResults(true);
+    // Open the bottom sheet immediately to show loading state
+    searchSheetRef.current?.present();
     
     try {
       console.log(`🔍 Starting web search for topic: ${topic.name}`);
@@ -336,14 +355,6 @@ export default function TopicDetailScreen() {
       
       console.log(`✅ Web search complete. Found ${result.newSubtopics.length} updates`);
       setWebSearchResults(result.newSubtopics);
-      
-      if (result.newSubtopics.length === 0) {
-        Alert.alert(
-          'No Updates Found',
-          `No recent updates or changes were found for ${topic.name}.`,
-          [{ text: 'OK' }]
-        );
-      }
     } catch (error) {
       console.error('❌ Web search failed:', error);
       Alert.alert(
@@ -351,7 +362,7 @@ export default function TopicDetailScreen() {
         error instanceof Error ? error.message : 'Failed to search for updates. Please try again.',
         [{ text: 'OK' }]
       );
-      setShowSearchResults(false);
+      searchSheetRef.current?.dismiss();
     } finally {
       setIsSearching(false);
     }
@@ -404,53 +415,81 @@ export default function TopicDetailScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <Stack.Screen 
           options={{ 
-            title: 'Loading...',
-            headerBackTitle: 'Back'
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
           }} 
         />
-        <View className="flex-1 justify-center items-center px-6">
-          <ActivityIndicator size="large" />
-          <Text className="mt-4 text-muted-foreground text-center">Loading topic details...</Text>
+        <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+          <Pressable 
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          </Pressable>
         </View>
-      </View>
+        <ScrollView className="flex-1">
+          <TopicDetailSkeleton />
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <Stack.Screen 
           options={{ 
-            title: 'Error',
-            headerBackTitle: 'Back'
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
           }} 
         />
+        <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+          <Pressable 
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          </Pressable>
+        </View>
         <ErrorDisplay
           error={error instanceof Error ? error.message : String(error)}
           onRetry={() => refetch()}
           title="Failed to load topic details"
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!currentTopicDetail) {
     return (
-      <View className="flex-1 bg-background justify-center items-center p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <Stack.Screen 
           options={{ 
-            title: 'Topic Not Found',
-            headerBackTitle: 'Back'
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
           }} 
         />
-        <Text className="text-center text-muted-foreground">Topic details not available</Text>
-        <Button onPress={() => router.back()} className="mt-4">
-          <Text className="text-white">Go Back</Text>
-        </Button>
-      </View>
+        <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+          <Pressable 
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          </Pressable>
+        </View>
+        <View className="flex-1 justify-center items-center p-6">
+          <Text className="text-center text-muted-foreground">Topic details not available</Text>
+          <Button onPress={() => router.back()} className="mt-4">
+            <Text className="text-white">Go Back</Text>
+          </Button>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -460,18 +499,29 @@ export default function TopicDetailScreen() {
   // explanation is already memoized above with deduplication applied
   if (!explanation) {
     return (
-      <View className="flex-1 bg-background justify-center items-center p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
         <Stack.Screen 
           options={{ 
-            title: 'Error',
-            headerBackTitle: 'Back'
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
           }} 
         />
-        <Text className="text-center text-muted-foreground">Failed to load content</Text>
-        <Button onPress={() => router.back()} className="mt-4">
-          <Text className="text-white">Go Back</Text>
-        </Button>
-      </View>
+        <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+          <Pressable 
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          </Pressable>
+        </View>
+        <View className="flex-1 justify-center items-center p-6">
+          <Text className="text-center text-muted-foreground">Failed to load content</Text>
+          <Button onPress={() => router.back()} className="mt-4">
+            <Text className="text-white">Go Back</Text>
+          </Button>
+        </View>
+      </SafeAreaView>
     );
   }
   
@@ -495,10 +545,10 @@ export default function TopicDetailScreen() {
   
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case 'basic': return 'bg-green-100 text-green-800';
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800';
-      case 'advanced': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'basic': return { bg: 'bg-green-500', text: 'text-white' };
+      case 'intermediate': return { bg: 'bg-amber-500', text: 'text-white' };
+      case 'advanced': return { bg: 'bg-red-500', text: 'text-white' };
+      default: return { bg: 'bg-gray-500', text: 'text-white' };
     }
   };
 
@@ -608,33 +658,44 @@ export default function TopicDetailScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <Stack.Screen 
         options={{ 
-          title: topic.name,
-          headerBackTitle: 'Back'
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 150,
         }} 
       />
+      
+      {/* Custom Header with Back Button */}
+      <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
+        <Pressable 
+          onPress={() => router.back()}
+          className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+        >
+          <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+        </Pressable>
+      </View>
       
       {/* Regeneration Loading Overlay */}
       {isRegenerating && (
         <Animated.View 
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(200)}
-          className="absolute inset-0 z-50 bg-background/95 justify-center items-center"
+          className="absolute inset-0 z-50 bg-background/90 justify-center items-center"
           style={{ zIndex: 50 }}
         >
-          <View className="px-8">
+          <Card className="mx-8 p-6">
             <LoadingAnimation 
               title="Personalizing Content"
               messages={[
-                'Analyzing your quiz performance...',
+                'Regenerating learning material based on your quiz performance...',
                 'Strengthening weak areas...',
                 'Adapting to your level...',
-                'Almost ready...'
+                'Almost ready...',
               ]}
             />
-          </View>
+          </Card>
         </Animated.View>
       )}
       
@@ -809,24 +870,24 @@ export default function TopicDetailScreen() {
             />
           )}
 
-          {/* Header */}
-          <Card>
-            <CardHeader>
-              <View className="flex-row items-center justify-between mb-2">
-                <CardTitle className="flex-1">{topic.name}</CardTitle>
-                {explanation.difficulty && (
-                  <Badge className={getDifficultyColor(explanation.difficulty)}>
-                    <Text className="text-xs font-medium">
-                      {explanation.difficulty}
-                    </Text>
-                  </Badge>
-                )}
-              </View>
-              <Text className="text-muted-foreground mt-2 leading-6">
-                {explanation.overview}
+          {/* Header - Clean, no card */}
+          <View className="mb-6">
+            <View className="flex-row items-start justify-between mb-3">
+              <Text className="text-2xl font-bold text-foreground flex-1 pr-3" style={{ flexWrap: 'wrap' }}>
+                {topic.name}
               </Text>
-            </CardHeader>
-          </Card>
+              {explanation.difficulty && (
+                <View className={`px-3 py-1 rounded-full ${getDifficultyColor(explanation.difficulty).bg}`}>
+                  <Text className={`text-xs font-semibold uppercase ${getDifficultyColor(explanation.difficulty).text}`}>
+                    {explanation.difficulty}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text className="text-muted-foreground leading-6">
+              {explanation.overview}
+            </Text>
+          </View>
 
           {/* Video Generation Section */}
           {isGeneratedVideosEnabled && currentUserId && (
@@ -838,69 +899,78 @@ export default function TopicDetailScreen() {
             />
           )}
 
-          {/* Web Search for Latest Updates */}
-          <Card>
-            <CardHeader>
-              <View className="flex-row items-center space-x-2 mb-2">
-                <Search className="h-5 w-5 text-purple-600" />
-                <CardTitle>Search Web for Updates</CardTitle>
-              </View>
-              <Text className="text-sm text-muted-foreground">
-                Find the latest information, changes, and best practices about this topic from across the web.
-              </Text>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onPress={handleWebSearch}
-                disabled={isSearching}
-                className="w-full flex-row items-center justify-center space-x-2"
-              >
-                {isSearching ? (
-                  <>
-                    <ActivityIndicator size="small" color="white" />
-                    <Text className="text-white font-medium ml-2">Searching...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Search className="h-4 w-4 text-white" />
-                    <Text className="text-white font-medium">Search Latest Updates</Text>
-                  </>
-                )}
-              </Button>
-
-              {/* Search Results */}
-              {showSearchResults && webSearchResults.length > 0 && (
-                <Animated.View
-                  entering={FadeIn.duration(300)}
-                  className="mt-4 p-4 bg-secondary/50 rounded-lg"
-                >
-                  <View className="flex-row items-center space-x-2 mb-3">
-                    <ExternalLink className="h-4 w-4 text-primary" />
-                    <Text className="text-sm font-semibold text-foreground">
-                      Latest Updates Found ({webSearchResults.length})
-                    </Text>
-                  </View>
-                  <View className="space-y-2">
-                    {webSearchResults.map((update, idx) => (
-                      <View key={idx} className="mb-2">
-                        <MarkdownText text={update} />
-                      </View>
-                    ))}
-                  </View>
-                  <Pressable
-                    onPress={() => setShowSearchResults(false)}
-                    className="mt-3 py-2 px-3 bg-background rounded-lg active:opacity-70"
-                  >
-                    <Text className="text-xs text-center text-muted-foreground">
-                      Hide Results
-                    </Text>
-                  </Pressable>
-                </Animated.View>
+          {/* Action Buttons Row */}
+          <View className="flex-row items-center gap-2 mb-4">
+            {/* Search Button */}
+            <Pressable
+              onPress={handleWebSearch}
+              disabled={isSearching}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
+                backgroundColor: isDarkColorScheme ? '#27272a' : '#ffffff',
+                opacity: isSearching ? 0.6 : 1,
+              }}
+            >
+              {isSearching ? (
+                <ActivityIndicator size="small" color={isDarkColorScheme ? '#a1a1aa' : '#52525b'} />
+              ) : (
+                <Search size={16} color={isDarkColorScheme ? '#a1a1aa' : '#52525b'} />
               )}
+              <Text style={{ fontSize: 13, fontWeight: '500', color: isDarkColorScheme ? '#fafafa' : '#18181b' }}>
+                {isSearching ? 'Searching...' : 'Search Updates'}
+              </Text>
+            </Pressable>
+            
+            {/* Ask a Doubt Button */}
+            <Pressable
+              onPress={() => {
+                if (isAskDoubtMode) {
+                  setIsAskDoubtMode(false);
+                  setSelectedSubtopics(new Set());
+                } else {
+                  setIsAskDoubtMode(true);
+                }
+              }}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 8,
+                backgroundColor: isAskDoubtMode 
+                  ? (isDarkColorScheme ? '#6366f1' : '#4f46e5')
+                  : (isDarkColorScheme ? '#27272a' : '#ffffff'),
+                borderWidth: isAskDoubtMode ? 0 : 1,
+                borderColor: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
+              }}
+            >
+              <MessageSquare size={16} color={isAskDoubtMode ? '#ffffff' : (isDarkColorScheme ? '#a1a1aa' : '#52525b')} />
+              <Text style={{ 
+                fontSize: 13, 
+                fontWeight: '500', 
+                color: isAskDoubtMode ? '#ffffff' : (isDarkColorScheme ? '#fafafa' : '#18181b'),
+              }}>
+                {isAskDoubtMode ? 'Cancel' : 'Ask a Doubt'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View className="-mt-4">
+            <CardContent className="pt-0">
 
               {/* Content View Toggle - Show only when web search content is available */}
               {webSearchContent && (
-                <View className="mt-4">
+                <View className="mb-4">
                   <Text className="text-xs text-muted-foreground mb-2 text-center">
                     Switch between original and latest content
                   </Text>
@@ -909,21 +979,21 @@ export default function TopicDetailScreen() {
                       onPress={() => setContentView('old')}
                       className={`flex-1 py-3 rounded-lg border-2 ${
                         contentView === 'old' 
-                          ? 'bg-blue-500 border-blue-500' 
-                          : 'bg-background border-border'
+                          ? 'bg-primary border-primary' 
+                          : 'bg-background dark:bg-card border-border'
                       }`}
                     >
-                      <View className="flex-row items-center justify-center space-x-2">
+                      <View className="flex-row items-center justify-center gap-2">
                         <BookOpen 
                           size={16} 
-                          className={contentView === 'old' ? 'text-white' : 'text-foreground'} 
+                          color={contentView === 'old' ? '#ffffff' : (isDarkColorScheme ? '#a1a1aa' : '#52525b')} 
                         />
                         <Text 
                           className={`text-sm font-semibold ${
                             contentView === 'old' ? 'text-white' : 'text-foreground'
                           }`}
                         >
-                          Original Content
+                          Original
                         </Text>
                       </View>
                     </Pressable>
@@ -931,21 +1001,21 @@ export default function TopicDetailScreen() {
                       onPress={() => setContentView('new')}
                       className={`flex-1 py-3 rounded-lg border-2 ${
                         contentView === 'new' 
-                          ? 'bg-purple-600 border-purple-600' 
-                          : 'bg-background border-border'
+                          ? 'bg-primary border-primary' 
+                          : 'bg-background dark:bg-card border-border'
                       }`}
                     >
-                      <View className="flex-row items-center justify-center space-x-2">
+                      <View className="flex-row items-center justify-center gap-2">
                         <Sparkles 
                           size={16} 
-                          className={contentView === 'new' ? 'text-white' : 'text-foreground'} 
+                          color={contentView === 'new' ? '#ffffff' : (isDarkColorScheme ? '#a1a1aa' : '#52525b')} 
                         />
                         <Text 
                           className={`text-sm font-semibold ${
                             contentView === 'new' ? 'text-white' : 'text-foreground'
                           }`}
                         >
-                          Latest Updates
+                          Latest
                         </Text>
                       </View>
                     </Pressable>
@@ -953,19 +1023,17 @@ export default function TopicDetailScreen() {
                 </View>
               )}
             </CardContent>
-          </Card>
+          </View>
 
           {/* Web Search Generated Content - Show ABOVE existing subtopics */}
           {(isGeneratingWebContent || webSearchContent) && (
-            <Card className="border-2 border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+            <Card className="border-2 border-primary/20 bg-primary/5 dark:bg-primary/10">
               <CardHeader>
-                <View className="flex-row items-center space-x-2 mb-2">
-                  <Sparkles className="h-5 w-5 text-purple-600" />
-                  <CardTitle className="text-purple-900 dark:text-purple-100">
-                    Content Preview
-                  </CardTitle>
+                <View className="flex-row items-center gap-2 mb-2">
+                  <Sparkles size={18} className="text-primary" />
+                  <CardTitle>Content Preview</CardTitle>
                 </View>
-                <Text className="text-sm text-purple-700 dark:text-purple-300">
+                <Text className="text-sm text-muted-foreground">
                   {isGeneratingWebContent 
                     ? 'Generating fresh content from web search results...'
                     : 'Use the toggle above to switch between original and latest content'
@@ -975,8 +1043,8 @@ export default function TopicDetailScreen() {
               <CardContent>
                 {isGeneratingWebContent && (
                   <View className="items-center py-8">
-                    <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full p-4 mb-4">
-                      <Sparkles size={32} className="text-purple-600" />
+                    <View className="bg-primary/10 dark:bg-primary/20 rounded-full p-4 mb-4">
+                      <Sparkles size={32} className="text-primary" />
                     </View>
                     <ActivityIndicator size="large" className="mb-4" />
                     <Text className="text-lg font-semibold text-foreground text-center mb-2">
@@ -994,18 +1062,16 @@ export default function TopicDetailScreen() {
           {/* Conditional Content Display Based on Toggle */}
           {contentView === 'new' && webSearchContent ? (
             /* New Web Search Content Section */
-            <Card className="border-2 border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+            <Card className="border-2 border-primary/20 bg-primary/5 dark:bg-primary/10">
               <CardHeader>
-                <View className="flex-row items-center space-x-2 mb-2">
-                  <Sparkles className="h-5 w-5 text-purple-600" />
-                  <CardTitle className="text-purple-900 dark:text-purple-100">
-                    Latest Updates & Insights
-                  </CardTitle>
-                  <Badge className="bg-purple-600">
+                <View className="flex-row items-center gap-2 mb-2">
+                  <Sparkles size={18} className="text-primary" />
+                  <CardTitle>Latest Updates & Insights</CardTitle>
+                  <Badge className="bg-primary">
                     <Text className="text-xs text-white font-semibold">NEW</Text>
                   </Badge>
                 </View>
-                <Text className="text-sm text-purple-700 dark:text-purple-300">
+                <Text className="text-sm text-muted-foreground">
                   Fresh content generated from recent web search findings
                 </Text>
               </CardHeader>
@@ -1019,7 +1085,7 @@ export default function TopicDetailScreen() {
                     return (
                       <View 
                         key={subtopic.id}
-                        className="border border-purple-200 rounded-lg overflow-hidden bg-white dark:bg-gray-900"
+                        className="border border-border rounded-lg overflow-hidden bg-card"
                       >
                         {/* Accordion Header */}
                         <Button
@@ -1035,64 +1101,131 @@ export default function TopicDetailScreen() {
                           }}
                           className="w-full flex-row items-center justify-between p-4 rounded-none"
                         >
-                          <View className="flex-1 flex-row items-center space-x-2">
-                            <View className="bg-purple-100 dark:bg-purple-900/30 rounded-full w-6 h-6 items-center justify-center">
-                              <Text className="text-purple-700 dark:text-purple-300 font-bold text-xs">
+                          <View className="flex-1 flex-row items-center gap-2">
+                            <View className="bg-primary/10 dark:bg-primary/20 rounded-full w-7 h-7 items-center justify-center">
+                              <Text className="text-primary font-bold text-xs">
                                 {index + 1}
                               </Text>
                             </View>
-                            <Text className="font-semibold text-base text-left flex-1">
+                            <Text className="font-semibold text-base text-left flex-1 flex-wrap pr-2">
                               {subtopic.title}
                             </Text>
-                            <Badge className="bg-purple-100">
-                              <Text className="text-xs text-purple-700">New</Text>
+                            <Badge className="bg-primary/10 dark:bg-primary/20">
+                              <Text className="text-xs text-primary font-medium">New</Text>
                             </Badge>
                           </View>
                           {isExpanded ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
+                            <ChevronUp size={20} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
                           ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
+                            <ChevronDown size={20} color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} />
                           )}
                         </Button>
 
                         {/* Accordion Content */}
                         {isExpanded && (
-                          <View className="border-t border-purple-200 bg-purple-50/30 dark:bg-purple-950/10">
-                            {/* Style Switcher */}
-                            <View className="px-4 pt-3 pb-2">
-                              <View className="flex-row gap-2 mb-3">
-                                <Button
-                                  variant={currentVersion === 'default' ? 'default' : 'outline'}
-                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
-                                  className="flex-1 py-2"
-                                  size="sm"
-                                >
-                                  <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
-                                    📚 Default
-                                  </Text>
-                                </Button>
-                                <Button
-                                  variant={currentVersion === 'simplified' ? 'default' : 'outline'}
-                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
-                                  className="flex-1 py-2"
-                                  size="sm"
-                                >
-                                  <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
-                                    🎯 Simplified
-                                  </Text>
-                                </Button>
-                                <Button
-                                  variant={currentVersion === 'story' ? 'default' : 'outline'}
-                                  onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
-                                  className="flex-1 py-2"
-                                  size="sm"
-                                >
-                                  <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
-                                    📖 Story
-                                  </Text>
-                                </Button>
+                          <View className="border-t border-border bg-secondary/20 dark:bg-secondary/10">
+                            {/* Content Header with Settings Toggle */}
+                            <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
+                              {/* Current mode indicator */}
+                              <View className="flex-row items-center gap-2">
+                                <Text className="text-xs text-muted-foreground">Mode:</Text>
+                                <View className="bg-primary/10 dark:bg-primary/20 px-2 py-1 rounded-full">
+                                  <Text className="text-xs font-medium text-primary capitalize">{currentVersion}</Text>
+                                </View>
                               </View>
+                              
+                              {/* Settings toggle */}
+                              <Pressable
+                                onPress={() => {
+                                  const newShow = new Set(showWebSearchToneSwitcher);
+                                  if (newShow.has(subtopic.id)) {
+                                    newShow.delete(subtopic.id);
+                                  } else {
+                                    newShow.add(subtopic.id);
+                                  }
+                                  setShowWebSearchToneSwitcher(newShow);
+                                }}
+                                className={`p-2 rounded-lg active:opacity-70 ${showWebSearchToneSwitcher.has(subtopic.id) ? 'bg-primary/10 dark:bg-primary/20' : ''}`}
+                              >
+                                <Settings2 size={18} color={isDarkColorScheme ? (showWebSearchToneSwitcher.has(subtopic.id) ? '#a78bfa' : '#a1a1aa') : (showWebSearchToneSwitcher.has(subtopic.id) ? '#7c3aed' : '#71717a')} />
+                              </Pressable>
                             </View>
+
+                            {/* Style Switcher - Hidden by default */}
+                            {showWebSearchToneSwitcher.has(subtopic.id) && (
+                              <Animated.View 
+                                entering={FadeIn.duration(200)}
+                                className="mx-4 mb-3 p-3 rounded-lg border border-border"
+                                style={{ backgroundColor: isDarkColorScheme ? '#27272a' : '#f4f4f5' }}
+                              >
+                                <Text className="text-xs text-muted-foreground mb-2">Select learning style:</Text>
+                                <View className="flex-row gap-2">
+                                  <Pressable
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
+                                    style={{
+                                      flex: 1,
+                                      paddingVertical: 10,
+                                      paddingHorizontal: 12,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      backgroundColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                      borderColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                    }}
+                                  >
+                                    <Text style={{
+                                      fontSize: 12,
+                                      textAlign: 'center',
+                                      fontWeight: '500',
+                                      color: currentVersion === 'default' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                    }}>
+                                      Default
+                                    </Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
+                                    style={{
+                                      flex: 1,
+                                      paddingVertical: 10,
+                                      paddingHorizontal: 12,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      backgroundColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                      borderColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                    }}
+                                  >
+                                    <Text style={{
+                                      fontSize: 12,
+                                      textAlign: 'center',
+                                      fontWeight: '500',
+                                      color: currentVersion === 'simplified' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                    }}>
+                                      Simple
+                                    </Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
+                                    style={{
+                                      flex: 1,
+                                      paddingVertical: 10,
+                                      paddingHorizontal: 12,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      backgroundColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                      borderColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                    }}
+                                  >
+                                    <Text style={{
+                                      fontSize: 12,
+                                      textAlign: 'center',
+                                      fontWeight: '500',
+                                      color: currentVersion === 'story' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                    }}>
+                                      Story
+                                    </Text>
+                                  </Pressable>
+                                </View>
+                              </Animated.View>
+                            )}
 
                             {/* Content */}
                             <Animated.View 
@@ -1106,33 +1239,36 @@ export default function TopicDetailScreen() {
 
                               {content.example && (
                                 <View className="mt-3">
-                                  <View className="flex-row items-center space-x-2 mb-2">
-                                    <Code className="h-4 w-4 text-green-600" />
-                                    <Text className="text-sm font-semibold text-green-600">
-                                      Example:
+                                  <View className="flex-row items-center gap-2 mb-2">
+                                    <Code size={16} color={isDarkColorScheme ? '#4ade80' : '#16a34a'} />
+                                    <Text className="text-sm font-semibold text-green-600 dark:text-green-400">
+                                      Example
                                     </Text>
                                   </View>
-                                  <View className="bg-slate-900 rounded-lg p-4">
+                                  <View className="bg-slate-900 dark:bg-slate-950 rounded-lg p-4">
                                     <Text className="text-slate-100 font-mono text-sm leading-6">
                                       {content.example}
                                     </Text>
                                   </View>
                                   
                                   {subtopic.exampleExplanation && (
-                                    <Text className="text-sm text-muted-foreground mt-2 italic">
-                                      💡 {subtopic.exampleExplanation}
-                                    </Text>
+                                    <View className="flex-row items-start gap-2 mt-2">
+                                      <Lightbulb size={14} color={isDarkColorScheme ? '#fbbf24' : '#d97706'} />
+                                      <Text className="flex-1 text-sm text-muted-foreground italic">
+                                        {subtopic.exampleExplanation}
+                                      </Text>
+                                    </View>
                                   )}
                                 </View>
                               )}
 
                               {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
                                 <View className="mt-3">
-                                  <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                  <Text className="text-sm font-semibold mb-2 text-foreground">Key Points</Text>
                                   {subtopic.keyPoints.map((point: string, idx: number) => (
-                                    <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                    <View key={idx} className="flex-row items-start gap-2 mb-1">
                                       <Text className="text-muted-foreground">•</Text>
-                                      <Text className="flex-1 text-sm text-muted-foreground">
+                                      <Text className="flex-1 text-sm text-muted-foreground leading-relaxed">
                                         {point}
                                       </Text>
                                     </View>
@@ -1151,189 +1287,266 @@ export default function TopicDetailScreen() {
           ) : (
             /* Original Subtopics Section */
             <>
-              {/* Regenerate Selected Subtopics Button */}
-              {selectedSubtopics.size > 0 && (
-                <Animated.View entering={FadeIn.duration(300)}>
-                  <Card className="border-2 border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
-                    <CardContent className="p-4">
-                      <View className="flex-row items-center justify-between">
-                        <View className="flex-1">
-                          <View className="flex-row items-center gap-2 mb-1">
-                            <Wand2 size={18} className="text-orange-600" />
-                            <Text className="text-sm font-semibold text-orange-900 dark:text-orange-100">
-                              {selectedSubtopics.size} subtopic{selectedSubtopics.size > 1 ? 's' : ''} selected
-                            </Text>
-                          </View>
-                          <Text className="text-xs text-orange-700 dark:text-orange-300">
-                            Regenerate with your custom instructions
-                          </Text>
-                        </View>
-                        <Button
-                          onPress={() => setShowRegenerateModal(true)}
-                          className="bg-orange-500 flex-row items-center gap-2"
-                        >
-                          <Wand2 size={16} className="text-white" />
-                          <Text className="text-white font-medium">
-                            Regenerate
-                          </Text>
-                        </Button>
-                      </View>
-                    </CardContent>
-                  </Card>
+              {/* Selection Bar for Ask Doubt */}
+              {isAskDoubtMode && (
+                <Animated.View 
+                  entering={FadeIn.duration(300)}
+                  className="mb-4 p-4 rounded-xl border flex-row items-center justify-between"
+                  style={{
+                    backgroundColor: isDarkColorScheme ? '#1e1b4b' : '#eef2ff',
+                    borderColor: isDarkColorScheme ? '#4338ca' : '#a5b4fc',
+                  }}
+                >
+                  <View className="flex-1">
+                    <Text style={{ color: isDarkColorScheme ? '#e0e7ff' : '#312e81', fontWeight: '600', fontSize: 14 }}>
+                      {selectedSubtopics.size > 0 
+                        ? `${selectedSubtopics.size} topic${selectedSubtopics.size > 1 ? 's' : ''} selected`
+                        : 'Select topics to ask about'}
+                    </Text>
+                    <Text style={{ color: isDarkColorScheme ? '#a5b4fc' : '#6366f1', fontSize: 12 }}>
+                      Tap topics to select them
+                    </Text>
+                  </View>
+                  <View className="flex-row gap-2">
+                    {selectedSubtopics.size > 0 && (
+                      <Pressable
+                        onPress={() => setSelectedSubtopics(new Set())}
+                        className="px-3 py-2 rounded-lg active:opacity-70"
+                        style={{
+                          borderWidth: 1,
+                          borderColor: isDarkColorScheme ? '#6366f1' : '#a5b4fc',
+                        }}
+                      >
+                        <Text style={{ color: isDarkColorScheme ? '#a5b4fc' : '#4f46e5', fontSize: 12, fontWeight: '500' }}>Clear</Text>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => {
+                        if (selectedSubtopics.size > 0) {
+                          setShowRegenerateModal(true);
+                        } else {
+                          Alert.alert('Select Topics', 'Please select at least one topic to ask about.');
+                        }
+                      }}
+                      className="px-3 py-2 rounded-lg flex-row items-center gap-1 active:opacity-70"
+                      style={{ 
+                        backgroundColor: selectedSubtopics.size > 0 
+                          ? (isDarkColorScheme ? '#6366f1' : '#4f46e5')
+                          : (isDarkColorScheme ? '#3f3f46' : '#d4d4d8'),
+                      }}
+                    >
+                      <MessageSquare size={14} color={selectedSubtopics.size > 0 ? '#ffffff' : '#71717a'} />
+                      <Text style={{ 
+                        color: selectedSubtopics.size > 0 ? '#ffffff' : '#71717a', 
+                        fontSize: 12, 
+                        fontWeight: '500' 
+                      }}>Ask</Text>
+                    </Pressable>
+                  </View>
                 </Animated.View>
               )}
 
-              <Card>
-              <CardHeader>
-                <View className="flex-row items-center space-x-2 mb-2">
-                  <BookOpen className="h-5 w-5 text-blue-600" />
-                  <CardTitle>Key Concepts</CardTitle>
-                  {!webSearchContent && (
-                    <Badge className="bg-blue-100">
-                      <Text className="text-xs text-blue-700 font-semibold">ORIGINAL</Text>
-                    </Badge>
-                  )}
+              {/* Key Concepts - No Card wrapper */}
+              <View className="mb-4">
+                <View className="flex-row items-center gap-2 mb-3">
+                  <BookOpen size={20} color={isDarkColorScheme ? '#a78bfa' : '#7c3aed'} />
+                  <Text className="text-lg font-semibold text-foreground">Key Concepts</Text>
                 </View>
-                <Text className="text-sm text-muted-foreground">
-                  Tap each concept to learn more • Switch learning style per concept
-                </Text>
-              </CardHeader>
-            <CardContent>
+              </View>
+              
               <View className="space-y-3">
                 {explanation.subtopics.map((subtopic, index) => {
                   const isExpanded = expandedSections.has(subtopic.id);
                   const performance = getPerformanceForSubtopic(subtopic.id);
                   const content = getSubtopicContent(subtopic, subtopic.id);
                   const currentVersion = getSubtopicVersion(subtopic.id);
-                  
+                  const showingToneSwitcher = showToneSwitcher.has(subtopic.id);
                   const isSelected = selectedSubtopics.has(subtopic.id);
                   
                   return (
-                    <View 
+                    <Pressable 
                       key={subtopic.id}
-                      className={`rounded-lg overflow-hidden ${
-                        isSelected 
-                          ? 'border-2 border-orange-500 bg-orange-50/30 dark:bg-orange-950/20' 
-                          : 'border border-border'
-                      }`}
+                      onPress={() => {
+                        if (isAskDoubtMode) {
+                          // In Ask Doubt mode, toggle selection
+                          const newSelected = new Set(selectedSubtopics);
+                          if (newSelected.has(subtopic.id)) {
+                            newSelected.delete(subtopic.id);
+                          } else {
+                            newSelected.add(subtopic.id);
+                          }
+                          setSelectedSubtopics(newSelected);
+                        } else {
+                          // Normal mode, toggle expand/collapse
+                          toggleSection(subtopic.id);
+                        }
+                      }}
+                      className="rounded-xl overflow-hidden"
+                      style={{
+                        borderWidth: isSelected ? 2 : 1,
+                        borderColor: isSelected 
+                          ? (isDarkColorScheme ? '#6366f1' : '#4f46e5')
+                          : (isDarkColorScheme ? '#27272a' : '#e4e4e7'),
+                        backgroundColor: isDarkColorScheme ? 'rgba(39, 39, 42, 0.5)' : '#ffffff',
+                      }}
                     >
-                      {/* Accordion Header with Selection */}
-                      <View className="flex-row items-center">
-                        {/* Selection Checkbox */}
-                        <Pressable
-                          onPress={() => {
-                            const newSelected = new Set(selectedSubtopics);
-                            if (newSelected.has(subtopic.id)) {
-                              newSelected.delete(subtopic.id);
-                            } else {
-                              newSelected.add(subtopic.id);
-                            }
-                            setSelectedSubtopics(newSelected);
-                          }}
-                          className={`pl-3 pr-1 py-4 active:opacity-70 rounded-l-lg ${
-                            isSelected ? 'bg-orange-100 dark:bg-orange-900/30' : ''
-                          }`}
-                        >
-                          <View className={`rounded-full ${
-                            isSelected 
-                              ? 'border-2 border-orange-500 bg-orange-500' 
-                              : 'border-2 border-gray-300 dark:border-gray-600'
-                          } p-0.5`}>
+                      {/* Accordion Header */}
+                      <View className="flex-row items-center p-4">
+                        {/* Checkbox for Ask Doubt mode */}
+                        {isAskDoubtMode && (
+                          <View className="mr-3">
                             {isSelected ? (
-                              <CheckCircle2 size={18} className="text-white" />
+                              <CheckCircle2 size={22} color={isDarkColorScheme ? '#6366f1' : '#4f46e5'} />
                             ) : (
-                              <Circle size={18} className="text-transparent" />
+                              <Circle size={22} color={isDarkColorScheme ? '#52525b' : '#a1a1aa'} />
                             )}
                           </View>
-                        </Pressable>
-
-                        <Button
-                          variant="ghost"
-                          onPress={() => toggleSection(subtopic.id)}
-                          className="flex-1 flex-row items-center justify-between p-4 rounded-none"
-                        >
-                          <View className="flex-1 flex-row items-center space-x-2">
-                            <Text className="font-semibold text-base text-left flex-1">
-                              {index + 1}. {subtopic.title}
-                            </Text>
-                            <View className={`px-2 py-1 rounded ${
-                              performance 
-                                ? (performance.status === 'strong' ? 'bg-green-100' :
-                                   performance.status === 'weak' ? 'bg-red-100' :
-                                   'bg-yellow-100')
-                                : 'bg-gray-100'
+                        )}
+                        <View className="flex-1 flex-row items-center gap-3">
+                          <View className={`w-8 h-8 rounded-full items-center justify-center ${
+                            performance 
+                              ? (performance.status === 'strong' ? 'bg-green-500' :
+                                 performance.status === 'weak' ? 'bg-red-500' :
+                                 'bg-amber-500')
+                              : 'bg-primary/20 dark:bg-primary/30'
+                          }`}>
+                            <Text className={`text-xs font-bold ${
+                              performance ? 'text-white' : 'text-primary'
                             }`}>
-                              <Text className={`text-xs font-bold ${
-                                performance
-                                  ? (performance.status === 'strong' ? 'text-green-700' :
-                                     performance.status === 'weak' ? 'text-red-700' :
-                                     'text-yellow-700')
-                                  : 'text-gray-600'
-                              }`}>
-                                {performance 
-                                  ? `${performance.correctCount}/${performance.totalAttempts}` 
-                                  : 'No quiz'}
-                              </Text>
-                            </View>
+                              {index + 1}
+                            </Text>
                           </View>
-                          {isExpanded ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground ml-2" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground ml-2" />
-                          )}
-                        </Button>
+                          <Text className="font-medium text-base text-foreground flex-1 flex-wrap pr-2">
+                            {subtopic.title}
+                          </Text>
+                        </View>
+                        {!isAskDoubtMode && (
+                          <ChevronDown 
+                            size={20} 
+                            color={isDarkColorScheme ? '#a1a1aa' : '#71717a'}
+                            style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
+                          />
+                        )}
                       </View>
 
 
                       {/* Accordion Content */}
                       {isExpanded && (
-                        <View className="border-t border-border bg-muted/30">
-                          {/* Per-Subtopic Style Switcher */}
-                          <View className="px-4 pt-3 pb-2">
-                            {/* Auto-adaptation indicator */}
-                            {currentEmotion.current && (currentEmotion.current === 'wbored' || currentEmotion.current === 'drowsy' || currentEmotion.current === 'frustrated' || currentEmotion.current === 'confused') && (
-                              <View className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 mb-3 flex-row items-center">
-                                <Sparkles size={14} className="text-blue-600 dark:text-blue-400 mr-2" />
-                                <Text className="text-xs text-blue-700 dark:text-blue-300 flex-1">
-                                  {currentEmotion.current === 'wbored' || currentEmotion.current === 'drowsy' 
-                                    ? '✨ Content adapting to keep you engaged!' 
-                                    : '🎯 Content simplifying to help you understand!'}
-                                </Text>
+                        <View className="border-t border-border bg-secondary/20 dark:bg-secondary/10">
+                          {/* Content Header with Settings Toggle */}
+                          <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
+                            {/* Current mode indicator */}
+                            <View className="flex-row items-center gap-2">
+                              <Text className="text-xs text-muted-foreground">Mode:</Text>
+                              <View className="bg-primary/10 dark:bg-primary/20 px-2 py-1 rounded-full">
+                                <Text className="text-xs font-medium text-primary capitalize">{currentVersion}</Text>
                               </View>
-                            )}
-                            <View className="flex-row gap-2 mb-3">
-                              <Button
-                                variant={currentVersion === 'default' ? 'default' : 'outline'}
-                                onPress={() => setSubtopicVersion(subtopic.id, 'default')}
-                                className="flex-1 py-2"
-                                size="sm"
-                              >
-                                <Text className={`text-xs ${currentVersion === 'default' ? 'text-white' : 'text-foreground'}`}>
-                                  📚 Default
-                                </Text>
-                              </Button>
-                              <Button
-                                variant={currentVersion === 'simplified' ? 'default' : 'outline'}
-                                onPress={() => setSubtopicVersion(subtopic.id, 'simplified')}
-                                className="flex-1 py-2"
-                                size="sm"
-                              >
-                                <Text className={`text-xs ${currentVersion === 'simplified' ? 'text-white' : 'text-foreground'}`}>
-                                  🎯 Simplified
-                                </Text>
-                              </Button>
-                              <Button
-                                variant={currentVersion === 'story' ? 'default' : 'outline'}
-                                onPress={() => setSubtopicVersion(subtopic.id, 'story')}
-                                className="flex-1 py-2"
-                                size="sm"
-                              >
-                                <Text className={`text-xs ${currentVersion === 'story' ? 'text-white' : 'text-foreground'}`}>
-                                  📖 Story
-                                </Text>
-                              </Button>
                             </View>
+                            
+                            {/* Settings toggle */}
+                            <Pressable
+                              onPress={() => {
+                                const newShow = new Set(showToneSwitcher);
+                                if (newShow.has(subtopic.id)) {
+                                  newShow.delete(subtopic.id);
+                                } else {
+                                  newShow.add(subtopic.id);
+                                }
+                                setShowToneSwitcher(newShow);
+                              }}
+                              className={`p-2 rounded-lg active:opacity-70 ${showingToneSwitcher ? 'bg-primary/10 dark:bg-primary/20' : ''}`}
+                            >
+                              <Settings2 size={18} color={isDarkColorScheme ? (showingToneSwitcher ? '#a78bfa' : '#a1a1aa') : (showingToneSwitcher ? '#7c3aed' : '#71717a')} />
+                            </Pressable>
                           </View>
+                          
+                          {/* Auto-adaptation indicator */}
+                          {currentEmotion && (currentEmotion === 'wbored' || currentEmotion === 'drowsy' || currentEmotion === 'frustrated' || currentEmotion === 'confused') && (
+                            <View className="mx-4 mb-2 bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/30 rounded-lg p-2 flex-row items-center">
+                              <Sparkles size={14} color={isDarkColorScheme ? '#a78bfa' : '#7c3aed'} />
+                              <Text className="text-xs text-foreground flex-1 ml-2">
+                                {currentEmotion === 'wbored' || currentEmotion === 'drowsy' 
+                                  ? 'Content adapting to keep you engaged' 
+                                  : 'Content simplifying to help you understand'}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Style Switcher - Hidden by default */}
+                          {showingToneSwitcher && (
+                            <Animated.View 
+                              entering={FadeIn.duration(200)}
+                              className="mx-4 mb-3 p-3 rounded-lg border border-border"
+                              style={{ backgroundColor: isDarkColorScheme ? '#27272a' : '#f4f4f5' }}
+                            >
+                              <Text className="text-xs text-muted-foreground mb-2">Select learning style:</Text>
+                              <View className="flex-row gap-2">
+                                <Pressable
+                                  onPress={() => setSubtopicVersion(subtopic.id, 'default')}
+                                  style={{
+                                    flex: 1,
+                                    paddingVertical: 10,
+                                    paddingHorizontal: 12,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    backgroundColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                    borderColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                  }}
+                                >
+                                  <Text style={{
+                                    fontSize: 12,
+                                    textAlign: 'center',
+                                    fontWeight: '500',
+                                    color: currentVersion === 'default' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                  }}>
+                                    Default
+                                  </Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => setSubtopicVersion(subtopic.id, 'simplified')}
+                                  style={{
+                                    flex: 1,
+                                    paddingVertical: 10,
+                                    paddingHorizontal: 12,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    backgroundColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                    borderColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                  }}
+                                >
+                                  <Text style={{
+                                    fontSize: 12,
+                                    textAlign: 'center',
+                                    fontWeight: '500',
+                                    color: currentVersion === 'simplified' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                  }}>
+                                    Simple
+                                  </Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => setSubtopicVersion(subtopic.id, 'story')}
+                                  style={{
+                                    flex: 1,
+                                    paddingVertical: 10,
+                                    paddingHorizontal: 12,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    backgroundColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
+                                    borderColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
+                                  }}
+                                >
+                                  <Text style={{
+                                    fontSize: 12,
+                                    textAlign: 'center',
+                                    fontWeight: '500',
+                                    color: currentVersion === 'story' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
+                                  }}>
+                                    Story
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            </Animated.View>
+                          )}
 
                           {/* Content */}
                           <Animated.View 
@@ -1343,29 +1556,25 @@ export default function TopicDetailScreen() {
                           >
                             {/* Show error if this specific tone failed */}
                             {isContentFailed(currentVersion) ? (
-                              <View className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                                <View className="flex-row items-start space-x-3">
-                                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                              <View className="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+                                <View className="flex-row items-start gap-3">
+                                  <AlertCircle size={20} color={isDarkColorScheme ? '#f87171' : '#dc2626'} />
                                   <View className="flex-1">
-                                    <Text className="text-sm font-semibold text-red-900 mb-1">
+                                    <Text className="text-sm font-semibold text-red-900 dark:text-red-100 mb-1">
                                       Failed to generate {currentVersion} content
                                     </Text>
-                                    <Text className="text-xs text-red-700 mb-3">
-                                      An error occurred while generating this learning style. Try regenerating or switch to another style.
+                                    <Text className="text-xs text-red-700 dark:text-red-300 mb-3">
+                                      Try regenerating or switch to another style.
                                     </Text>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
+                                    <Pressable
                                       onPress={() => handleRegenerateContent(currentVersion)}
-                                      className="border-red-300 self-start"
+                                      className="flex-row items-center gap-2 self-start px-3 py-2 rounded-lg border border-red-300 dark:border-red-700 active:opacity-70"
                                     >
-                                      <View className="flex-row items-center space-x-2">
-                                        <RefreshCw className="h-4 w-4 text-red-700" />
-                                        <Text className="text-red-700 text-xs font-medium">
-                                          Regenerate {currentVersion} content
-                                        </Text>
-                                      </View>
-                                    </Button>
+                                      <RefreshCw size={14} color={isDarkColorScheme ? '#f87171' : '#dc2626'} />
+                                      <Text className="text-red-700 dark:text-red-300 text-xs font-medium">
+                                        Retry
+                                      </Text>
+                                    </Pressable>
                                   </View>
                                 </View>
                               </View>
@@ -1377,33 +1586,36 @@ export default function TopicDetailScreen() {
 
                                 {content.example && (
                                   <View className="mt-3">
-                                    <View className="flex-row items-center space-x-2 mb-2">
-                                      <Code className="h-4 w-4 text-green-600" />
-                                      <Text className="text-sm font-semibold text-green-600">
-                                        Example:
+                                    <View className="flex-row items-center gap-2 mb-2">
+                                      <Code size={16} color={isDarkColorScheme ? '#4ade80' : '#16a34a'} />
+                                      <Text className="text-sm font-semibold text-green-600 dark:text-green-400">
+                                        Example
                                       </Text>
                                     </View>
-                                    <View className="bg-slate-900 rounded-lg p-4">
+                                    <View className="bg-slate-900 dark:bg-slate-950 rounded-lg p-4">
                                       <Text className="text-slate-100 font-mono text-sm leading-6">
                                         {content.example}
                                       </Text>
                                     </View>
                                     
                                     {subtopic.exampleExplanation && (
-                                      <Text className="text-sm text-muted-foreground mt-2 italic">
-                                        💡 {subtopic.exampleExplanation}
-                                      </Text>
+                                      <View className="flex-row items-start gap-2 mt-2">
+                                        <Lightbulb size={14} color={isDarkColorScheme ? '#fbbf24' : '#d97706'} />
+                                        <Text className="flex-1 text-sm text-muted-foreground italic">
+                                          {subtopic.exampleExplanation}
+                                        </Text>
+                                      </View>
                                     )}
                                   </View>
                                 )}
 
                                 {subtopic.keyPoints && subtopic.keyPoints.length > 0 && (
                                   <View className="mt-3">
-                                    <Text className="text-sm font-semibold mb-2">Key Points:</Text>
+                                    <Text className="text-sm font-semibold mb-2 text-foreground">Key Points</Text>
                                     {subtopic.keyPoints.map((point, idx) => (
-                                      <View key={idx} className="flex-row items-start space-x-2 mb-1">
+                                      <View key={idx} className="flex-row items-start gap-2 mb-1">
                                         <Text className="text-muted-foreground">•</Text>
-                                        <Text className="flex-1 text-sm text-muted-foreground">
+                                        <Text className="flex-1 text-sm text-muted-foreground leading-relaxed">
                                           {point}
                                         </Text>
                                       </View>
@@ -1415,57 +1627,83 @@ export default function TopicDetailScreen() {
                           </Animated.View>
                         </View>
                       )}
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
-            </CardContent>
-          </Card>
             </>
           )}
           {explanation.bestPractices && explanation.bestPractices.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Best Practices</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <View className="space-y-2">
+            <View className="mt-6">
+              <Pressable 
+                onPress={() => setIsBestPracticesExpanded(!isBestPracticesExpanded)}
+                className="flex-row items-center justify-between py-3 active:opacity-70"
+              >
+                <View className="flex-row items-center gap-2">
+                  <CheckCircle2 size={20} color={isDarkColorScheme ? '#4ade80' : '#16a34a'} />
+                  <Text className="text-lg font-semibold text-foreground">Best Practices</Text>
+                  <View className="bg-green-500/20 dark:bg-green-500/30 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs font-medium text-green-600 dark:text-green-400">{explanation.bestPractices.length}</Text>
+                  </View>
+                </View>
+                <ChevronDown 
+                  size={20} 
+                  color={isDarkColorScheme ? '#a1a1aa' : '#71717a'}
+                  style={{ transform: [{ rotate: isBestPracticesExpanded ? '180deg' : '0deg' }] }}
+                />
+              </Pressable>
+              {isBestPracticesExpanded && (
+                <Animated.View entering={FadeIn.duration(200)} className="space-y-3 mt-2">
                   {explanation.bestPractices.map((practice, index) => (
-                    <View key={index} className="flex-row items-start space-x-3">
-                      <View className="bg-green-100 rounded-full w-6 h-6 items-center justify-center mt-0.5">
-                        <Text className="text-green-700 font-bold text-xs">{index + 1}</Text>
+                    <View key={index} className="flex-row items-start gap-3">
+                      <View className="bg-green-500 rounded-full w-6 h-6 items-center justify-center mt-0.5">
+                        <Text className="text-white font-bold text-xs">{index + 1}</Text>
                       </View>
                       <Text className="flex-1 text-muted-foreground leading-6">
                         {practice}
                       </Text>
                     </View>
                   ))}
-                </View>
-              </CardContent>
-            </Card>
+                </Animated.View>
+              )}
+            </View>
           )}
 
           {/* Common Pitfalls */}
           {explanation.commonPitfalls && explanation.commonPitfalls.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Common Pitfalls to Avoid</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <View className="space-y-2">
+            <View className="mt-6">
+              <Pressable 
+                onPress={() => setIsCommonPitfallsExpanded(!isCommonPitfallsExpanded)}
+                className="flex-row items-center justify-between py-3 active:opacity-70"
+              >
+                <View className="flex-row items-center gap-2">
+                  <AlertCircle size={20} color={isDarkColorScheme ? '#f87171' : '#dc2626'} />
+                  <Text className="text-lg font-semibold text-foreground">Common Pitfalls</Text>
+                  <View className="bg-red-500/20 dark:bg-red-500/30 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs font-medium text-red-600 dark:text-red-400">{explanation.commonPitfalls.length}</Text>
+                  </View>
+                </View>
+                <ChevronDown 
+                  size={20} 
+                  color={isDarkColorScheme ? '#a1a1aa' : '#71717a'}
+                  style={{ transform: [{ rotate: isCommonPitfallsExpanded ? '180deg' : '0deg' }] }}
+                />
+              </Pressable>
+              {isCommonPitfallsExpanded && (
+                <Animated.View entering={FadeIn.duration(200)} className="space-y-3 mt-2">
                   {explanation.commonPitfalls.map((pitfall, index) => (
-                    <View key={index} className="flex-row items-start space-x-3">
-                      <View className="bg-red-100 rounded-full w-6 h-6 items-center justify-center mt-0.5">
-                        <Text className="text-red-700 font-bold text-xs">!</Text>
+                    <View key={index} className="flex-row items-start gap-3">
+                      <View className="bg-red-500 rounded-full w-6 h-6 items-center justify-center mt-0.5">
+                        <Text className="text-white font-bold text-xs">!</Text>
                       </View>
                       <Text className="flex-1 text-muted-foreground leading-6">
                         {pitfall}
                       </Text>
                     </View>
                   ))}
-                </View>
-              </CardContent>
-            </Card>
+                </Animated.View>
+              )}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -1480,15 +1718,15 @@ export default function TopicDetailScreen() {
         >
           <Card className="mx-8 p-6">
             <View className="items-center">
-              <View className="bg-orange-100 dark:bg-orange-900/30 rounded-full p-4 mb-4">
-                <Wand2 size={32} className="text-orange-600" />
+              <View className="bg-primary/10 dark:bg-primary/20 rounded-full p-4 mb-4">
+                <Wand2 size={32} color={isDarkColorScheme ? '#a78bfa' : '#7c3aed'} />
               </View>
               <ActivityIndicator size="large" className="mb-4" />
               <Text className="text-lg font-semibold text-foreground text-center mb-2">
                 Regenerating Subtopics
               </Text>
               <Text className="text-sm text-muted-foreground text-center leading-relaxed">
-                Creating better examples focused on your instructions for all 3 learning styles...
+                Creating better examples focused on your instructions...
               </Text>
             </View>
           </Card>
@@ -1527,25 +1765,36 @@ export default function TopicDetailScreen() {
           >
             <View className="p-6">
               <View className="flex-row items-center gap-2 mb-2">
-                <Wand2 size={24} className="text-orange-500" />
+                <MessageSquare size={24} color={isDarkColorScheme ? '#a78bfa' : '#7c3aed'} />
                 <Text className="text-xl font-bold text-foreground">
-                  Regenerate Subtopics
+                  Ask a Doubt
                 </Text>
               </View>
               <Text className="text-sm text-muted-foreground mb-4 leading-relaxed">
-                Provide your question or instructions to regenerate the selected subtopics with better examples focused on your needs.
+                Type your question about the selected topics. We'll regenerate the content with better explanations focused on your doubt.
               </Text>
 
               <View className="mb-2">
                 <Text className="text-sm font-medium text-foreground mb-1">
-                  Selected Subtopics ({selectedSubtopics.size})
+                  Selected Topics ({selectedSubtopics.size})
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {explanation.subtopics
                     .filter(st => selectedSubtopics.has(st.id))
                     .map(st => (
-                      <View key={st.id} className="bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded">
-                        <Text className="text-xs text-orange-700 dark:text-orange-300">
+                      <View 
+                        key={st.id} 
+                        style={{
+                          backgroundColor: isDarkColorScheme ? 'rgba(99, 102, 241, 0.2)' : 'rgba(79, 70, 229, 0.1)',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 12,
+                          color: isDarkColorScheme ? '#a5b4fc' : '#4f46e5',
+                        }}>
                           {st.title}
                         </Text>
                       </View>
@@ -1555,7 +1804,7 @@ export default function TopicDetailScreen() {
 
               <View className="mb-6">
                 <Text className="text-sm font-medium text-foreground mb-2">
-                  Your Question/Instructions
+                  Your Question
                 </Text>
                 <View className="min-h-[120px] p-3 rounded-lg border border-border bg-background">
                   <TextInput
@@ -1577,15 +1826,22 @@ export default function TopicDetailScreen() {
                 <Pressable
                   onPress={handleRegenerateSelectedSubtopics}
                   disabled={!regenerateInstructions.trim()}
-                  className={`w-full h-12 items-center justify-center rounded-lg flex-row gap-2 ${
-                    !regenerateInstructions.trim()
-                      ? 'bg-orange-500/30'
-                      : 'bg-orange-500 active:bg-orange-600'
-                  }`}
+                  style={{
+                    backgroundColor: !regenerateInstructions.trim() 
+                      ? (isDarkColorScheme ? 'rgba(99, 102, 241, 0.3)' : 'rgba(79, 70, 229, 0.3)')
+                      : (isDarkColorScheme ? '#6366f1' : '#4f46e5'),
+                    width: '100%',
+                    height: 48,
+                    borderRadius: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
                 >
-                  <Wand2 size={20} className="text-white" />
-                  <Text className="text-base font-semibold text-white">
-                    Regenerate (All 3 Styles)
+                  <MessageSquare size={20} color="#ffffff" />
+                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+                    Get Answer
                   </Text>
                 </Pressable>
 
@@ -1699,6 +1955,17 @@ export default function TopicDetailScreen() {
           </Animated.View>
         </Animated.View>
       </Modal>
-    </View>
+
+      {/* Search Results Bottom Sheet */}
+      <BottomSheet>
+        <TopicSearchResultsModal
+          sheetRef={searchSheetRef}
+          results={webSearchResults}
+          isSearching={isSearching}
+          topicName={topic.name}
+          onRefresh={handleWebSearch}
+        />
+      </BottomSheet>
+    </SafeAreaView>
   );
 }

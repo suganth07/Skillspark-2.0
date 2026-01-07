@@ -17,6 +17,8 @@ import {
 import type { KnowledgeGraph, Prerequisite, QuizQuestion } from '@/lib/gemini';
 import { createId } from '@paralleldrive/cuid2';
 import { markContentForRegeneration } from './topics';
+import { awardXP } from './users';
+import { XP_REWARDS } from '@/lib/gamification';
 
 export interface RoadmapWithProgress {
   id: string;
@@ -667,12 +669,24 @@ export async function getRoadmapWithSteps(roadmapId: string, userId: string): Pr
 }
 
 // Submit quiz attempt
+// Submit quiz attempt
 export async function submitQuizAttempt(
   userId: string,
   quizId: string,
   answers: Record<string, any>,
   roadmapId?: string
-): Promise<{ score: number; passed: boolean; feedback: string; weakSubtopics: string[] }> {
+): Promise<{ 
+  score: number; 
+  passed: boolean; 
+  feedback: string; 
+  weakSubtopics: string[];
+  leveledUp: boolean;
+  oldLevel: number;
+  newLevel: number;
+  xpGained: number;
+  oldXP: number;
+  newXP: number;
+}> {
   return await db.transaction(async (tx) => {
     // Get quiz questions with subtopic info
     const quizQuestions = await tx
@@ -920,7 +934,17 @@ export async function submitQuizAttempt(
       console.log(`🔄 Marked topic ${quiz[0].topicId} for content regeneration after quiz completion`);
     }
 
-    return { score, passed, feedback, weakSubtopics };
+    // Award XP for quiz completion
+    let levelUpResult = { leveledUp: false, oldLevel: 1, newLevel: 1, xpGained: 0, oldXP: 0, newXP: 0 };
+    
+    if (passed) {
+      // Award XP based on perfect score or just passing
+      const xpToAward = score === 100 ? XP_REWARDS.QUIZ_PERFECT : XP_REWARDS.QUIZ_PASS;
+      levelUpResult = await awardXP(userId, xpToAward);
+      console.log(`🎉 Awarded ${xpToAward} XP for ${score === 100 ? 'perfect' : 'passing'} quiz`);
+    }
+
+    return { score, passed, feedback, weakSubtopics, ...levelUpResult };
   });
 }
 
@@ -1263,18 +1287,27 @@ export async function deleteRoadmap(userId: string, roadmapId: string): Promise<
 
 /**
  * Manually update step completion status
+ * Awards/deducts XP and returns level-up information
  */
 export async function updateStepCompletion(
   stepId: string,
   userId: string,
   isCompleted: boolean
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<{
+  leveledUp: boolean;
+  oldLevel: number;
+  newLevel: number;
+  xpGained: number;
+  oldXP: number;
+  newXP: number;
+}> {
+  return await db.transaction(async (tx) => {
     // Verify ownership before making any updates
     const stepWithOwnership = await tx
       .select({ 
         roadmapId: roadmapSteps.roadmapId,
-        ownerId: roadmaps.userId 
+        ownerId: roadmaps.userId,
+        wasCompleted: roadmapSteps.isCompleted
       })
       .from(roadmapSteps)
       .innerJoin(roadmaps, eq(roadmapSteps.roadmapId, roadmaps.id))
@@ -1290,6 +1323,7 @@ export async function updateStepCompletion(
     }
 
     const roadmapId = stepWithOwnership[0].roadmapId;
+    const wasCompleted = stepWithOwnership[0].wasCompleted;
 
     // Update the step completion status
     await tx
@@ -1311,16 +1345,43 @@ export async function updateStepCompletion(
       ? Math.round((completedStepsCount / allSteps.length) * 100) 
       : 0;
 
+    const wasRoadmapComplete = allSteps.length === allSteps.filter(step => step.isCompleted).length - (isCompleted ? 1 : 0);
+    const isRoadmapComplete = progress === 100;
+
     await tx
       .update(roadmaps)
       .set({ 
         progress,
-        status: progress === 100 ? 'completed' : 'active',
+        status: isRoadmapComplete ? 'completed' : 'active',
         updatedAt: new Date()
       })
       .where(eq(roadmaps.id, roadmapId));
 
     console.log(`✅ Updated step ${stepId} completion to ${isCompleted}. Roadmap progress: ${progress}%`);
+
+    // Award or deduct XP based on completion status change
+    let xpChange = 0;
+    let levelUpResult = { leveledUp: false, oldLevel: 1, newLevel: 1, xpGained: 0, oldXP: 0, newXP: 0 };
+
+    if (isCompleted && !wasCompleted) {
+      // Step completed: Award XP
+      xpChange = XP_REWARDS.STEP_COMPLETE;
+      
+      // Award extra XP for completing entire roadmap
+      if (isRoadmapComplete && !wasRoadmapComplete) {
+        xpChange += XP_REWARDS.ROADMAP_COMPLETE;
+      }
+
+      levelUpResult = await awardXP(userId, xpChange);
+      console.log(`🎉 Awarded ${xpChange} XP for step completion`);
+    } else if (!isCompleted && wasCompleted) {
+      // Step marked incomplete: Deduct XP
+      xpChange = -XP_REWARDS.STEP_COMPLETE;
+      levelUpResult = await awardXP(userId, xpChange);
+      console.log(`⚠️ Deducted ${Math.abs(xpChange)} XP for marking step incomplete`);
+    }
+
+    return levelUpResult;
   });
 }
 

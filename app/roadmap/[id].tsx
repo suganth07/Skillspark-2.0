@@ -23,6 +23,32 @@ export default function RoadmapDetailScreen() {
   const [screenState, setScreenState] = useState<ScreenState>({ type: 'roadmap' });
   const [isRevisionQuiz, setIsRevisionQuiz] = useState(false);
 
+  // Early return for missing data to speed up initial render
+  if (!roadmapId || !currentUserId) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+        <Stack.Screen 
+          options={{ 
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
+          }} 
+        />
+        <View className="flex-row items-center px-4 py-3 border-b border-border">
+          <Pressable 
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
+          </Pressable>
+        </View>
+        <View className="flex-1 justify-center items-center p-6">
+          <Text className="text-center text-muted-foreground">Roadmap not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const handleTakeQuiz = (quizId: string, stepTitle: string) => {
     // Check if this is a revision quiz based on the title
     setIsRevisionQuiz(stepTitle.includes('- Revision'));
@@ -59,30 +85,17 @@ export default function RoadmapDetailScreen() {
     }
   };
 
-  if (!roadmapId || !currentUserId) {
-    return (
-      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View className="flex-row items-center px-4 py-3 border-b border-border">
-          <Pressable 
-            onPress={() => router.back()}
-            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
-          >
-            <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
-          </Pressable>
-        </View>
-        <View className="flex-1 justify-center items-center p-6">
-          <Text className="text-center text-muted-foreground">Roadmap not found</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   // Render based on screen state - matches tabs/roadmap.tsx exactly
   if (screenState.type === 'quiz') {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-        <Stack.Screen options={{ headerShown: false }} />
+        <Stack.Screen 
+          options={{ 
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
+          }} 
+        />
         <View className="flex-1">
           <View className="flex-row items-center px-4 py-3 border-b border-border">
             <Pressable 
@@ -109,7 +122,13 @@ export default function RoadmapDetailScreen() {
   if (screenState.type === 'results') {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-        <Stack.Screen options={{ headerShown: false }} />
+        <Stack.Screen 
+          options={{ 
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 150,
+          }} 
+        />
         <View className="flex-1">
           <View className="flex-row items-center px-4 py-3 border-b border-border">
             <Pressable 
@@ -136,7 +155,13 @@ export default function RoadmapDetailScreen() {
   // Default: Show roadmap display
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen 
+        options={{ 
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 150,
+        }} 
+      />
       <View className="flex-row items-center px-4 py-3 border-b border-border bg-background">
         <Pressable 
           onPress={() => router.back()}

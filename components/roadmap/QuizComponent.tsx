@@ -32,7 +32,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
   const [showResults, setShowResults] = useState(false);
-  const [timeStarted, setTimeStarted] = useState<Date>(new Date());
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   
@@ -48,12 +47,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
   } = useQuiz(quizId);
   
   const submitQuizMutation = useSubmitQuiz();
-
-  useEffect(() => {
-    if (quizId) {
-      setTimeStarted(new Date());
-    }
-  }, [quizId]);
 
   const handleAnswerChange = (questionId: string, answer: any) => {
     setAnswers(prev => ({
@@ -256,7 +249,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
                 setShowResults(false);
                 setQuizResult(null);
                 setAnswers({});
-                setTimeStarted(new Date());
               }}
             >
               <Text className="text-primary-foreground">Try Again</Text>
@@ -320,7 +312,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
     );
   }
 
-  const timeElapsed = Math.round((new Date().getTime() - timeStarted.getTime()) / 1000 / 60);
   const answeredQuestions = Object.keys(answers).length;
   const totalQuestions = currentQuiz.questions.length;
   const progressPercentage = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
@@ -434,12 +425,6 @@ export function QuizComponent({ quizId, roadmapId, onQuizComplete, onBack }: Qui
         {/* Progress Stats */}
         <View className="mb-6 p-4 rounded-xl bg-card border border-border">
           <View className="flex-row justify-between items-center mb-3">
-            <View className="flex-row items-center gap-2">
-              <Clock size={16} className="text-muted-foreground" />
-              <Text className="text-sm text-muted-foreground">
-                {timeElapsed} min elapsed
-              </Text>
-            </View>
             <Text className="text-sm font-semibold text-foreground">
               {answeredQuestions}/{totalQuestions} answered
             </Text>

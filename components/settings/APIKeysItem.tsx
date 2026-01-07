@@ -289,7 +289,6 @@ export function APIKeysItem() {
         />
       </BottomSheetContent>
 
-      {/* Success Dialog */}
       <SuccessDialog
         open={showSuccessDialog}
         onOpenChange={setShowSuccessDialog}

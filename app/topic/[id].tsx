@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, ActivityIndicator, ScrollView, Pressable, Alert, Modal, TextInput } from 'react-native';
+import { View, ActivityIndicator, ScrollView, Pressable, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -76,6 +76,7 @@ export default function TopicDetailScreen() {
   const [quizId, setQuizId] = useState<string | null>(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [showQuizResults, setShowQuizResults] = useState(false);
+  const [showExitQuizModal, setShowExitQuizModal] = useState(false);
   
   // Collapsible sections state
   const [isBestPracticesExpanded, setIsBestPracticesExpanded] = useState(false);
@@ -313,8 +314,6 @@ export default function TopicDetailScreen() {
     
     const { topic } = currentTopicDetail;
     
-    setIsGeneratingQuiz(true);
-    
     try {
       // First, check if there's already a quiz for this topic
       const roadmap = await import('@/server/queries/topics').then(m => 
@@ -327,7 +326,6 @@ export default function TopicDetailScreen() {
           'This topic is not part of any roadmap. Please access it through a roadmap to take a quiz.',
           [{ text: 'OK' }]
         );
-        setIsGeneratingQuiz(false);
         return;
       }
       
@@ -363,10 +361,14 @@ export default function TopicDetailScreen() {
           console.log('📋 Reusing existing unattempted quiz:', existingQuiz[0].id);
           setQuizId(existingQuiz[0].id);
           setShowQuiz(true);
-          setIsGeneratingQuiz(false);
           return;
         }
       }
+      
+      // Show quiz modal with loading state immediately
+      setQuizId(null);
+      setShowQuiz(true);
+      setIsGeneratingQuiz(true);
       
       // Get roadmap steps to find the step for this topic
       const { steps } = await import('@/server/queries/roadmaps').then(m => 
@@ -376,16 +378,17 @@ export default function TopicDetailScreen() {
       const step = steps.find(s => s.topicId === topic.id);
       
       if (!step) {
+        setShowQuiz(false);
+        setIsGeneratingQuiz(false);
         Alert.alert(
           'Error',
           'Could not find the roadmap step for this topic.',
           [{ text: 'OK' }]
         );
-        setIsGeneratingQuiz(false);
         return;
       }
       
-      // Generate new quiz
+      // Generate new quiz in background
       const result = await generateQuizMutation.mutateAsync({
         userId: currentUserId,
         roadmapId: roadmap.id,
@@ -394,16 +397,16 @@ export default function TopicDetailScreen() {
       });
       
       setQuizId(result.quizId);
-      setShowQuiz(true);
+      setIsGeneratingQuiz(false);
     } catch (error) {
       console.error('Error generating quiz:', error);
+      setShowQuiz(false);
+      setIsGeneratingQuiz(false);
       Alert.alert(
         'Quiz Generation Failed',
         error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.',
         [{ text: 'OK' }]
       );
-    } finally {
-      setIsGeneratingQuiz(false);
     }
   };
   
@@ -1625,7 +1628,6 @@ export default function TopicDetailScreen() {
               {/* Take a Test Button */}
               <Pressable
                 onPress={handleTakeTest}
-                disabled={isGeneratingQuiz}
                 className="flex-1"
                 style={{
                   flexDirection: 'row',
@@ -1635,16 +1637,11 @@ export default function TopicDetailScreen() {
                   paddingVertical: 14,
                   borderRadius: 6,
                   backgroundColor: isDarkColorScheme ? '#18181b' : '#f4f4f5',
-                  opacity: isGeneratingQuiz ? 0.5 : 1,
                 }}
               >
-                {isGeneratingQuiz ? (
-                  <ActivityIndicator size="small" color={isDarkColorScheme ? '#fafafa' : '#18181b'} />
-                ) : (
-                  <BookOpen size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
-                )}
+                <BookOpen size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
                 <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b', letterSpacing: 0.3 }}>
-                  {isGeneratingQuiz ? 'Preparing Quiz...' : 'Take a Test'}
+                  Take a Test
                 </Text>
               </Pressable>
               
@@ -1958,24 +1955,45 @@ export default function TopicDetailScreen() {
           <View className="flex-row items-center px-4 py-3 border-b border-border">
             <Pressable
               onPress={() => {
-                Alert.alert(
-                  'Exit Quiz?',
-                  'Are you sure you want to exit? Your progress will not be saved.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Exit', style: 'destructive', onPress: () => setShowQuiz(false) }
-                  ]
-                );
+                if (isGeneratingQuiz) {
+                  setShowQuiz(false);
+                  setIsGeneratingQuiz(false);
+                } else {
+                  setShowExitQuizModal(true);
+                }
               }}
               className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
             >
               <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
             </Pressable>
             <Text className="flex-1 text-center text-lg font-semibold pr-9">
-              {topic.name} - Quiz
+              {isGeneratingQuiz ? 'Preparing Quiz...' : `${topic.name} - Quiz`}
             </Text>
           </View>
-          {quizId && (
+          {isGeneratingQuiz ? (
+            <View className="flex-1 p-6">
+              <View className="mb-6">
+                <Skeleton className="h-6 w-3/4 mb-2" />
+                <Skeleton className="h-4 w-full mb-1" />
+                <Skeleton className="h-4 w-5/6" />
+              </View>
+              {[1, 2, 3].map((i) => (
+                <View key={i} className="mb-6 p-4 rounded-xl bg-card border border-border">
+                  <Skeleton className="h-5 w-32 mb-4" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-4/5 mb-4" />
+                  <View className="space-y-3">
+                    {[1, 2, 3, 4].map((j) => (
+                      <View key={j} className="flex-row items-center gap-3">
+                        <Skeleton className="h-5 w-5 rounded-full" />
+                        <Skeleton className="h-4 flex-1" />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : quizId ? (
             <QuizComponent
               quizId={quizId}
               onQuizComplete={(result) => {
@@ -1984,7 +2002,7 @@ export default function TopicDetailScreen() {
               }}
               onBack={() => setShowQuiz(false)}
             />
-          )}
+          ) : null}
         </SafeAreaView>
       </Modal>
       
@@ -2024,6 +2042,78 @@ export default function TopicDetailScreen() {
             />
           )}
         </SafeAreaView>
+      </Modal>
+      
+      {/* Exit Quiz Confirmation Modal */}
+      <Modal
+        transparent
+        visible={showExitQuizModal}
+        animationType="none"
+        onRequestClose={() => setShowExitQuizModal(false)}
+        statusBarTranslucent
+      >
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <Pressable 
+            className="absolute inset-0" 
+            onPress={() => setShowExitQuizModal(false)}
+          />
+          
+          <Animated.View
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            style={{
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            }}
+          >
+            <View className="p-6">
+              {/* Icon */}
+              <View className="items-center mb-4">
+                <View className="bg-red-100 dark:bg-red-900/30 rounded-full p-4 mb-3">
+                  <AlertCircle size={48} className="text-red-500" />
+                </View>
+                <Text className="text-xl font-bold text-foreground text-center mb-2">
+                  Exit Quiz?
+                </Text>
+                <Text className="text-sm text-muted-foreground text-center leading-relaxed">
+                  Are you sure you want to exit? Your progress will not be saved.
+                </Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View className="flex-col gap-3">
+                <Pressable
+                  onPress={() => {
+                    setShowExitQuizModal(false);
+                    setShowQuiz(false);
+                  }}
+                  className="w-full h-12 items-center justify-center rounded-lg bg-red-500 active:bg-red-600"
+                >
+                  <Text className="text-base font-semibold text-white">
+                    Yes, Exit Quiz
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setShowExitQuizModal(false)}
+                  className="w-full h-12 items-center justify-center rounded-lg border border-border active:bg-secondary"
+                >
+                  <Text className="text-base font-medium text-foreground">
+                    Continue Quiz
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        </Animated.View>
       </Modal>
     </SafeAreaView>
   );

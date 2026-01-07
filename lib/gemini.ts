@@ -370,18 +370,30 @@ export class GeminiService {
   ): Promise<QuizQuestion[]> {
     const subtopicsList = subtopics.map(st => `- ${st.name}: ${st.description}`).join('\n');
     
+    const subtopicCount = subtopics.length;
+    const minQuestionsPerSubtopic = 2;
+    const maxQuestionsPerSubtopic = 3;
+    const totalMinQuestions = subtopicCount * minQuestionsPerSubtopic;
+    const totalMaxQuestions = subtopicCount * maxQuestionsPerSubtopic;
+    
     const prompt = `
       Create a comprehensive quiz for "${topicName}" in the context of learning "${context}".
       
-      Generate 1-2 questions for EACH of the following subtopics (total 8-12 questions):
+      🎯 CRITICAL REQUIREMENTS FOR COMPLETE COVERAGE:
+      Generate ${minQuestionsPerSubtopic}-${maxQuestionsPerSubtopic} questions for EACH of the following ${subtopicCount} subtopics.
+      Total questions: ${totalMinQuestions}-${totalMaxQuestions} questions
+      
+      SUBTOPICS TO COVER (ALL ${subtopicCount} MUST have questions):
       ${subtopicsList}
       
-      Requirements:
-      - Each question MUST specify which subtopic it tests
-      - Create ONLY multiple choice questions with 5 options each (4 regular + "Not sure")
-      - Questions should test understanding of that specific subtopic
-      - Make questions practical and relevant
-      - Difficulty level: ${difficulty}
+      📋 MANDATORY RULES:
+      1. EVERY SINGLE subtopic listed above MUST have at least ${minQuestionsPerSubtopic} questions
+      2. Questions can test multiple subtopics (use subtopicNames array for this)
+      3. Create ONLY multiple choice questions with 5 options each (4 regular + "Not sure")
+      4. Questions should test deep understanding, not just memorization
+      5. Make questions practical and relevant to real-world scenarios
+      6. Difficulty level: ${difficulty}
+      7. Verify at the end that ALL ${subtopicCount} subtopics are covered!
       
       Return ONLY valid JSON array (no markdown, no code blocks, no extra text):
       [
@@ -391,19 +403,20 @@ export class GeminiService {
           "type": "multiple_choice",
           "difficulty": "${difficulty}",
           "subtopicName": "exact subtopic name from the list above",
+          "subtopicNames": ["subtopic1", "subtopic2"],
           "data": {
             "options": ["Option A", "Option B", "Option C", "Option D", "Not sure"],
             "correct": 0,
-            "explanation": "Why this answer is correct and how it relates to the subtopic"
+            "explanation": "Why this answer is correct and how it relates to the subtopic(s)"
           }
         }
       ]
       
-      IMPORTANT: 
-      - Return ONLY the JSON array, nothing else
-      - Always include "Not sure" as the last option (5th option)
-      - Ensure each subtopic gets at least 1 question
-      - Make questions challenging but fair for ${difficulty} level
+      ⚠️ VERIFICATION CHECKLIST BEFORE SUBMITTING:
+      - Does EVERY subtopic from the list have at least ${minQuestionsPerSubtopic} questions? ✓
+      - Are there ${totalMinQuestions}-${totalMaxQuestions} total questions? ✓
+      - Do all questions include "Not sure" as the 5th option? ✓
+      - Are subtopicNames arrays used for questions testing multiple concepts? ✓
     `;
 
     // aiService already has retry logic built-in
@@ -454,17 +467,37 @@ export class GeminiService {
         throw new Error('Invalid questions structure - empty array');
       }
       
-      // Map subtopic names to IDs
+      // Map subtopic names to IDs and verify coverage
+      const subtopicCoverage = new Map<string, number>();
+      subtopics.forEach(st => subtopicCoverage.set(st.id, 0));
+      
       questions.forEach(q => {
         const matchingSubtopic = subtopics.find(
           st => st.name.toLowerCase() === q.subtopicName?.toLowerCase()
         );
         if (matchingSubtopic) {
           q.subtopicId = matchingSubtopic.id;
+          subtopicCoverage.set(matchingSubtopic.id, (subtopicCoverage.get(matchingSubtopic.id) || 0) + 1);
         }
       });
       
-      console.log(`✅ Generated ${questions.length} quiz questions from subtopics`);
+      // Log coverage statistics
+      const uncoveredSubtopics = Array.from(subtopicCoverage.entries())
+        .filter(([_, count]) => count === 0)
+        .map(([id, _]) => subtopics.find(st => st.id === id)?.name);
+      
+      if (uncoveredSubtopics.length > 0) {
+        console.warn(`⚠️ WARNING: ${uncoveredSubtopics.length} subtopics not covered in quiz:`, uncoveredSubtopics);
+      }
+      
+      const coverageStats = Array.from(subtopicCoverage.entries())
+        .map(([id, count]) => {
+          const name = subtopics.find(st => st.id === id)?.name;
+          return `${name}: ${count} questions`;
+        });
+      
+      console.log(`✅ Generated ${questions.length} quiz questions from ${subtopics.length} subtopics`);
+      console.log(`📊 Coverage:`, coverageStats.join(', '));
       return questions;
   }
 
@@ -537,14 +570,23 @@ ${subtopicPerformance.map(p =>
 `      📊 "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status.toUpperCase()})
          → ${p.status === 'strong' 
            ? '✅ BRIEF REVIEW ONLY: 1 short paragraph (3-4 sentences), 1 simple example, 2 key points'
-           : '❌ COMPREHENSIVE TEACHING: 3-4 full paragraphs, 2-3 detailed examples, 3-4 key points with explanations'
+           : `❌ COMPREHENSIVE DEEP TEACHING: 5-8 FULL DETAILED PARAGRAPHS covering:
+              * Fundamental concepts with thorough explanations
+              * Step-by-step breakdowns of how it works
+              * WHY this concept matters and common use cases
+              * 3-5 DIVERSE examples (beginner, intermediate, real-world)
+              * Common mistakes and how to avoid them
+              * Best practices and tips for mastery
+              * 5-7 key points with detailed explanations
+              The weak content MUST be SIGNIFICANTLY longer and more comprehensive!`
          }`
       ).join('\n')}
       
       REQUIREMENTS:
       - Strong subtopics (≥70%): MAX 1 paragraph + 1 basic example (user knows this)
-      - Weak/Neutral (<70%): MIN 3 paragraphs + 2-3 diverse examples (user needs deep learning)
-      - Content length difference should be OBVIOUSLY visible
+      - Weak/Neutral (<70%): MIN 5-8 DETAILED paragraphs + 3-5 diverse examples + extensive explanations (user struggles here!)
+      - Weak content should be 5-8x longer than strong content
+      - Content length difference MUST be DRAMATICALLY OBVIOUS
       - Match subtopic titles EXACTLY to names above to apply correct depth
       `;
     }
@@ -606,7 +648,7 @@ ${specificSubtopics.map((title, i) => `      ${i + 1}. "${title}"`).join('\n')}
       7. Suggested resources for deeper learning
       
       ${subtopicPerformance && subtopicPerformance.length > 0 
-        ? '🔥 CRITICAL: Strong subtopics = SHORT (1 paragraph), Weak subtopics = LONG (3-4 paragraphs). Do NOT make them all the same length!'
+        ? '🔥🔥🔥 CRITICAL: Strong subtopics = SHORT (1 paragraph), Weak subtopics = VERY LONG (5-8 detailed paragraphs with extensive examples and explanations). The difference MUST be DRAMATIC - weak content should be 5-8x longer!'
         : 'Make explanations clear, beginner-friendly but thorough.'
       }
       Include real-world, practical examples.
@@ -675,10 +717,16 @@ ${specificSubtopics.map((title, i) => `      ${i + 1}. "${title}"`).join('\n')}
     if (subtopicPerformance && subtopicPerformance.length > 0) {
       performanceGuidance = `
       
-      📊 User Performance Data (use for prioritization):
-${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      📊 User Performance Data (CRITICAL for content depth):
+${subtopicPerformance.map(p => 
+`      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})
+        ${p.status === 'weak' || p.status === 'neutral' 
+          ? '→ ELABORATE EXTENSIVELY: 5-8 paragraphs, multiple detailed examples, step-by-step breakdowns, analogies, real-world scenarios'
+          : '→ Keep brief: 1-2 paragraphs, simple review'
+        }`
+      ).join('\n')}
       
-      Focus MORE examples and simpler language on weak areas, but keep all content accessible.
+      Focus MUCH MORE content, examples, and simpler language on weak areas. Weak subtopics need COMPREHENSIVE teaching!
       `;
     }
 
@@ -801,10 +849,17 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
     if (subtopicPerformance && subtopicPerformance.length > 0) {
       performanceGuidance = `
       
-      📊 User Performance Data:
-${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      📊 User Quiz Performance - Adjust storytelling depth DRAMATICALLY:
+${subtopicPerformance.map(p => 
+`      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})
+        ${p.status === 'weak' || p.status === 'neutral'
+          ? '→ ELABORATE STORY: Multi-chapter narrative with detailed character development, extensive plot points teaching the concept, multiple story-based examples, deeper analogies, and thorough lesson integration (5-8 story paragraphs)'
+          : '→ Brief story: Short engaging narrative (1-2 paragraphs)'
+        }`
+      ).join('\n')}
       
-      Create more detailed story scenarios for weak areas to help understanding.
+      - Strong areas: Keep story brief and engaging (1-2 paragraphs)
+      - Weak areas: Tell an EXTENSIVE, multi-layered educational story with deep analogies and comprehensive teaching (5-8 detailed paragraphs)
       `;
     }
 
@@ -930,10 +985,16 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
     if (subtopicPerformance && subtopicPerformance.length > 0) {
       performanceGuidance = `
       
-      📊 User Performance Data (use for prioritization):
-${subtopicPerformance.map(p => `      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})`).join('\n')}
+      📊 User Quiz Performance - Adjust humor and depth:
+${subtopicPerformance.map(p => 
+`      - "${p.subtopicName}": ${Math.round(p.accuracy)}% accuracy (${p.status})
+        ${p.status === 'weak' || p.status === 'neutral'
+          ? '→ EXTRA HILARIOUS & COMPREHENSIVE: 5-8 paragraphs of comedy gold mixed with deep teaching, multiple funny examples, witty analogies, and entertaining explanations that make learning stick'
+          : '→ Quick funny review: 1-2 paragraphs with light humor'
+        }`
+      ).join('\n')}
       
-      Make weak areas extra fun and engaging with more humor and interactive examples.
+      Make weak areas extra fun and engaging with MUCH MORE humor, interactive examples, and comprehensive funny explanations!
       `;
     }
 

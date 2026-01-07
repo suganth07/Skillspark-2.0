@@ -406,24 +406,25 @@ export class EmotionDetector {
 
     // 3. Confused - raised eyebrows + head tilt + facial asymmetry
     let confusionScore = 0;
-    if (avgBrowHeight > 1.2) {
-      // Raised eyebrows
+    if (avgBrowHeight > 1.25) {
+      // Raised eyebrows (balanced threshold)
       confusionScore += 0.35;
     }
-    if (Math.abs(tiltAngle) > 8 && Math.abs(tiltAngle) < 25) {
-      // Moderate head tilt
+    if (Math.abs(tiltAngle) > 10 && Math.abs(tiltAngle) < 30) {
+      // Moderate head tilt (balanced - between 8 and 12)
       confusionScore += 0.25;
     }
-    if (browAsymmetry > 0.15) {
-      // Asymmetric eyebrows
+    if (browAsymmetry > 0.18) {
+      // Asymmetric eyebrows (balanced)
       confusionScore += 0.2;
     }
-    if (symmetryRatio < 0.3) {
-      // Facial asymmetry
+    if (symmetryRatio < 0.27) {
+      // Facial asymmetry (balanced)
       confusionScore += 0.2;
     }
 
-    if (confusionScore > 0.5) {
+    if (confusionScore > 0.58) {
+      // Balanced threshold (requires at least 3 indicators)
       return {
         emotion: "confused",
         confidence: Math.min(0.95, confusionScore),

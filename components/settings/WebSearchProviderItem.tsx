@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Pressable } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Globe, Search } from 'lucide-react-native';
-import { useWebSearchProvider, useSetWebSearchProvider, useIsWebSearchProviderAvailable, type WebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
+import { useWebSearchProvider, useSetWebSearchProvider, useIsWebSearchProviderAvailable, useWebSearchProviderRefreshKey, type WebSearchProvider } from '@/hooks/stores/useWebSearchProviderStore';
 
 interface WebSearchProviderItemProps {
   onValueChange?: (value: boolean) => void;
@@ -12,6 +12,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
   const currentProvider = useWebSearchProvider();
   const setProvider = useSetWebSearchProvider();
   const isProviderAvailable = useIsWebSearchProviderAvailable();
+  const refreshKey = useWebSearchProviderRefreshKey();
   
   const [availability, setAvailability] = useState<Record<WebSearchProvider, boolean>>({
     langsearch: false,
@@ -44,7 +45,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
       });
     };
     checkAvailability();
-  }, []);
+  }, [refreshKey]);
 
   const handleProviderSelect = async (providerId: WebSearchProvider) => {
     // Check availability before attempting to set

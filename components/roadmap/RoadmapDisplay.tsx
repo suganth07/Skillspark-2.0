@@ -583,37 +583,16 @@ export function RoadmapDisplay({ roadmapId, onTakeQuiz, onViewResults, onRevisio
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background p-6">
-        {/* Header Skeleton */}
-        <View className="flex-row items-start mb-6">
-          <Skeleton className="h-8 w-8 rounded-full mr-3" />
-          <View className="flex-1">
-            <Skeleton className="h-7 w-3/4 mb-2" />
-            <Skeleton className="h-4 w-full" />
-          </View>
-          <Skeleton className="h-10 w-10 rounded-lg ml-4" />
-        </View>
-
-        {/* Progress Card Skeleton */}
-        <View className="mb-6">
-          <Skeleton className="h-32 w-full rounded-xl" />
-        </View>
-
-        {/* Timeline Skeletons */}
-        <Skeleton className="h-5 w-32 mb-2" />
-        <Skeleton className="h-3 w-48 mb-6" />
-
-        {[1, 2, 3].map((i) => (
-          <View key={i} className="flex-row mb-6">
-            <View className="items-center mr-4">
-              <Skeleton className="h-10 w-10 rounded-full" />
-              {i !== 3 && <View className="w-0.5 flex-1 my-1" style={{ minHeight: 60, backgroundColor: 'rgba(128, 128, 128, 0.2)' }} />}
-            </View>
-            <View className="flex-1">
-              <Skeleton className="h-40 w-full rounded-xl" />
-            </View>
-          </View>
-        ))}
+      <View className="flex-1 bg-background justify-center items-center px-6">
+        <LoadingAnimation 
+          title="Loading Roadmap"
+          messages={[
+            'Fetching your learning path...',
+            'Loading progress data...',
+            'Preparing roadmap steps...',
+            'Almost ready...',
+          ]}
+        />
       </View>
     );
   }

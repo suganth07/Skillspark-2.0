@@ -9,6 +9,9 @@ interface WebSearchProviderStoreState {
   // Current web search provider selection
   provider: WebSearchProvider;
   
+  // Refresh key to trigger UI updates
+  refreshKey: number;
+  
   // Actions
   setProvider: (provider: WebSearchProvider) => Promise<void>;
   
@@ -43,6 +46,9 @@ export const useWebSearchProviderStore = create<WebSearchProviderStoreState>()(
       // Default to LangSearch
       provider: 'langsearch',
       
+      // Initialize refresh key
+      refreshKey: 0,
+      
       setProvider: async (provider: WebSearchProvider) => {
         const isAvailable = await get().isProviderAvailable(provider);
         if (!isAvailable) {
@@ -72,6 +78,9 @@ export const useWebSearchProviderStore = create<WebSearchProviderStoreState>()(
       },
       
       refreshAvailability: async () => {
+        // Increment refresh key to trigger UI updates
+        set((state) => ({ refreshKey: state.refreshKey + 1 }));
+        
         // This method can be called to trigger UI updates after key changes
         const currentProvider = get().provider;
         const isAvailable = await get().isProviderAvailable(currentProvider);
@@ -100,3 +109,4 @@ export const useWebSearchProvider = () => useWebSearchProviderStore((state) => s
 export const useSetWebSearchProvider = () => useWebSearchProviderStore((state) => state.setProvider);
 export const useIsWebSearchProviderAvailable = () => useWebSearchProviderStore((state) => state.isProviderAvailable);
 export const useRefreshWebSearchProviderAvailability = () => useWebSearchProviderStore((state) => state.refreshAvailability);
+export const useWebSearchProviderRefreshKey = () => useWebSearchProviderStore((state) => state.refreshKey);

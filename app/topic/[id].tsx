@@ -33,7 +33,7 @@ import { ToneChangeModal } from '@/components/emotion/ToneChangeModal';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
 import { ToneSwitcher } from '@/components/topic/ToneSwitcher';
 import MarkdownText from '@/components/ui/MarkdownText';
-import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2, Settings2, ArrowLeft, MessageSquare } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2, Settings2, ArrowLeft, MessageSquare, Rocket } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 
@@ -97,6 +97,10 @@ export default function TopicDetailScreen() {
   // API Key Required Dialog state
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyDialogMessage, setApiKeyDialogMessage] = useState('');
+  
+  // Error and success message states
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Bottom sheet ref for search results
   const searchSheetRef = useRef<BottomSheetModal>(null);
@@ -204,11 +208,7 @@ export default function TopicDetailScreen() {
           onError: (error) => {
             console.error('❌ Failed to generate web search content:', error);
             setIsGeneratingWebContent(false);
-            Alert.alert(
-              'Generation Failed',
-              'Failed to generate content from web search results. Please try again.',
-              [{ text: 'OK' }]
-            );
+            setErrorMessage('Failed to generate content from web search results. Please try again.');
           }
         });
       }
@@ -321,11 +321,7 @@ export default function TopicDetailScreen() {
       );
       
       if (!roadmap) {
-        Alert.alert(
-          'No Roadmap Found',
-          'This topic is not part of any roadmap. Please access it through a roadmap to take a quiz.',
-          [{ text: 'OK' }]
-        );
+        setErrorMessage('This topic is not part of any roadmap. Please access it through a roadmap to take a quiz.');
         return;
       }
       
@@ -380,11 +376,7 @@ export default function TopicDetailScreen() {
       if (!step) {
         setShowQuiz(false);
         setIsGeneratingQuiz(false);
-        Alert.alert(
-          'Error',
-          'Could not find the roadmap step for this topic.',
-          [{ text: 'OK' }]
-        );
+        setErrorMessage('Could not find the roadmap step for this topic.');
         return;
       }
       
@@ -402,20 +394,12 @@ export default function TopicDetailScreen() {
       console.error('Error generating quiz:', error);
       setShowQuiz(false);
       setIsGeneratingQuiz(false);
-      Alert.alert(
-        'Quiz Generation Failed',
-        error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.',
-        [{ text: 'OK' }]
-      );
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.');
     }
   };
   
   const handleAnalyze = () => {
-    Alert.alert(
-      'Analyze Feature',
-      'Topic analysis feature coming soon! This will provide insights into your learning progress.',
-      [{ text: 'OK' }]
-    );
+    setSuccessMessage('Topic analysis feature coming soon! This will provide insights into your learning progress.');
   };
   
   const handleQuizComplete = () => {
@@ -450,11 +434,7 @@ export default function TopicDetailScreen() {
       setWebSearchResults(result.newSubtopics);
     } catch (error) {
       console.error('❌ Web search failed:', error);
-      Alert.alert(
-        'Search Failed',
-        error instanceof Error ? error.message : 'Failed to search for updates. Please try again.',
-        [{ text: 'OK' }]
-      );
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to search for updates. Please try again.');
       searchSheetRef.current?.dismiss();
     } finally {
       setIsSearching(false);
@@ -524,9 +504,16 @@ export default function TopicDetailScreen() {
             <ArrowLeft size={20} color={isDarkColorScheme ? '#fafafa' : '#0a0a0a'} />
           </Pressable>
         </View>
-        <ScrollView className="flex-1">
-          <TopicDetailSkeleton />
-        </ScrollView>
+        <View className="flex-1 justify-center items-center px-6">
+          <LoadingAnimation 
+            title="Loading Topic"
+            messages={[
+              'Fetching topic details...',
+              'Preparing learning content...',
+              'Almost ready...',
+            ]}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -707,7 +694,7 @@ export default function TopicDetailScreen() {
     if (!currentUserId || !currentTopicDetail || selectedSubtopics.size === 0) return;
     
     if (!regenerateInstructions.trim()) {
-      Alert.alert('Instructions Required', 'Please enter your question or instructions for regeneration.');
+      setErrorMessage('Please enter your question or instructions for regeneration.');
       return;
     }
 
@@ -733,19 +720,11 @@ export default function TopicDetailScreen() {
         setIsRegeneratingSubtopics(false);
         setSelectedSubtopics(new Set());
         setRegenerateInstructions('');
-        Alert.alert(
-          'Regeneration Complete!',
-          'Selected subtopics have been regenerated with your instructions for all 3 learning styles.',
-          [{ text: 'OK' }]
-        );
+        setSuccessMessage('Selected subtopics have been regenerated with your instructions for all 3 learning styles.');
       },
       onError: (error) => {
         setIsRegeneratingSubtopics(false);
-        Alert.alert(
-          'Regeneration Failed',
-          error instanceof Error ? error.message : 'Failed to regenerate subtopics. Please try again.',
-          [{ text: 'OK' }]
-        );
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to regenerate subtopics. Please try again.');
       },
     });
   };
@@ -794,6 +773,50 @@ export default function TopicDetailScreen() {
       
       <ScrollView className="flex-1">
         <View className="p-6 space-y-6">
+          {/* Error Message Banner */}
+          {errorMessage && (
+            <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)}>
+              <Card className="bg-destructive/10 border-destructive">
+                <View className="p-4 flex-row items-start gap-3">
+                  <AlertCircle size={20} className="text-destructive mt-0.5" />
+                  <View className="flex-1">
+                    <Text className="text-sm text-destructive font-medium mb-2">
+                      {errorMessage}
+                    </Text>
+                    <Pressable
+                      onPress={() => setErrorMessage(null)}
+                      className="self-start"
+                    >
+                      <Text className="text-xs text-destructive/80 font-medium">Dismiss</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </Card>
+            </Animated.View>
+          )}
+
+          {/* Success Message Banner */}
+          {successMessage && (
+            <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)}>
+              <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                <View className="p-4 flex-row items-start gap-3">
+                  <CheckCircle2 size={20} className="text-green-600 dark:text-green-400 mt-0.5" />
+                  <View className="flex-1">
+                    <Text className="text-sm text-green-700 dark:text-green-300 font-medium mb-2">
+                      {successMessage}
+                    </Text>
+                    <Pressable
+                      onPress={() => setSuccessMessage(null)}
+                      className="self-start"
+                    >
+                      <Text className="text-xs text-green-600 dark:text-green-400 font-medium">Dismiss</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </Card>
+            </Animated.View>
+          )}
+
           {/* Content Generation Warning Banner */}
           {explanation.failedTones && (explanation.failedTones.default || explanation.failedTones.simplified || explanation.failedTones.story) && (
             <Card className="bg-yellow-50 border-yellow-200">
@@ -888,6 +911,7 @@ export default function TopicDetailScreen() {
             <TopicEmotionDetector 
               onEmotionDetected={(emotion, confidence) => {
                 console.log(`📊 User emotion: ${emotion} (${(confidence * 100).toFixed(1)}%)`);
+                console.log(`📋 Expanded sections: ${expandedSectionsRef.current.size}, Cooldown active: ${Date.now() - lastToneSwitchTime.current < 45000}`);
                 setCurrentEmotion(emotion);
                 
                 // Detect if user is looking away/distracted
@@ -910,7 +934,7 @@ export default function TopicDetailScreen() {
                     let targetTone: ContentVersion | null = null;
                     let shouldSwitch = false;
                     
-                    if (emotion === 'wbored' || emotion === 'drowsy') {
+                    if (emotion === 'bored' || emotion === 'drowsy') {
                       targetTone = 'story';
                       shouldSwitch = true;
                       console.log('😴 User seems bored/drowsy → Switching to Story mode');
@@ -942,8 +966,10 @@ export default function TopicDetailScreen() {
                           setSubtopicVersions(prev => ({ ...prev, ...updatedVersions }));
                           
                           // Show modal notification
+                          console.log(`🔔 SHOWING TONE CHANGE MODAL: ${targetTone}`);
                           setNewToneToShow(targetTone);
                           setShowToneChangeModal(true);
+                          console.log(`📱 Modal state set - isOpen should be true`);
                         } else {
                           console.log('ℹ️ All expanded subtopics already in target tone');
                         }
@@ -1133,16 +1159,15 @@ export default function TopicDetailScreen() {
               <CardContent>
                 {isGeneratingWebContent && (
                   <View className="items-center py-8">
-                    <View className="bg-primary/10 dark:bg-primary/20 rounded-full p-4 mb-4">
-                      <Sparkles size={32} className="text-primary" />
-                    </View>
-                    <ActivityIndicator size="large" className="mb-4" />
-                    <Text className="text-lg font-semibold text-foreground text-center mb-2">
-                      Generating Latest Content
-                    </Text>
-                    <Text className="text-sm text-muted-foreground text-center leading-relaxed">
-                      Creating educational material from web search results...
-                    </Text>
+                    <LoadingAnimation 
+                      title="Generating Latest Content"
+                      messages={[
+                        'Creating educational material from web search results...',
+                        'Analyzing recent updates...',
+                        'Organizing information...',
+                        'Almost ready...',
+                      ]}
+                    />
                   </View>
                 )}
               </CardContent>
@@ -1328,7 +1353,7 @@ export default function TopicDetailScreen() {
                         if (selectedSubtopics.size > 0) {
                           setShowRegenerateModal(true);
                         } else {
-                          Alert.alert('Select Topics', 'Please select at least one topic to ask about.');
+                          setErrorMessage('Please select at least one topic to ask about.');
                         }
                       }}
                       className="px-3 py-2 rounded-lg flex-row items-center gap-1 active:opacity-70"
@@ -1628,6 +1653,7 @@ export default function TopicDetailScreen() {
               {/* Take a Test Button */}
               <Pressable
                 onPress={handleTakeTest}
+                disabled={isGeneratingQuiz}
                 className="flex-1"
                 style={{
                   flexDirection: 'row',
@@ -1636,13 +1662,43 @@ export default function TopicDetailScreen() {
                   gap: 8,
                   paddingVertical: 14,
                   borderRadius: 6,
-                  backgroundColor: isDarkColorScheme ? '#18181b' : '#f4f4f5',
+                  backgroundColor: isGeneratingQuiz 
+                    ? (isDarkColorScheme ? '#27272a' : '#e4e4e7')
+                    : (isDarkColorScheme ? '#18181b' : '#f4f4f5'),
+                  opacity: isGeneratingQuiz ? 0.7 : 1,
                 }}
               >
-                <BookOpen size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
-                <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b', letterSpacing: 0.3 }}>
-                  Take a Test
-                </Text>
+                {isGeneratingQuiz ? (
+                  <>
+                    <View className="h-5 w-5 items-center justify-center">
+                      <Animated.View
+                        style={{
+                          transform: [
+                            {
+                              rotate: '0deg',
+                            },
+                          ],
+                        }}
+                      >
+                        <Rocket 
+                          size={16} 
+                          color={isDarkColorScheme ? '#a1a1aa' : '#71717a'} 
+                          style={{ transform: [{ rotate: '-45deg' }] }}
+                        />
+                      </Animated.View>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#a1a1aa' : '#71717a', letterSpacing: 0.3 }}>
+                      Preparing Quiz...
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <BookOpen size={16} color={isDarkColorScheme ? '#fafafa' : '#18181b'} strokeWidth={2.5} />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkColorScheme ? '#fafafa' : '#18181b', letterSpacing: 0.3 }}>
+                      Take a Test
+                    </Text>
+                  </>
+                )}
               </Pressable>
               
               {/* Analyze Button */}
@@ -1840,78 +1896,36 @@ export default function TopicDetailScreen() {
           />
           
           <Animated.View
-            entering={ZoomIn.duration(400).springify()}
-            className="bg-card rounded-2xl w-full max-w-md overflow-hidden"
+            entering={ZoomIn.duration(300).springify()}
+            className="bg-card rounded-xl w-full max-w-md overflow-hidden border border-border"
             style={{
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.3,
-              shadowRadius: 20,
-              elevation: 10,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 12,
+              elevation: 5,
             }}
           >
             <View className="p-6">
-              {/* Alert Icon */}
-              <View className="items-center mb-4">
-                <View className="bg-orange-100 dark:bg-orange-900/30 rounded-full p-4 mb-3">
-                  <AlertCircle size={48} className="text-orange-500" />
-                </View>
-                <Text className="text-2xl font-bold text-foreground text-center mb-2">
-                  You Seem Distracted
+              {/* Header */}
+              <View className="mb-6">
+                <Text className="text-xl font-semibold text-foreground mb-2">
+                  Focus Reminder
                 </Text>
-                <Text className="text-base text-muted-foreground text-center leading-relaxed">
-                  We noticed you're looking away. Let's get back to learning! 🎯
+                <Text className="text-sm text-muted-foreground leading-relaxed">
+                  We noticed you may be distracted. Take a moment to refocus on your learning.
                 </Text>
               </View>
 
-              {/* Distraction Stats */}
-              <View className="bg-secondary rounded-lg p-4 mb-6">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-sm text-muted-foreground">
-                    Distraction Count
-                  </Text>
-                  <View className="bg-orange-500 rounded-full px-3 py-1">
-                    <Text className="text-white font-bold">
-                      {distractionCount}
-                    </Text>
-                  </View>
-                </View>
-                <Text className="text-xs text-muted-foreground mt-2">
-                  💡 Staying focused helps you learn faster!
+              {/* Action Button */}
+              <Pressable
+                onPress={() => setShowDistractionAlert(false)}
+                className="w-full h-11 items-center justify-center rounded-lg bg-primary active:opacity-90"
+              >
+                <Text className="text-sm font-medium text-primary-foreground">
+                  Continue Learning
                 </Text>
-              </View>
-
-              {/* Action Buttons */}
-              <View className="flex-col gap-3">
-                <Pressable
-                  onPress={() => setShowDistractionAlert(false)}
-                  className="w-full h-12 items-center justify-center rounded-lg bg-orange-500 active:bg-orange-600 flex-row gap-2"
-                >
-                  <CheckCircle2 size={20} className="text-white" />
-                  <Text className="text-base font-semibold text-white">
-                    I'm Back, Let's Continue!
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    setShowDistractionAlert(false);
-                    // Could add a "take a break" feature here
-                  }}
-                  className="w-full h-10 items-center justify-center rounded-lg active:opacity-70"
-                >
-                  <Text className="text-sm font-medium text-muted-foreground">
-                    Dismiss
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Motivational Message */}
-              <View className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <Text className="text-xs text-center text-green-700 dark:text-green-300 leading-relaxed">
-                  🌟 "Focus is the gateway to success. Stay engaged and unlock your potential!"
-                </Text>
-              </View>
+              </Pressable>
             </View>
           </Animated.View>
         </Animated.View>
@@ -2035,6 +2049,7 @@ export default function TopicDetailScreen() {
             <QuizResults
               userId={currentUserId}
               quizId={quizId}
+              stepTitle={topic.name}
               onClose={() => {
                 setShowQuizResults(false);
                 handleQuizComplete();

@@ -9,6 +9,9 @@ interface AIProviderStoreState {
   // Current AI provider selection
   provider: AIProvider;
   
+  // Refresh key to trigger UI updates
+  refreshKey: number;
+  
   // Actions
   setProvider: (provider: AIProvider) => void;
   
@@ -43,6 +46,9 @@ export const useAIProviderStore = create<AIProviderStoreState>()(
       // Default to Gemini
       provider: 'gemini',
       
+      // Initialize refresh key
+      refreshKey: 0,
+      
       setProvider: async (provider: AIProvider) => {
         const isAvailable = await get().isProviderAvailable(provider);
         if (!isAvailable) {
@@ -72,6 +78,9 @@ export const useAIProviderStore = create<AIProviderStoreState>()(
       },
       
       refreshAvailability: async () => {
+        // Increment refresh key to trigger UI updates
+        set((state) => ({ refreshKey: state.refreshKey + 1 }));
+        
         // This method can be called to trigger UI updates after key changes
         const currentProvider = get().provider;
         const isAvailable = await get().isProviderAvailable(currentProvider);
@@ -100,3 +109,4 @@ export const useAIProvider = () => useAIProviderStore((state) => state.provider)
 export const useSetAIProvider = () => useAIProviderStore((state) => state.setProvider);
 export const useIsProviderAvailable = () => useAIProviderStore((state) => state.isProviderAvailable);
 export const useRefreshProviderAvailability = () => useAIProviderStore((state) => state.refreshAvailability);
+export const useAIProviderRefreshKey = () => useAIProviderStore((state) => state.refreshKey);

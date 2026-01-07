@@ -14,7 +14,6 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
-  Image,
   Platform,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -64,7 +63,7 @@ const EMOTIONS = [
   "looking_away",
 ];
 
-const DETECTION_INTERVAL = 10000; // 10 seconds
+const DETECTION_INTERVAL = 30000; // 30 seconds
 
 export function TopicEmotionDetector({
   onEmotionDetected,
@@ -73,12 +72,17 @@ export function TopicEmotionDetector({
   const [emotion, setEmotion] = useState<EmotionResultState | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [countdown, setCountdown] = useState(DETECTION_INTERVAL / 1000);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
   
   // Initialize emotion detector
   const emotionDetector = useRef(new EmotionDetector()).current;
+  
+  // Store callback in ref to prevent interval recreation
+  const onEmotionDetectedRef = useRef(onEmotionDetected);
+  useEffect(() => {
+    onEmotionDetectedRef.current = onEmotionDetected;
+  }, [onEmotionDetected]);
 
   // Main emotion detection function
   const detectEmotion = useCallback(async () => {
@@ -88,14 +92,21 @@ export function TopicEmotionDetector({
       return;
     }
 
+    // Reset countdown immediately when detection starts
+    setCountdown(DETECTION_INTERVAL / 1000);
     setIsProcessing(true);
     setError(null);
 
     try {
-      // Capture photo from camera
+      // Capture photo from camera (silently, no processing to avoid sound/flicker)
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
         skipProcessing: true,
+        exif: false,
+        base64: false,
+        imageType: 'jpg',
+        isImageMirror: false,
+        shutterSound: false
       });
 
       if (!photo?.uri) {
@@ -104,7 +115,6 @@ export function TopicEmotionDetector({
         return;
       }
 
-      setCapturedImage(photo.uri);
       console.log("📷 Photo captured:", photo.uri);
 
       // Detect face landmarks using native module
@@ -156,7 +166,7 @@ export function TopicEmotionDetector({
       };
 
       setEmotion(result_state);
-      onEmotionDetected?.(emotionResult.emotion, emotionResult.confidence);
+      onEmotionDetectedRef.current?.(emotionResult.emotion, emotionResult.confidence);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       console.error("Error detecting emotion:", errorMessage);
@@ -164,28 +174,36 @@ export function TopicEmotionDetector({
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, emotionDetector, onEmotionDetected]);
+  }, [isProcessing, emotionDetector]);
 
-  // Set up detection interval
+  // Store detectEmotion in ref to prevent interval recreation
+  const detectEmotionRef = useRef(detectEmotion);
+  useEffect(() => {
+    detectEmotionRef.current = detectEmotion;
+  }, [detectEmotion]);
+
+  // Set up detection interval - runs only once on mount
   useEffect(() => {
     if (!isFaceLandmarksAvailable) return;
 
+    console.log('🔄 Setting up emotion detection interval (30 seconds)');
+
     // Initial detection after 2 seconds
     const initialTimeout = setTimeout(() => {
-      detectEmotion();
+      detectEmotionRef.current();
     }, 2000);
 
-    // Regular detection every 10 seconds
+    // Regular detection every 30 seconds
     const interval = setInterval(() => {
-      detectEmotion();
-      setCountdown(DETECTION_INTERVAL / 1000);
+      detectEmotionRef.current();
     }, DETECTION_INTERVAL);
 
     return () => {
+      console.log('🛑 Cleaning up emotion detection interval');
       clearInterval(interval);
       clearTimeout(initialTimeout);
     };
-  }, [detectEmotion]);
+  }, []);
 
   // Countdown timer
   useEffect(() => {
@@ -304,31 +322,26 @@ export function TopicEmotionDetector({
 
   return (
     <View className="mb-6">
-      {/* Hidden camera for capturing photos */}
-      <View style={{ position: "absolute", opacity: 0, width: 1, height: 1 }}>
+      {/* Hidden camera - positioned off-screen to prevent flicker */}
+      <View style={{ position: "absolute", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, zIndex: -1 }}>
         <CameraView
           ref={cameraRef}
           style={{ width: 1, height: 1 }}
           facing="front"
           mirror={false}
+          enableTorch={false}
+          animateShutter={false}
         />
       </View>
 
       <Card>
         <View className="p-4">
-          <View className="flex-row items-center justify-between mb-3">
-            <View className="flex-row items-center gap-2">
-              <Brain
-                size={18}
-                className="text-purple-600 dark:text-purple-400"
-              />
-              <Text className="text-sm font-semibold">Learning Engagement</Text>
-            </View>
-
-            <View className="flex-row items-center gap-2 bg-secondary px-3 py-1.5 rounded-full">
-              <Camera size={14} className="text-foreground" />
-              <Text className="text-xs font-medium">Next: {countdown}s</Text>
-            </View>
+          <View className="flex-row items-center gap-2 mb-3">
+            <Brain
+              size={18}
+              className="text-purple-600 dark:text-purple-400"
+            />
+            <Text className="text-sm font-semibold">Learning Engagement</Text>
           </View>
 
           {error && (
@@ -344,26 +357,8 @@ export function TopicEmotionDetector({
               entering={FadeIn.duration(300)}
               className="flex-row items-center gap-3"
             >
-              {capturedImage && (
-                <View className="relative">
-                  <Image
-                    source={{ uri: capturedImage }}
-                    style={styles.thumbnail}
-                    className="rounded-lg"
-                  />
-                  {isProcessing && (
-                    <View style={styles.thumbnailOverlay}>
-                      <ActivityIndicator size="small" color="#fff" />
-                    </View>
-                  )}
-                </View>
-              )}
-
               <View className="flex-1">
                 <View className="flex-row items-center gap-2 mb-1">
-                  <Text style={{ fontSize: 24 }}>
-                    {getEmotionEmoji(emotion.emotion)}
-                  </Text>
                   <Text
                     className="text-base font-bold"
                     style={{ color: getEmotionColor(emotion.emotion) }}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Zap, Sparkles } from 'lucide-react-native';
-import { useAIProvider, useSetAIProvider, useIsProviderAvailable, type AIProvider } from '@/hooks/stores/useAIProviderStore';
+import { useAIProvider, useSetAIProvider, useIsProviderAvailable, useAIProviderRefreshKey, type AIProvider } from '@/hooks/stores/useAIProviderStore';
 
 interface AIProviderItemProps {
   onValueChange?: (value: boolean) => void;
@@ -12,6 +12,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
   const currentProvider = useAIProvider();
   const setProvider = useSetAIProvider();
   const isProviderAvailable = useIsProviderAvailable();
+  const refreshKey = useAIProviderRefreshKey();
   
   const [availability, setAvailability] = useState<Record<AIProvider, boolean>>({
     gemini: false,
@@ -44,7 +45,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
       });
     };
     checkAvailability();
-  }, []);
+  }, [refreshKey]);
 
   const handleProviderSelect = async (providerId: AIProvider) => {
     // Check availability before attempting to set

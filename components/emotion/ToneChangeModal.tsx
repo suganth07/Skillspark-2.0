@@ -18,6 +18,13 @@ interface ToneChangeModalProps {
 export function ToneChangeModal({ isOpen, onClose, newTone }: ToneChangeModalProps) {
   const { isDarkColorScheme } = useColorScheme();
 
+  // Debug logging
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log(`🔔 ToneChangeModal rendered with isOpen=${isOpen}, newTone=${newTone}`);
+    }
+  }, [isOpen, newTone]);
+
   const getToneInfo = () => {
     if (newTone === 'story') {
       return {

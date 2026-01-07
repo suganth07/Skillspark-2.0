@@ -41,7 +41,6 @@ export async function searchTopicUpdates(
     // Build a focused query for latest research, updates, and findings
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
-    const formattedDate = completedDate ? completedDate.toISOString().split('T')[0] : `${lastYear}`;
     
     // More targeted query focusing on recent developments, research, and news
     const query = `${topicName} latest research findings updates news ${currentYear} ${lastYear} recent developments breakthrough`;
@@ -244,8 +243,10 @@ function extractActualUpdatesFromResults(
     return !updates.slice(0, index).some(prev => {
       const prevLower = prev.toLowerCase().replace(/\[read more\].*$/i, '').trim();
       // Check if updates are very similar (>70% overlap)
-      const similarity = updateLower.includes(prevLower.substring(0, 50)) || 
-                         prevLower.includes(updateLower.substring(0, 50));
+      const prefixLen = Math.min(50, updateLower.length, prevLower.length);
+      if (prefixLen < 10) return false; // Too short to compare meaningfully
+      const similarity = updateLower.includes(prevLower.substring(0, prefixLen)) || 
+                         prevLower.includes(updateLower.substring(0, prefixLen));
       return similarity;
     });
   });

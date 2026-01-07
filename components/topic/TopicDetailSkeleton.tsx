@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function TopicDetailSkeleton() {
   return (
-    <View className="p-6 space-y-6">
+    <View className="p-6 gap-y-6">
       {/* Header Skeleton */}
       <View className="mb-6">
         <View className="flex-row items-start justify-between mb-3">
@@ -33,7 +33,7 @@ export function TopicDetailSkeleton() {
       </View>
 
       {/* Subtopics Skeleton */}
-      <View className="space-y-3">
+      <View className="gap-y-3">
         {[1, 2, 3].map((i) => (
           <View 
             key={i}

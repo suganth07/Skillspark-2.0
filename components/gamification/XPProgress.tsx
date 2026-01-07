@@ -20,7 +20,6 @@ import { Star, Zap } from '@/components/Icons';
 
 interface XPProgressBarProps {
   xp: number;
-  level: number;
   showDetails?: boolean;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -29,7 +28,6 @@ interface XPProgressBarProps {
 
 export function XPProgressBar({ 
   xp, 
-  level: levelProp, 
   showDetails = true,
   className,
   size = 'md',
@@ -53,16 +51,35 @@ export function XPProgressBar({
   // Animate progress bar and XP counter when xp changes
   useEffect(() => {
     const startXP = animateFrom ?? prevXPRef.current;
-    const startProgress = calculateLevelProgress(startXP, level);
+    const startLevel = calculateLevel(startXP);
+    const startProgress = calculateLevelProgress(startXP, startLevel);
     
     // Set initial progress
     progressWidth.value = startProgress;
     
-    // Animate to new progress
-    progressWidth.value = withTiming(progress, {
-      duration: 800,
-      easing: Easing.out(Easing.cubic),
-    });
+    // Handle cross-level transitions
+    if (startLevel !== level && startXP !== xp) {
+      // Animate to 100% in the old level
+      progressWidth.value = withTiming(100, {
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+      }, (finished) => {
+        if (finished) {
+          // Reset to 0% and animate to new progress in the new level
+          progressWidth.value = 0;
+          progressWidth.value = withTiming(progress, {
+            duration: 400,
+            easing: Easing.out(Easing.cubic),
+          });
+        }
+      });
+    } else {
+      // Same level, just animate to new progress
+      progressWidth.value = withTiming(progress, {
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
 
     // Streaming XP counter animation
     if (startXP !== xp) {

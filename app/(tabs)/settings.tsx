@@ -33,7 +33,6 @@ export default function Settings() {
               <Text className="text-lg font-semibold mb-3">Your Progress</Text>
               <XPProgressBar 
                 xp={currentUser.xp || 0}
-                level={currentUser.level || 1}
                 showDetails={true}
                 size="md"
               />

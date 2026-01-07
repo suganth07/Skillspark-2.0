@@ -26,70 +26,13 @@ import { useColorScheme } from '@/lib/useColorScheme';
 import { TopicEmotionDetector } from '@/components/emotion/TopicEmotionDetector';
 import { ToneChangeModal } from '@/components/emotion/ToneChangeModal';
 import { TopicVideoGenerator } from '@/components/topic/TopicVideoGenerator';
+import { ToneSwitcher } from '@/components/topic/ToneSwitcher';
+import MarkdownText from '@/components/ui/MarkdownText';
 import { ChevronDown, ChevronUp, BookOpen, Code, Lightbulb, Sparkles, AlertCircle, RefreshCw, Loader2, Search, ExternalLink, CheckCircle2, Circle, Wand2, Settings2, ArrowLeft, MessageSquare } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 
 type ContentVersion = 'default' | 'simplified' | 'story';
-
-// Component to render markdown text with clickable links
-function MarkdownText({ text }: { text: string }) {
-  const parts: Array<{ text: string; url?: string }> = [];
-  
-  // Parse markdown links: [text](url)
-  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before the link
-    if (match.index > lastIndex) {
-      parts.push({ text: text.substring(lastIndex, match.index) });
-    }
-    // Add the link
-    parts.push({ text: match[1], url: match[2] });
-    lastIndex = regex.lastIndex;
-  }
-  
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push({ text: text.substring(lastIndex) });
-  }
-  
-  if (parts.length === 0) {
-    parts.push({ text });
-  }
-  
-  return (
-    <View className="flex-row flex-wrap ml-2">
-      <Text className="text-sm text-foreground">• </Text>
-      {parts.map((part, index) => (
-        part.url ? (
-          <Pressable
-            key={index}
-            onPress={async () => {
-              try {
-                await WebBrowser.openBrowserAsync(part.url!);
-              } catch (error) {
-                console.error('Error opening URL:', error);
-                Alert.alert('Error', 'Could not open link');
-              }
-            }}
-            className="active:opacity-70"
-          >
-            <Text className="text-sm text-blue-500 underline">
-              {part.text}
-            </Text>
-          </Pressable>
-        ) : (
-          <Text key={index} className="text-sm text-foreground">
-            {part.text}
-          </Text>
-        )
-      ))}
-    </View>
-  );
-}
 
 export default function TopicDetailScreen() {
   const { id, webSearchResults: webSearchParam, topicName: topicNameParam, generateWebContent } = useLocalSearchParams<{ 
@@ -1126,108 +1069,21 @@ export default function TopicDetailScreen() {
                         {/* Accordion Content */}
                         {isExpanded && (
                           <View className="border-t border-border bg-secondary/20 dark:bg-secondary/10">
-                            {/* Content Header with Settings Toggle */}
-                            <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
-                              {/* Current mode indicator */}
-                              <View className="flex-row items-center gap-2">
-                                <Text className="text-xs text-muted-foreground">Mode:</Text>
-                                <View className="bg-primary/10 dark:bg-primary/20 px-2 py-1 rounded-full">
-                                  <Text className="text-xs font-medium text-primary capitalize">{currentVersion}</Text>
-                                </View>
-                              </View>
-                              
-                              {/* Settings toggle */}
-                              <Pressable
-                                onPress={() => {
-                                  const newShow = new Set(showWebSearchToneSwitcher);
-                                  if (newShow.has(subtopic.id)) {
-                                    newShow.delete(subtopic.id);
-                                  } else {
-                                    newShow.add(subtopic.id);
-                                  }
-                                  setShowWebSearchToneSwitcher(newShow);
-                                }}
-                                className={`p-2 rounded-lg active:opacity-70 ${showWebSearchToneSwitcher.has(subtopic.id) ? 'bg-primary/10 dark:bg-primary/20' : ''}`}
-                              >
-                                <Settings2 size={18} color={isDarkColorScheme ? (showWebSearchToneSwitcher.has(subtopic.id) ? '#a78bfa' : '#a1a1aa') : (showWebSearchToneSwitcher.has(subtopic.id) ? '#7c3aed' : '#71717a')} />
-                              </Pressable>
-                            </View>
-
-                            {/* Style Switcher - Hidden by default */}
-                            {showWebSearchToneSwitcher.has(subtopic.id) && (
-                              <Animated.View 
-                                entering={FadeIn.duration(200)}
-                                className="mx-4 mb-3 p-3 rounded-lg border border-border"
-                                style={{ backgroundColor: isDarkColorScheme ? '#27272a' : '#f4f4f5' }}
-                              >
-                                <Text className="text-xs text-muted-foreground mb-2">Select learning style:</Text>
-                                <View className="flex-row gap-2">
-                                  <Pressable
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'default' }))}
-                                    style={{
-                                      flex: 1,
-                                      paddingVertical: 10,
-                                      paddingHorizontal: 12,
-                                      borderRadius: 8,
-                                      borderWidth: 1,
-                                      backgroundColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                      borderColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                    }}
-                                  >
-                                    <Text style={{
-                                      fontSize: 12,
-                                      textAlign: 'center',
-                                      fontWeight: '500',
-                                      color: currentVersion === 'default' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                    }}>
-                                      Default
-                                    </Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'simplified' }))}
-                                    style={{
-                                      flex: 1,
-                                      paddingVertical: 10,
-                                      paddingHorizontal: 12,
-                                      borderRadius: 8,
-                                      borderWidth: 1,
-                                      backgroundColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                      borderColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                    }}
-                                  >
-                                    <Text style={{
-                                      fontSize: 12,
-                                      textAlign: 'center',
-                                      fontWeight: '500',
-                                      color: currentVersion === 'simplified' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                    }}>
-                                      Simple
-                                    </Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: 'story' }))}
-                                    style={{
-                                      flex: 1,
-                                      paddingVertical: 10,
-                                      paddingHorizontal: 12,
-                                      borderRadius: 8,
-                                      borderWidth: 1,
-                                      backgroundColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                      borderColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                    }}
-                                  >
-                                    <Text style={{
-                                      fontSize: 12,
-                                      textAlign: 'center',
-                                      fontWeight: '500',
-                                      color: currentVersion === 'story' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                    }}>
-                                      Story
-                                    </Text>
-                                  </Pressable>
-                                </View>
-                              </Animated.View>
-                            )}
+                            <ToneSwitcher
+                              currentVersion={currentVersion}
+                              onVersionChange={(v) => setWebSearchSubtopicVersions(prev => ({ ...prev, [subtopic.id]: v }))}
+                              showSettings={showWebSearchToneSwitcher.has(subtopic.id)}
+                              onToggleSettings={() => {
+                                const newShow = new Set(showWebSearchToneSwitcher);
+                                if (newShow.has(subtopic.id)) {
+                                  newShow.delete(subtopic.id);
+                                } else {
+                                  newShow.add(subtopic.id);
+                                }
+                                setShowWebSearchToneSwitcher(newShow);
+                              }}
+                              subtopicId={subtopic.id}
+                            />
 
                             {/* Content */}
                             <Animated.View 
@@ -1435,32 +1291,21 @@ export default function TopicDetailScreen() {
                       {/* Accordion Content */}
                       {isExpanded && (
                         <View className="border-t border-border bg-secondary/20 dark:bg-secondary/10">
-                          {/* Content Header with Settings Toggle */}
-                          <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
-                            {/* Current mode indicator */}
-                            <View className="flex-row items-center gap-2">
-                              <Text className="text-xs text-muted-foreground">Mode:</Text>
-                              <View className="bg-primary/10 dark:bg-primary/20 px-2 py-1 rounded-full">
-                                <Text className="text-xs font-medium text-primary capitalize">{currentVersion}</Text>
-                              </View>
-                            </View>
-                            
-                            {/* Settings toggle */}
-                            <Pressable
-                              onPress={() => {
-                                const newShow = new Set(showToneSwitcher);
-                                if (newShow.has(subtopic.id)) {
-                                  newShow.delete(subtopic.id);
-                                } else {
-                                  newShow.add(subtopic.id);
-                                }
-                                setShowToneSwitcher(newShow);
-                              }}
-                              className={`p-2 rounded-lg active:opacity-70 ${showingToneSwitcher ? 'bg-primary/10 dark:bg-primary/20' : ''}`}
-                            >
-                              <Settings2 size={18} color={isDarkColorScheme ? (showingToneSwitcher ? '#a78bfa' : '#a1a1aa') : (showingToneSwitcher ? '#7c3aed' : '#71717a')} />
-                            </Pressable>
-                          </View>
+                          <ToneSwitcher
+                            currentVersion={currentVersion}
+                            onVersionChange={(v) => setSubtopicVersion(subtopic.id, v)}
+                            showSettings={showingToneSwitcher}
+                            onToggleSettings={() => {
+                              const newShow = new Set(showToneSwitcher);
+                              if (newShow.has(subtopic.id)) {
+                                newShow.delete(subtopic.id);
+                              } else {
+                                newShow.add(subtopic.id);
+                              }
+                              setShowToneSwitcher(newShow);
+                            }}
+                            subtopicId={subtopic.id}
+                          />
                           
                           {/* Auto-adaptation indicator */}
                           {currentEmotion && (currentEmotion === 'wbored' || currentEmotion === 'drowsy' || currentEmotion === 'frustrated' || currentEmotion === 'confused') && (
@@ -1472,82 +1317,6 @@ export default function TopicDetailScreen() {
                                   : 'Content simplifying to help you understand'}
                               </Text>
                             </View>
-                          )}
-
-                          {/* Style Switcher - Hidden by default */}
-                          {showingToneSwitcher && (
-                            <Animated.View 
-                              entering={FadeIn.duration(200)}
-                              className="mx-4 mb-3 p-3 rounded-lg border border-border"
-                              style={{ backgroundColor: isDarkColorScheme ? '#27272a' : '#f4f4f5' }}
-                            >
-                              <Text className="text-xs text-muted-foreground mb-2">Select learning style:</Text>
-                              <View className="flex-row gap-2">
-                                <Pressable
-                                  onPress={() => setSubtopicVersion(subtopic.id, 'default')}
-                                  style={{
-                                    flex: 1,
-                                    paddingVertical: 10,
-                                    paddingHorizontal: 12,
-                                    borderRadius: 8,
-                                    borderWidth: 1,
-                                    backgroundColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                    borderColor: currentVersion === 'default' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                  }}
-                                >
-                                  <Text style={{
-                                    fontSize: 12,
-                                    textAlign: 'center',
-                                    fontWeight: '500',
-                                    color: currentVersion === 'default' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                  }}>
-                                    Default
-                                  </Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => setSubtopicVersion(subtopic.id, 'simplified')}
-                                  style={{
-                                    flex: 1,
-                                    paddingVertical: 10,
-                                    paddingHorizontal: 12,
-                                    borderRadius: 8,
-                                    borderWidth: 1,
-                                    backgroundColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                    borderColor: currentVersion === 'simplified' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                  }}
-                                >
-                                  <Text style={{
-                                    fontSize: 12,
-                                    textAlign: 'center',
-                                    fontWeight: '500',
-                                    color: currentVersion === 'simplified' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                  }}>
-                                    Simple
-                                  </Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => setSubtopicVersion(subtopic.id, 'story')}
-                                  style={{
-                                    flex: 1,
-                                    paddingVertical: 10,
-                                    paddingHorizontal: 12,
-                                    borderRadius: 8,
-                                    borderWidth: 1,
-                                    backgroundColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#3f3f46' : '#ffffff'),
-                                    borderColor: currentVersion === 'story' ? '#7c3aed' : (isDarkColorScheme ? '#52525b' : '#e4e4e7'),
-                                  }}
-                                >
-                                  <Text style={{
-                                    fontSize: 12,
-                                    textAlign: 'center',
-                                    fontWeight: '500',
-                                    color: currentVersion === 'story' ? '#ffffff' : (isDarkColorScheme ? '#e4e4e7' : '#3f3f46'),
-                                  }}>
-                                    Story
-                                  </Text>
-                                </Pressable>
-                              </View>
-                            </Animated.View>
                           )}
 
                           {/* Content */}

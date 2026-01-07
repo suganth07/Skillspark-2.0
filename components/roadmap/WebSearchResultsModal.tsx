@@ -134,7 +134,7 @@ export function WebSearchResultsModal({
     if (!visible) {
       hasLoadedCache.current = false;
     }
-  }, [visible]);
+  }, [visible, isSearching, handleRefresh, hasAutoRefreshed, storageKey]);
 
   // Save results to cache when they change
   useEffect(() => {

@@ -1325,6 +1325,15 @@ export async function updateStepCompletion(
     const roadmapId = stepWithOwnership[0].roadmapId;
     const wasCompleted = stepWithOwnership[0].wasCompleted;
 
+    // Read roadmap completion state BEFORE updating the step
+    const allStepsBeforeUpdate = await tx
+      .select({ isCompleted: roadmapSteps.isCompleted })
+      .from(roadmapSteps)
+      .where(eq(roadmapSteps.roadmapId, roadmapId));
+
+    const completedStepsBeforeUpdate = allStepsBeforeUpdate.filter(step => step.isCompleted).length;
+    const wasRoadmapComplete = allStepsBeforeUpdate.length > 0 && completedStepsBeforeUpdate === allStepsBeforeUpdate.length;
+
     // Update the step completion status
     await tx
       .update(roadmapSteps)
@@ -1345,7 +1354,6 @@ export async function updateStepCompletion(
       ? Math.round((completedStepsCount / allSteps.length) * 100) 
       : 0;
 
-    const wasRoadmapComplete = allSteps.length === allSteps.filter(step => step.isCompleted).length - (isCompleted ? 1 : 0);
     const isRoadmapComplete = progress === 100;
 
     await tx
@@ -1377,6 +1385,12 @@ export async function updateStepCompletion(
     } else if (!isCompleted && wasCompleted) {
       // Step marked incomplete: Deduct XP
       xpChange = -XP_REWARDS.STEP_COMPLETE;
+      
+      // Deduct roadmap completion bonus if this action reverts a completed roadmap
+      if (wasRoadmapComplete && !isRoadmapComplete) {
+        xpChange -= XP_REWARDS.ROADMAP_COMPLETE;
+      }
+      
       levelUpResult = await awardXP(userId, xpChange);
       console.log(`⚠️ Deducted ${Math.abs(xpChange)} XP for marking step incomplete`);
     }

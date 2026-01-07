@@ -1,74 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Sparkles, RefreshCw, ExternalLink } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { getItem, setItem } from '@/lib/storage';
 import { useColorScheme } from '@/lib/useColorScheme';
 import * as WebBrowser from 'expo-web-browser';
+import MarkdownText from '@/components/ui/MarkdownText';
 import {
   BottomSheetContent,
   BottomSheetHeader,
   BottomSheetView,
   BottomSheetFlatList,
 } from '@/components/primitives/bottomSheet/bottom-sheet.native';
-
-// Component to render markdown text with clickable links
-function MarkdownText({ text }: { text: string }) {
-  // Filter out "read more" text (case insensitive)
-  const cleanedText = text.replace(/\s*read more\s*/gi, '').trim();
-  
-  const parts: Array<{ text: string; url?: string }> = [];
-  
-  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = regex.exec(cleanedText)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ text: cleanedText.substring(lastIndex, match.index) });
-    }
-    parts.push({ text: match[1], url: match[2] });
-    lastIndex = regex.lastIndex;
-  }
-  
-  if (lastIndex < cleanedText.length) {
-    parts.push({ text: cleanedText.substring(lastIndex) });
-  }
-  
-  if (parts.length === 0) {
-    parts.push({ text: cleanedText });
-  }
-  
-  return (
-    <View className="flex-row flex-wrap ml-2">
-      <Text className="text-sm text-foreground">• </Text>
-      {parts.map((part, index) => (
-        part.url ? (
-          <Pressable
-            key={index}
-            onPress={async () => {
-              try {
-                await WebBrowser.openBrowserAsync(part.url!);
-              } catch (error) {
-                console.error('Error opening URL:', error);
-                Alert.alert('Error', 'Could not open link');
-              }
-            }}
-            className="active:opacity-70"
-          >
-            <Text className="text-sm text-blue-500 underline">
-              {part.text}
-            </Text>
-          </Pressable>
-        ) : (
-          <Text key={index} className="text-sm text-foreground">
-            {part.text}
-          </Text>
-        )
-      ))}
-    </View>
-  );
-}
 
 interface TopicUpdate {
   topicId: string;
@@ -98,7 +40,6 @@ export function TopicUpdatesModal({
   roadmapId,
   sheetRef
 }: TopicUpdatesModalProps) {
-  const router = useRouter();
   const { isDarkColorScheme } = useColorScheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cachedUpdates, setCachedUpdates] = useState<TopicUpdate[]>([]);
@@ -143,7 +84,7 @@ export function TopicUpdatesModal({
     if (!visible) {
       hasLoadedCache.current = false;
     }
-  }, [visible]);
+  }, [visible, handleRefresh, hasAutoRefreshed, isLoading, storageKey]);
 
   // Save updates to cache when they change
   useEffect(() => {

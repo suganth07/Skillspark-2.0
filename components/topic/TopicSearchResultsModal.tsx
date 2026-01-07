@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { Search, ExternalLink, RefreshCw } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useColorScheme } from '@/lib/useColorScheme';
+import MarkdownText from '@/components/ui/MarkdownText';
 import {
   BottomSheetContent,
   BottomSheetHeader,
@@ -10,70 +11,12 @@ import {
   BottomSheetFlatList,
 } from '@/components/primitives/bottomSheet/bottom-sheet.native';
 
-// Component to render markdown text with clickable links
-function MarkdownText({ text }: { text: string }) {
-  const cleanedText = text.replace(/\s*read more\s*/gi, '').trim();
-  
-  const parts: Array<{ text: string; url?: string }> = [];
-  
-  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = regex.exec(cleanedText)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ text: cleanedText.substring(lastIndex, match.index) });
-    }
-    parts.push({ text: match[1], url: match[2] });
-    lastIndex = regex.lastIndex;
-  }
-  
-  if (lastIndex < cleanedText.length) {
-    parts.push({ text: cleanedText.substring(lastIndex) });
-  }
-  
-  if (parts.length === 0) {
-    parts.push({ text: cleanedText });
-  }
-
-  return (
-    <View className="flex-row flex-wrap ml-2">
-      <Text className="text-sm text-foreground">• </Text>
-      {parts.map((part, index) => (
-        part.url ? (
-          <Pressable
-            key={index}
-            onPress={async () => {
-              try {
-                await WebBrowser.openBrowserAsync(part.url!);
-              } catch (error) {
-                console.error('Error opening URL:', error);
-                Alert.alert('Error', 'Could not open link');
-              }
-            }}
-            className="active:opacity-70"
-          >
-            <Text className="text-sm text-blue-500 underline">
-              {part.text}
-            </Text>
-          </Pressable>
-        ) : (
-          <Text key={index} className="text-sm text-foreground">
-            {part.text}
-          </Text>
-        )
-      ))}
-    </View>
-  );
-}
-
 interface TopicSearchResultsModalProps {
   sheetRef: React.RefObject<any>;
   results: string[];
   isSearching: boolean;
   topicName?: string;
   onRefresh: () => Promise<void>;
-  visible?: boolean;
 }
 
 export function TopicSearchResultsModal({ 
@@ -81,8 +24,7 @@ export function TopicSearchResultsModal({
   results,
   isSearching,
   topicName,
-  onRefresh,
-  visible = true
+  onRefresh
 }: TopicSearchResultsModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { isDarkColorScheme } = useColorScheme();

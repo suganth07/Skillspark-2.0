@@ -311,11 +311,11 @@ export function useSubmitQuiz() {
       const result = await submitQuizAttempt(userId, quizId, answers, roadmapId);
       return { ...result, userId, roadmapId, quizId };
     },
-    onSuccess: async ({ userId, roadmapId, leveledUp, oldLevel, newLevel, xpGained, score }) => {
+    onSuccess: async ({ userId, roadmapId, quizId, leveledUp, oldLevel, newLevel, xpGained, score }) => {
       // Use centralized cache invalidation for comprehensive cross-invalidation
       await cacheInvalidation.invalidateQuizSubmission(
         userId,
-        '',  // quizId not available in result, will trigger broader invalidation
+        quizId,
         roadmapId
       );
       // Invalidate user data to refresh XP/level display
@@ -325,9 +325,6 @@ export function useSubmitQuiz() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.users.current(userId)
       });
-
-      // Return level-up info to be handled by the component
-      return { leveledUp, oldLevel, newLevel, xpGained, action: `Scored ${score}% on quiz!` };
     },
   });
 }

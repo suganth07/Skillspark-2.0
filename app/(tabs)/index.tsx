@@ -39,7 +39,8 @@ export default function Home() {
   const totalRoadmaps = roadmaps?.length || 0;
   const completedRoadmaps = roadmaps?.filter((r: RoadmapWithProgress) => r.status === 'completed')?.length || 0;
   const inProgressRoadmaps = roadmaps?.filter((r: RoadmapWithProgress) => 
-    r.status === 'in-progress' || (r.completedSteps > 0 && r.status !== 'completed')
+    // r.status === 'in-progress' || (r.completedSteps > 0 && r.status !== 'completed')
+  r.status === 'active' && r.completedSteps > 0 && r.status !== 'completed'
   )?.length || 0;
   const totalProgress = roadmaps?.reduce((sum: number, r: RoadmapWithProgress) => sum + (r.completedSteps || 0), 0) || 0;
 
@@ -49,8 +50,9 @@ export default function Home() {
     switch (selectedFilter) {
       case 'in-progress':
         return roadmaps.filter((r: RoadmapWithProgress) => 
-          r.status === 'in-progress' || (r.completedSteps > 0 && r.status !== 'completed')
-        );
+          // r.status === 'in-progress' || (r.completedSteps > 0 && r.status !== 'completed')
+        r.status === 'active' && r.completedSteps > 0  
+      );
       case 'completed':
         return roadmaps.filter((r: RoadmapWithProgress) => r.status === 'completed');
       default:
@@ -99,7 +101,6 @@ export default function Home() {
             <View className="mt-2">
               <XPProgressBar 
                 xp={currentUser.xp || 0}
-                level={currentUser.level || 1}
                 showDetails={true}
                 size="md"
               />

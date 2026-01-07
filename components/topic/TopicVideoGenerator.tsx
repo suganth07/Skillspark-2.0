@@ -5,6 +5,7 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
 import { Video, Trash2 } from 'lucide-react-native';
 import { Video as ExpoVideo, ResizeMode } from 'expo-av';
 import { geminiService } from '@/lib/gemini';
@@ -48,6 +49,7 @@ export function TopicVideoGenerator({
   const [videoError, setVideoError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isLocalVideo, setIsLocalVideo] = useState<boolean>(false);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
   const loadExistingVideo = useCallback(async () => {
     try {
@@ -88,17 +90,7 @@ export function TopicVideoGenerator({
       const HEYGEN_API_KEY = await SecureStore.getItemAsync('api_key_heygen');
       
       if (!HEYGEN_API_KEY || !HEYGEN_API_KEY.trim()) {
-        Alert.alert(
-          'API Key Required',
-          'HeyGen API key is required to generate videos. Please configure it in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Go to Settings',
-              onPress: () => router.push('/(tabs)/settings'),
-            },
-          ]
-        );
+        setShowApiKeyDialog(true);
         return;
       }
       setVideoStatus('generating-script');
@@ -218,6 +210,7 @@ export function TopicVideoGenerator({
   }, [videoStatus, downloadProgress, isLocalVideo, videoError]);
 
   return (
+    <>
     <Card>
       <CardHeader>
         <View className="flex-row items-center space-x-2 mb-2">
@@ -336,5 +329,14 @@ export function TopicVideoGenerator({
         )}
       </CardContent>
     </Card>
+
+    <APIKeyRequiredDialog
+      open={showApiKeyDialog}
+      onOpenChange={setShowApiKeyDialog}
+      title="API Key Required"
+      description="HeyGen API key is required to generate videos. Please configure it in Settings."
+      onGoToSettings={() => router.push('/(tabs)/settings')}
+    />
+  </>
   );
 }

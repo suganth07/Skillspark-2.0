@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadingAnimation } from '@/components/ui/loading-animation';
 import { TopicDetailSkeleton } from '@/components/topic/TopicDetailSkeleton';
 import { TopicSearchResultsModal } from '@/components/topic/TopicSearchResultsModal';
+import { APIKeyRequiredDialog } from '@/components/ui/api-key-required-dialog';
 import { BottomSheet } from '@/components/primitives/bottomSheet/bottom-sheet.native';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useIsEmotionDetectionEnabled } from '@/hooks/stores/useEmotionStore';
@@ -82,6 +83,10 @@ export default function TopicDetailScreen() {
   // Tone change modal state
   const [showToneChangeModal, setShowToneChangeModal] = useState(false);
   const [newToneToShow, setNewToneToShow] = useState<'simplified' | 'story'>('simplified');
+  
+  // API Key Required Dialog state
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [apiKeyDialogMessage, setApiKeyDialogMessage] = useState('');
   
   // Bottom sheet ref for search results
   const searchSheetRef = useRef<BottomSheetModal>(null);
@@ -299,17 +304,8 @@ export default function TopicDetailScreen() {
     const googleSerperKey = await SecureStore.getItemAsync('api_key_googleserper');
     
     if ((!langSearchKey || !langSearchKey.trim()) && (!googleSerperKey || !googleSerperKey.trim())) {
-      Alert.alert(
-        'API Key Required',
-        'Web search requires either LangSearch or Google Serper API key. Please configure one in Settings.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Go to Settings',
-            onPress: () => router.push('/(tabs)/settings'),
-          },
-        ]
-      );
+      setApiKeyDialogMessage('Web search requires either LangSearch or Google Serper API key. Please configure one in Settings.');
+      setShowApiKeyDialog(true);
       return;
     }
     
@@ -1763,6 +1759,15 @@ export default function TopicDetailScreen() {
         isOpen={showToneChangeModal}
         onClose={() => setShowToneChangeModal(false)}
         newTone={newToneToShow}
+      />
+
+      {/* API Key Required Dialog */}
+      <APIKeyRequiredDialog
+        open={showApiKeyDialog}
+        onOpenChange={setShowApiKeyDialog}
+        title="API Key Required"
+        description={apiKeyDialogMessage}
+        onGoToSettings={() => router.push('/(tabs)/settings')}
       />
     </SafeAreaView>
   );

@@ -3,6 +3,7 @@ import { View, ActivityIndicator, ScrollView, Pressable, Alert, Modal, TextInput
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -292,6 +293,25 @@ export default function TopicDetailScreen() {
 
   const handleWebSearch = async () => {
     if (!currentTopicDetail) return;
+    
+    // Check if web search API key is configured (either langsearch or googleserper)
+    const langSearchKey = await SecureStore.getItemAsync('api_key_langsearch');
+    const googleSerperKey = await SecureStore.getItemAsync('api_key_googleserper');
+    
+    if ((!langSearchKey || !langSearchKey.trim()) && (!googleSerperKey || !googleSerperKey.trim())) {
+      Alert.alert(
+        'API Key Required',
+        'Web search requires either LangSearch or Google Serper API key. Please configure one in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Go to Settings',
+            onPress: () => router.push('/(tabs)/settings'),
+          },
+        ]
+      );
+      return;
+    }
     
     setIsSearching(true);
     // Open the bottom sheet immediately to show loading state

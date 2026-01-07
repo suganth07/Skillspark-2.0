@@ -1,4 +1,4 @@
-import { LANG_SEARCH_API_KEY } from '@/lib/constants';
+import * as SecureStore from 'expo-secure-store';
 
 const LANG_SEARCH_WEB_SEARCH_URL = 'https://api.langsearch.com/v1/web-search';
 const LANG_SEARCH_RERANK_URL = 'https://api.langsearch.com/v1/rerank';
@@ -31,7 +31,10 @@ export async function searchTopicUpdates(
   completedDate?: Date,
   topicId?: string
 ): Promise<TopicUpdate> {
-  if (!LANG_SEARCH_API_KEY) {
+  // Fetch API key from SecureStore
+  const LANG_SEARCH_API_KEY = await SecureStore.getItemAsync('api_key_langsearch');
+  
+  if (!LANG_SEARCH_API_KEY || !LANG_SEARCH_API_KEY.trim()) {
     throw new Error('Lang Search API key is not configured');
   }
 

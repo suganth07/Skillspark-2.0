@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Pressable } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Globe, Search } from 'lucide-react-native';
@@ -12,6 +12,11 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
   const currentProvider = useWebSearchProvider();
   const setProvider = useSetWebSearchProvider();
   const isProviderAvailable = useIsWebSearchProviderAvailable();
+  
+  const [availability, setAvailability] = useState<Record<WebSearchProvider, boolean>>({
+    langsearch: false,
+    serper: false,
+  });
 
   const providers: Array<{ id: WebSearchProvider; name: string; description: string; icon: typeof Globe }> = [
     {
@@ -28,9 +33,26 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
     },
   ];
 
-  const handleProviderSelect = (providerId: WebSearchProvider) => {
-    setProvider(providerId);
-    onValueChange?.(true);
+  // Check availability on mount
+  useEffect(() => {
+    const checkAvailability = async () => {
+      const langsearchAvailable = await isProviderAvailable('langsearch');
+      const serperAvailable = await isProviderAvailable('serper');
+      setAvailability({
+        langsearch: langsearchAvailable,
+        serper: serperAvailable,
+      });
+    };
+    checkAvailability();
+  }, []);
+
+  const handleProviderSelect = async (providerId: WebSearchProvider) => {
+    // Check availability before attempting to set
+    const available = await isProviderAvailable(providerId);
+    if (available) {
+      await setProvider(providerId);
+      onValueChange?.(true);
+    }
   };
 
   return (
@@ -48,7 +70,7 @@ export function WebSearchProviderItem({ onValueChange }: WebSearchProviderItemPr
       <View className="gap-3">
         {providers.map((provider) => {
           const Icon = provider.icon;
-          const isAvailable = isProviderAvailable(provider.id);
+          const isAvailable = availability[provider.id];
           const isSelected = currentProvider === provider.id;
 
           return (

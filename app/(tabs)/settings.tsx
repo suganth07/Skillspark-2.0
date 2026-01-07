@@ -11,6 +11,7 @@ import {EmotionDetectionItem} from '@/components/settings/EmotionDetectionItem';
 import {GeneratedVideosItem} from '@/components/settings/GeneratedVideosItem';
 import {AIProviderItem} from '@/components/settings/AIProviderItem';
 import {WebSearchProviderItem} from '@/components/settings/WebSearchProviderItem';
+import {APIKeysItem} from '@/components/settings/APIKeysItem';
 import {XPProgressBar} from '@/components/gamification/XPProgress';
 import {useUserManagement} from '@/hooks/stores/useUserStore';
 
@@ -72,6 +73,7 @@ export default function Settings() {
             <ListHeader>
               <Muted>AI Configuration</Muted>
             </ListHeader>
+            <APIKeysItem />
             <AIProviderItem />
           </List>
         </View>

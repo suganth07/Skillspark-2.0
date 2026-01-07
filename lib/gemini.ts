@@ -1,13 +1,18 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as SecureStore from 'expo-secure-store';
 import { generateContentBundle } from '@/server/agents/DynamicContent';
 import { aiService } from '@/lib/aiService';
 
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-
-if (!API_KEY) {
-  console.warn('⚠️ EXPO_PUBLIC_GEMINI_API_KEY not set. Will use alternate AI provider if configured.');
+// Helper to get API key from SecureStore
+async function getAPIKey(provider: 'gemini' | 'groq'): Promise<string | null> {
+  try {
+    const key = await SecureStore.getItemAsync(`api_key_${provider}`);
+    return key && key.trim() ? key : null;
+  } catch (error) {
+    console.error(`Failed to retrieve ${provider} API key:`, error);
+    return null;
+  }
 }
-const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 // Utility function to sanitize JSON strings by removing control characters
 // This fixes issues with Groq and other LLMs that may include control characters in JSON responses

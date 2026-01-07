@@ -4,13 +4,22 @@ import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { Text } from '@/components/ui/text';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useCurrentUserId } from '@/hooks/stores/useUserStore';
 import { useGenerateRoadmap } from '@/hooks/queries/useRoadmapQueries';
 import { LoadingAnimation } from '@/components/ui/loading-animation';
-import { ArrowLeft, CheckCircle, X, WandSparkles, ChevronDown, ChevronUp, Settings2 } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, X, WandSparkles, ChevronDown, ChevronUp, Settings2, Key } from 'lucide-react-native';
 import { useColorScheme } from '@/lib/useColorScheme';
+import { hasAnyAIProviderKey } from '@/lib/apiKeys';
+import { router } from 'expo-router';
+import {
+  BottomSheet,
+  BottomSheetContent,
+  BottomSheetHeader,
+  useBottomSheet,
+} from '@/components/primitives/bottomSheet/bottom-sheet.native';
 
 interface RoadmapCreationProps {
   onRoadmapCreated?: (roadmapId: string) => void;
@@ -27,6 +36,7 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
   const [validationError, setValidationError] = useState<string | null>(null);
   const currentUserId = useCurrentUserId();
   const { isDarkColorScheme } = useColorScheme();
+  const { ref: apiKeyModalRef, open: openApiKeyModal, close: closeApiKeyModal } = useBottomSheet();
   
   // TanStack Query mutation for roadmap generation
   const generateRoadmapMutation = useGenerateRoadmap();
@@ -45,6 +55,14 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
 
     if (!currentUserId) {
       setValidationError('Please select a user account first');
+      return;
+    }
+
+    // Check if any AI provider key is configured (Gemini OR Groq)
+    const hasAIKey = await hasAnyAIProviderKey();
+    
+    if (!hasAIKey) {
+      openApiKeyModal();
       return;
     }
 
@@ -356,6 +374,75 @@ export function RoadmapCreation({ onRoadmapCreated, onBack }: RoadmapCreationPro
             </Card>
           </View>
         </ScrollView>
+
+        {/* API Key Required Modal */}
+        <BottomSheet>
+          <BottomSheetContent ref={apiKeyModalRef} snapPoints={['50%']}>
+            <BottomSheetHeader className="pb-4">
+              <View className="flex-row items-center gap-3">
+                <View className="w-12 h-12 rounded-full bg-destructive/10 items-center justify-center">
+                  <Key size={24} className="text-destructive" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xl font-bold text-foreground">
+                    AI Provider Required
+                  </Text>
+                  <Text className="text-sm text-muted-foreground mt-1">
+                    Configure an API key to continue
+                  </Text>
+                </View>
+              </View>
+            </BottomSheetHeader>
+
+            <View className="px-6 pb-6">
+              <Card className="mb-4 border-2 border-destructive/20 bg-destructive/5">
+                <CardContent className="p-4">
+                  <Text className="text-sm text-foreground leading-relaxed mb-2">
+                    To generate a roadmap, you need to configure at least one AI provider:
+                  </Text>
+                  <View className="gap-2 ml-2">
+                    <View className="flex-row items-center gap-2">
+                      <View className="w-1.5 h-1.5 rounded-full bg-foreground" />
+                      <Text className="text-sm text-muted-foreground">
+                        Google Gemini (recommended)
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center gap-2">
+                      <View className="w-1.5 h-1.5 rounded-full bg-foreground" />
+                      <Text className="text-sm text-muted-foreground">
+                        Groq (Llama 3.3 - faster)
+                      </Text>
+                    </View>
+                  </View>
+                </CardContent>
+              </Card>
+
+              <View className="gap-3">
+                <Button
+                  onPress={() => {
+                    closeApiKeyModal();
+                    router.push('/(tabs)/settings');
+                  }}
+                  className="w-full"
+                >
+                  <Text className="text-primary-foreground font-semibold">
+                    Go to Settings
+                  </Text>
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  onPress={closeApiKeyModal}
+                  className="w-full"
+                >
+                  <Text className="text-foreground font-semibold">
+                    Cancel
+                  </Text>
+                </Button>
+              </View>
+            </View>
+          </BottomSheetContent>
+        </BottomSheet>
       </View>
     </>
   );

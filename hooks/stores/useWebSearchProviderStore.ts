@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { storage } from '@/lib/storage';
+import * as SecureStore from 'expo-secure-store';
 
 export type WebSearchProvider = 'langsearch' | 'serper';
 
@@ -9,10 +10,13 @@ interface WebSearchProviderStoreState {
   provider: WebSearchProvider;
   
   // Actions
-  setProvider: (provider: WebSearchProvider) => void;
+  setProvider: (provider: WebSearchProvider) => Promise<void>;
   
   // Provider availability check
-  isProviderAvailable: (provider: WebSearchProvider) => boolean;
+  isProviderAvailable: (provider: WebSearchProvider) => Promise<boolean>;
+  
+  // Refresh availability after key changes
+  refreshAvailability: () => Promise<void>;
 }
 
 // Custom storage adapter for Zustand persist
@@ -39,8 +43,8 @@ export const useWebSearchProviderStore = create<WebSearchProviderStoreState>()(
       // Default to LangSearch
       provider: 'langsearch',
       
-      setProvider: (provider: WebSearchProvider) => {
-        const isAvailable = get().isProviderAvailable(provider);
+      setProvider: async (provider: WebSearchProvider) => {
+        const isAvailable = await get().isProviderAvailable(provider);
         if (!isAvailable) {
           console.warn(`⚠️ Cannot switch to ${provider}: API key not configured`);
           return;
@@ -50,14 +54,38 @@ export const useWebSearchProviderStore = create<WebSearchProviderStoreState>()(
         set({ provider });
       },
       
-      isProviderAvailable: (provider: WebSearchProvider) => {
-        if (provider === 'langsearch') {
-          return !!process.env.EXPO_PUBLIC_LANG_SEARCH_API_KEY;
+      isProviderAvailable: async (provider: WebSearchProvider) => {
+        try {
+          if (provider === 'langsearch') {
+            const key = await SecureStore.getItemAsync('api_key_langsearch');
+            return !!(key && key.trim());
+          }
+          if (provider === 'serper') {
+            const key = await SecureStore.getItemAsync('api_key_googleserper');
+            return !!(key && key.trim());
+          }
+          return false;
+        } catch (error) {
+          console.error(`Failed to check ${provider} availability:`, error);
+          return false;
         }
-        if (provider === 'serper') {
-          return !!process.env.EXPO_PUBLIC_SERPER_API_KEY;
+      },
+      
+      refreshAvailability: async () => {
+        // This method can be called to trigger UI updates after key changes
+        const currentProvider = get().provider;
+        const isAvailable = await get().isProviderAvailable(currentProvider);
+        
+        if (!isAvailable) {
+          // If current provider is no longer available, try to switch to the other one
+          const otherProvider: WebSearchProvider = currentProvider === 'langsearch' ? 'serper' : 'langsearch';
+          const otherAvailable = await get().isProviderAvailable(otherProvider);
+          
+          if (otherAvailable) {
+            console.log(`Current provider ${currentProvider} unavailable, switching to ${otherProvider}`);
+            set({ provider: otherProvider });
+          }
         }
-        return false;
       },
     }),
     {
@@ -71,3 +99,4 @@ export const useWebSearchProviderStore = create<WebSearchProviderStoreState>()(
 export const useWebSearchProvider = () => useWebSearchProviderStore((state) => state.provider);
 export const useSetWebSearchProvider = () => useWebSearchProviderStore((state) => state.setProvider);
 export const useIsWebSearchProviderAvailable = () => useWebSearchProviderStore((state) => state.isProviderAvailable);
+export const useRefreshWebSearchProviderAvailability = () => useWebSearchProviderStore((state) => state.refreshAvailability);

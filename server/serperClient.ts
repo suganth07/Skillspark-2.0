@@ -1,4 +1,4 @@
-import { SERPER_API_KEY } from '@/lib/constants';
+import * as SecureStore from 'expo-secure-store';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 
@@ -30,7 +30,10 @@ export async function searchTopicUpdates(
   completedDate?: Date,
   topicId?: string
 ): Promise<TopicUpdate> {
-  if (!SERPER_API_KEY) {
+  // Fetch API key from SecureStore
+  const SERPER_API_KEY = await SecureStore.getItemAsync('api_key_googleserper');
+  
+  if (!SERPER_API_KEY || !SERPER_API_KEY.trim()) {
     throw new Error('Serper API key is not configured');
   }
 

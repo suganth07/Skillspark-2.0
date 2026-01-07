@@ -9,6 +9,7 @@
 //
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import * as SecureStore from 'expo-secure-store';
 import { useAIProviderStore } from '@/hooks/stores/useAIProviderStore';
 
 // Helper function to add proper delay between retries
@@ -42,22 +43,16 @@ async function withRetry<T>(
   throw lastError || new Error(`${context} failed after ${maxRetries} attempts`);
 }
 
-// Initialize AI clients
-// TODO: Move these to server-side environment variables for production security
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
-
-if (!GEMINI_API_KEY && !GROQ_API_KEY) {
-  console.error('⚠️ No AI API keys configured. Set EXPO_PUBLIC_GEMINI_API_KEY or EXPO_PUBLIC_GROQ_API_KEY');
+// Helper to get API key from SecureStore
+async function getAPIKey(provider: 'gemini' | 'groq'): Promise<string | null> {
+  try {
+    const key = await SecureStore.getItemAsync(`api_key_${provider}`);
+    return key && key.trim() ? key : null;
+  } catch (error) {
+    console.error(`Failed to retrieve ${provider} API key:`, error);
+    return null;
+  }
 }
-
-const geminiClient = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-// Note: dangerouslyAllowBrowser is required for client-side usage but exposes keys
-// For production, move to server-side endpoints
-const groqClient = GROQ_API_KEY ? new Groq({ 
-  apiKey: GROQ_API_KEY, 
-  dangerouslyAllowBrowser: true // TODO: Remove when migrating to server-side
-}) : null;
 
 // Unified AI Service Interface
 export interface AIGenerateOptions {
@@ -90,10 +85,12 @@ class AIService {
   }
 
   private async generateWithGemini(options: AIGenerateOptions): Promise<string> {
-    if (!geminiClient) {
+    const apiKey = await getAPIKey('gemini');
+    if (!apiKey) {
       throw new Error('Gemini API key not configured');
     }
 
+    const geminiClient = new GoogleGenerativeAI(apiKey);
     const modelName = 'gemini-2.5-flash-lite';
     const model = geminiClient.getGenerativeModel({ 
       model: modelName,
@@ -122,9 +119,17 @@ class AIService {
   }
 
   private async generateWithGroq(options: AIGenerateOptions): Promise<string> {
-    if (!groqClient) {
+    const apiKey = await getAPIKey('groq');
+    if (!apiKey) {
       throw new Error('Groq API key not configured');
     }
+
+    // Note: dangerouslyAllowBrowser is required for client-side usage but exposes keys
+    // For production, move to server-side endpoints
+    const groqClient = new Groq({ 
+      apiKey, 
+      dangerouslyAllowBrowser: true
+    });
 
     const model = 'llama-3.3-70b-versatile';
     const completion = await groqClient.chat.completions.create({
@@ -156,18 +161,19 @@ class AIService {
   }
 
   // Check if current provider is available
-  isAvailable(): boolean {
+  async isAvailable(): Promise<boolean> {
     const provider = this.getProvider();
-    if (provider === 'gemini') return !!geminiClient;
-    if (provider === 'groq') return !!groqClient;
-    return false;
+    const key = await getAPIKey(provider);
+    return !!key;
   }
 
   // Get available providers
-  getAvailableProviders(): Array<'gemini' | 'groq'> {
+  async getAvailableProviders(): Promise<Array<'gemini' | 'groq'>> {
     const available: Array<'gemini' | 'groq'> = [];
-    if (geminiClient) available.push('gemini');
-    if (groqClient) available.push('groq');
+    const geminiKey = await getAPIKey('gemini');
+    const groqKey = await getAPIKey('groq');
+    if (geminiKey) available.push('gemini');
+    if (groqKey) available.push('groq');
     return available;
   }
 }

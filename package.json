@@ -60,6 +60,7 @@
     "expo-navigation-bar": "~5.0.8",
     "expo-notifications": "~0.32.12",
     "expo-router": "~6.0.10",
+    "expo-secure-store": "~15.0.8",
     "expo-splash-screen": "~31.0.10",
     "expo-sqlite": "~16.0.8",
     "expo-status-bar": "~3.0.8",
@@ -99,6 +100,7 @@
     "@types/react": "~19.1.10",
     "@types/sql.js": "^1.4.9",
     "drizzle-kit": "^0.31.1",
+    "expo-module-scripts": "^5.0.8",
     "tailwindcss": "3.4.1",
     "typescript": "~5.9.2"
   },

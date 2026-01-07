@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Zap, Sparkles } from 'lucide-react-native';
@@ -12,6 +12,11 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
   const currentProvider = useAIProvider();
   const setProvider = useSetAIProvider();
   const isProviderAvailable = useIsProviderAvailable();
+  
+  const [availability, setAvailability] = useState<Record<AIProvider, boolean>>({
+    gemini: false,
+    groq: false,
+  });
 
   const providers: Array<{ id: AIProvider; name: string; description: string; icon: typeof Zap }> = [
     {
@@ -28,9 +33,26 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
     },
   ];
 
-  const handleProviderSelect = (providerId: AIProvider) => {
-    setProvider(providerId);
-    onValueChange?.(true);
+  // Check availability on mount and when providers change
+  useEffect(() => {
+    const checkAvailability = async () => {
+      const geminiAvailable = await isProviderAvailable('gemini');
+      const groqAvailable = await isProviderAvailable('groq');
+      setAvailability({
+        gemini: geminiAvailable,
+        groq: groqAvailable,
+      });
+    };
+    checkAvailability();
+  }, []);
+
+  const handleProviderSelect = async (providerId: AIProvider) => {
+    // Check availability before attempting to set
+    const available = await isProviderAvailable(providerId);
+    if (available) {
+      await setProvider(providerId);
+      onValueChange?.(true);
+    }
   };
 
   return (
@@ -48,7 +70,7 @@ export function AIProviderItem({ onValueChange }: AIProviderItemProps) {
       <View className="gap-3">
         {providers.map((provider) => {
           const Icon = provider.icon;
-          const isAvailable = isProviderAvailable(provider.id);
+          const isAvailable = availability[provider.id];
           const isSelected = currentProvider === provider.id;
 
           return (

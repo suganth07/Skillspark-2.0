@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Alert } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +9,8 @@ import { Video, Trash2 } from 'lucide-react-native';
 import { Video as ExpoVideo, ResizeMode } from 'expo-av';
 import { geminiService } from '@/lib/gemini';
 import { heygenGenerateVideo, waitForHeygenVideoUrl } from '@/server/heygenClient';
-import { HEYGEN_API_KEY, HEYGEN_AVATAR_ID, HEYGEN_VOICE_ID } from '@/lib/constants';
+import { HEYGEN_AVATAR_ID, HEYGEN_VOICE_ID } from '@/lib/constants';
+import { router } from 'expo-router';
 import {
   getExistingTopicVideo,
   isLocalVideoValid,
@@ -81,15 +83,24 @@ export function TopicVideoGenerator({
   }, [topicId, userId, loadExistingVideo]);
 
   const handleGenerateVideo = useCallback(async () => {
-    if (!HEYGEN_API_KEY) {
-      const error = 'HeyGen API key not configured';
-      setVideoError(error);
-      setVideoStatus('error');
-      console.error('📹 Cannot generate video:', error);
-      return;
-    }
-
     try {
+      // Fetch HeyGen API key from SecureStore
+      const HEYGEN_API_KEY = await SecureStore.getItemAsync('api_key_heygen');
+      
+      if (!HEYGEN_API_KEY || !HEYGEN_API_KEY.trim()) {
+        Alert.alert(
+          'API Key Required',
+          'HeyGen API key is required to generate videos. Please configure it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Go to Settings',
+              onPress: () => router.push('/(tabs)/settings'),
+            },
+          ]
+        );
+        return;
+      }
       setVideoStatus('generating-script');
       setVideoError(null);
       setIsLocalVideo(false);

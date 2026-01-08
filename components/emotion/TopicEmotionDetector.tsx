@@ -63,7 +63,7 @@ const EMOTIONS = [
   "looking_away",
 ];
 
-const DETECTION_INTERVAL = 30000; // 30 seconds
+const DETECTION_INTERVAL = 10000; // 30 seconds
 
 export function TopicEmotionDetector({
   onEmotionDetected,

@@ -177,11 +177,25 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
           topicMetadata = {};
         }
         
+        // Deduplicate subtopics by title (case-insensitive)
+        const seenTitles = new Set<string>();
+        const uniqueSubtopics = existingSubtopics.filter(st => {
+          const normalizedTitle = st.name.toLowerCase().trim();
+          if (seenTitles.has(normalizedTitle)) {
+            console.warn(`⚠️ Skipping duplicate subtopic: "${st.name}"`);
+            return false;
+          }
+          seenTitles.add(normalizedTitle);
+          return true;
+        });
+
+        console.log(`📊 Deduplication: ${existingSubtopics.length} → ${uniqueSubtopics.length} subtopics`);
+
         const explanation: TopicExplanation = {
           topicName: topic.name,
           overview: topic.description || '',
           difficulty: topicMetadata.difficulty || 'intermediate',
-          subtopics: existingSubtopics.map(st => {
+          subtopics: uniqueSubtopics.map(st => {
             let metadata: Record<string, any> = {};
             try {
               metadata = JSON.parse(st.metadata as string || '{}');
@@ -206,7 +220,7 @@ export function useTopicDetail(topicId: string | undefined, userId: string | und
           whyLearn: topicMetadata.whyLearn
         };
         
-        console.log(`✅ Loaded ${existingSubtopics.length} subtopics from cache`);
+        console.log(`✅ Loaded ${uniqueSubtopics.length} unique subtopics from cache (${existingSubtopics.length - uniqueSubtopics.length} duplicates removed)`);
         return { topic, explanation, subtopicPerformance: performanceMap };
       }
 

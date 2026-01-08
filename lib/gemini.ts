@@ -1115,7 +1115,7 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
 
   /**
    * Generate a video script for HeyGen based on topic subtopics
-   * Creates a ~2 second educational video script
+   * Creates a ~170 second (2 minutes 50 seconds) educational video script
    * @param tone - The tone/style of the script (default, simplified, or story)
    */
   async generateVideoScript(
@@ -1130,32 +1130,54 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
       toneGuidance = `
 Use SIMPLE, beginner-friendly language.
 Avoid technical jargon. Explain as if to someone just starting out.
-Be encouraging and welcoming.`;
+Be encouraging and welcoming.
+Include relatable examples and analogies.`;
     } else if (tone === 'story') {
       toneGuidance = `
 Use a STORYTELLING approach.
-Create a brief scenario or narrative that introduces the concept.
-Make it engaging and relatable through a mini-story.`;
+Create engaging scenarios or narratives that introduce each concept.
+Make it relatable through stories and real-world examples.
+Build a narrative arc throughout the video.`;
     } else {
       toneGuidance = `
 Use a professional, educational tone.
-Be clear and concise while maintaining accuracy.`;
+Be clear and informative while maintaining accuracy.
+Include practical examples and key insights.`;
     }
 
     const prompt = `
-Create a very brief, concise script for a ~2 second video introducing the topic "${topicName}".
+Create a comprehensive, engaging script for a 170 second (approximately 2 minutes 50 seconds) educational video about "${topicName}" in the context of learning "${context}".
 ${toneGuidance}
 
-Provide ONLY:
-1. A single sentence introducing ${topicName}
-2. One key point about why it's important
+The script should be approximately 370-425 words (speaking pace: ~130-150 words per minute for 170 seconds).
 
-Use this subtopic information for context:
-${JSON.stringify(subtopics.slice(0, 2).map(s => ({ title: s.title })), null, 2)}
+Structure the script as follows:
+1. Opening Hook (20 seconds): Grab attention with an interesting fact or question about ${topicName}
+2. Introduction (30 seconds): Explain what ${topicName} is and why it matters for ${context}
+3. Main Content (90 seconds): Cover the key subtopics below, with clear explanations and examples
+4. Practical Application (20 seconds): Show how to apply this knowledge in real scenarios
+5. Conclusion & Call-to-Action (10 seconds): Summarize key takeaways and encourage practice
 
-Output ONLY the script text. Do NOT include JSON, markdown, bullets, or extra metadata.
-Keep overall length suitable for ~2 seconds (~10-15 words maximum).
-Write in a friendly, conversational tone as if speaking directly to the learner.
+Cover these subtopics in the main content section:
+${JSON.stringify(subtopics.map(s => ({ title: s.title, explanation: s.explanationDefault?.substring(0, 150) + '...' })), null, 2)}
+
+Requirements:
+- Write in a conversational, engaging style as if speaking directly to the learner
+- Use transitions between sections to maintain flow
+- Include 1-2 concrete examples throughout
+- Keep sentences concise and easy to understand when spoken aloud
+- Avoid overly complex vocabulary
+- Include natural pauses (indicated by periods and paragraph breaks)
+- Focus on the most important points given the 170 second time constraint
+
+Output ONLY the script text ready for voice narration. Do NOT include:
+- JSON formatting
+- Markdown headers or formatting
+- Section labels like "Introduction:" or "Section 1:"
+- Bullets or numbered lists
+- Stage directions or meta-commentary
+
+The script should flow naturally as continuous narration that a presenter would speak.
     `;
 
     try {
@@ -1171,10 +1193,12 @@ Write in a friendly, conversational tone as if speaking directly to the learner.
         .replace(/```[\s\S]*?```/g, '')
         .replace(/\*\*/g, '')
         .replace(/#{1,6}\s/g, '')
+        .replace(/^\s*[-*]\s+/gm, '') // Remove bullet points
+        .replace(/^\s*\d+\.\s+/gm, '') // Remove numbered lists
         .trim();
 
-      if (!cleanedScript || cleanedScript.length < 20) {
-        throw new Error('Generated script is too short or empty');
+      if (!cleanedScript || cleanedScript.length < 300) {
+        throw new Error('Generated script is too short for a 170 second video');
       }
 
       return cleanedScript;

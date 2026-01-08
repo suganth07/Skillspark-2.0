@@ -215,7 +215,16 @@ export default function TopicDetailScreen() {
   }, [generateWebContent, webSearchParam, topicNameParam, isGeneratingWebContent, webSearchContent, generateWebSearchContentMutation, id]);
 
   // Persist content to database when it's generated (idempotent via server check)
+  // Use ref to track if persistence is in progress to prevent duplicate calls
+  const isPersistingRef = useRef(false);
+  
   useEffect(() => {
+    // Early exit if already persisting
+    if (isPersistingRef.current) {
+      console.log('⏭️ Skipping persistence: already in progress');
+      return;
+    }
+
     if (!currentTopicDetail || !currentUserId) {
       console.log('⏭️ Skipping persistence: missing topicDetail or userId');
       return;
@@ -266,6 +275,9 @@ export default function TopicDetailScreen() {
         isRegeneration,
       });
       
+      // Set flag to prevent duplicate calls
+      isPersistingRef.current = true;
+      
       persistContentMutation.mutate({
         topicId: topic.id,
         userId: currentUserId,
@@ -276,14 +288,16 @@ export default function TopicDetailScreen() {
         onSuccess: () => {
           console.log('✅ Content successfully persisted to database!');
           setHasPersistedContent(true);
+          isPersistingRef.current = false;
         },
         onError: (err) => {
           console.error('❌ Failed to persist content:', err);
           console.error('Error details:', JSON.stringify(err, null, 2));
+          isPersistingRef.current = false;
         }
       });
     }
-  }, [currentTopicDetail, currentUserId, hasPersistedContent, persistContentMutation]);
+  }, [currentTopicDetail, currentUserId, hasPersistedContent]);
 
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -842,7 +856,7 @@ export default function TopicDetailScreen() {
                 if ((emotion === 'looking_away' && confidence > 0.5) || (emotion === 'distracted') || (emotion === 'drowsy' && confidence > 0.7)) {
                   const now = Date.now();
                   // Prevent multiple alerts within 30 seconds
-                  if (now - lastDistractionTime.current > 30000) {
+                  if (now - lastDistractionTime.current > 10000) {
                     lastDistractionTime.current = now;
                     setDistractionCount(prev => prev + 1);
                     setShowDistractionAlert(true);

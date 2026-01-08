@@ -4,8 +4,8 @@ const NAV_FONT_FAMILY = "Inter-Black";
 
 // HeyGen API Configuration
 export const HEYGEN_API_KEY = process.env.EXPO_PUBLIC_HEYGEN_API_KEY || null;
-export const HEYGEN_AVATAR_ID ="Chakir_headscarf_Front";
-export const HEYGEN_VOICE_ID =  "a6813ea36c8942c9a3c1dfd5f50bdff1";
+export const HEYGEN_AVATAR_ID ="Jocelyn_standing_sofa_front";
+export const HEYGEN_VOICE_ID =  "8f174b03cc9e412dbf72b47fb3a37ab2";
 
 // Lang Search API Configuration
 export const LANG_SEARCH_API_KEY = process.env.EXPO_PUBLIC_LANG_SEARCH_API_KEY || null;

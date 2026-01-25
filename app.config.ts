@@ -2,13 +2,13 @@ import type { ConfigContext, ExpoConfig } from "@expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "Expo Starter",
-  slug: "expostarter",
+  name: "SkillSpark",
+  slug: "skillspark",
   newArchEnabled: true,
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  scheme: "ltstarter",
+  scheme: "skillspark",
   userInterfaceStyle: "dark",
   runtimeVersion: {
     policy: "appVersion",
@@ -22,19 +22,21 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     newArchEnabled: true,
     supportsTablet: true,
-    bundleIdentifier: "com.expostarter.base",
+    bundleIdentifier: "com.skillspark.app",
     infoPlist: {
       NSCameraUsageDescription: "This app uses the camera to detect your emotions and engagement while learning.",
     },
   },
   android: {
     newArchEnabled: true,
+    icon: "./assets/images/icon.png",
     adaptiveIcon: {
-      foregroundImage: "./assets/images/adaptive-icon.png",
+      foregroundImage: "./assets/images/icon.png",
       backgroundColor: "#ffffff",
     },
-    package: "com.expostarter.base",
+    package: "com.skillspark.app",
     permissions: ["CAMERA"],
+    versionCode: 1,
   },
   web: {
     bundler: "metro",
@@ -60,8 +62,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     eas: {
-      projectId: "",
+      projectId: "7da223ee-8eef-4fd1-8ce6-ae1d599ec63f",
     },
   },
-  owner: "*",
 });

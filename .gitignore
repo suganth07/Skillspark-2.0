@@ -44,3 +44,4 @@ android/app/src/main/java/com/expostarter/base/MainActivity.kt
 .github/copilot-instructions.md
 rebuild.bat
 public/database.sqlite
+.idea/

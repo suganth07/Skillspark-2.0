@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX `subtopics_parent_order_idx` ON `subtopics` (`parent_topic_id`,`order`);

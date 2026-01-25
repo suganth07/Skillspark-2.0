@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0f11a510-dd62-44a8-ba20-0be7d8d96db8",
+  "id": "a3225e8b-e635-4c66-b5ab-4c9e81cb1b2e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "career_paths": {
@@ -824,6 +824,14 @@
           "columns": [
             "parent_topic_id",
             "name"
+          ],
+          "isUnique": true
+        },
+        "subtopics_parent_order_idx": {
+          "name": "subtopics_parent_order_idx",
+          "columns": [
+            "parent_topic_id",
+            "order"
           ],
           "isUnique": true
         }

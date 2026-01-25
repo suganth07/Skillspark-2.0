@@ -16,6 +16,7 @@ export function DatabaseProvider({children}: PropsWithChildren) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [db, setDb] = useState<any | SQLJsDatabase | ExpoSQLiteDatabase | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isInitialized) return;
@@ -23,16 +24,46 @@ export function DatabaseProvider({children}: PropsWithChildren) {
     console.log("[DatabaseProvider] Initializing database...");
     initialize()
       .then((result) => {
-        console.log("[DatabaseProvider] Database initialized, migrations:", result.migrationSuccess ? "SUCCESS" : "FAILED");
+        console.log("[DatabaseProvider] Database initialized successfully");
+        console.log("[DatabaseProvider] Migration status:", result.migrationSuccess ? "✅ SUCCESS" : "❌ FAILED");
+        
+        if (!result.migrationSuccess) {
+          setInitError("Database migrations failed. Please reinstall the app.");
+          setIsInitialized(true);
+          return;
+        }
+        
         setDb(result.db);
         setIsInitialized(true);
       })
       .catch((error) => {
-        console.error("[DatabaseProvider] Failed to initialize database:", error);
-        setIsInitialized(true); // Still mark as initialized to prevent infinite retry
+        console.error("[DatabaseProvider] ❌ CRITICAL: Database initialization failed:", error);
+        setInitError(error?.message || "Failed to initialize database");
+        setIsInitialized(true);
       });
   }, [isInitialized]);
 
+  // Show error screen if database initialization failed
+  if (initError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', padding: 20 }}>
+        <Text style={{ color: '#ef4444', fontSize: 24, fontWeight: 'bold', marginBottom: 16 }}>⚠️ Database Error</Text>
+        <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 8 }}>
+          Failed to initialize the database
+        </Text>
+        <Text style={{ color: '#999', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>
+          {initError}
+        </Text>
+        <Text style={{ color: '#666', fontSize: 12, textAlign: 'center' }}>
+          Please uninstall and reinstall the app.
+        </Text>
+        <Text style={{ color: '#666', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+          If the problem persists, contact support.
+        </Text>
+      </View>
+    );
+  }
+  
   // Show loading screen while database is initializing
   if (!isInitialized || !db) {
     return (

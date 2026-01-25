@@ -115,6 +115,7 @@ CREATE TABLE `subtopics` (
 CREATE INDEX `subtopics_parent_idx` ON `subtopics` (`parent_topic_id`);--> statement-breakpoint
 CREATE INDEX `subtopics_order_idx` ON `subtopics` (`parent_topic_id`,`order`);--> statement-breakpoint
 CREATE UNIQUE INDEX `subtopics_parent_name_idx` ON `subtopics` (`parent_topic_id`,`name`);--> statement-breakpoint
+CREATE UNIQUE INDEX `subtopics_parent_order_idx` ON `subtopics` (`parent_topic_id`,`order`);--> statement-breakpoint
 CREATE TABLE `topic_videos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`topic_id` text NOT NULL,

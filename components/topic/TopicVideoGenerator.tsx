@@ -387,10 +387,13 @@ export function TopicVideoGenerator({
             Select your preferred video duration:
           </Text>
           
-          <View className="flex-row gap-3">
+          <View className="flex-row gap-3" accessibilityRole="radiogroup">
             <Pressable
               onPress={() => setSelectedLength(10)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 10 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 10 }}
+              accessibilityLabel="10 seconds, ultra short"
             >
               <Text className={`font-semibold text-center ${selectedLength === 10 ? 'text-primary' : 'text-foreground'}`}>10s</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Ultra short</Text>
@@ -399,6 +402,9 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(30)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 30 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 30 }}
+              accessibilityLabel="30 seconds, quick"
             >
               <Text className={`font-semibold text-center ${selectedLength === 30 ? 'text-primary' : 'text-foreground'}`}>30s</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Quick</Text>
@@ -407,16 +413,22 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(45)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 45 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 45 }}
+              accessibilityLabel="45 seconds, brief"
             >
               <Text className={`font-semibold text-center ${selectedLength === 45 ? 'text-primary' : 'text-foreground'}`}>45s</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Brief</Text>
             </Pressable>
           </View>
 
-          <View className="flex-row gap-3">
+          <View className="flex-row gap-3" accessibilityRole="radiogroup">
             <Pressable
               onPress={() => setSelectedLength(60)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 60 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 60 }}
+              accessibilityLabel="1 minute, short"
             >
               <Text className={`font-semibold text-center ${selectedLength === 60 ? 'text-primary' : 'text-foreground'}`}>1m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Short</Text>
@@ -425,6 +437,9 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(90)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 90 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 90 }}
+              accessibilityLabel="1.5 minutes, concise"
             >
               <Text className={`font-semibold text-center ${selectedLength === 90 ? 'text-primary' : 'text-foreground'}`}>1.5m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Concise</Text>
@@ -433,16 +448,22 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(120)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 120 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 120 }}
+              accessibilityLabel="2 minutes, medium"
             >
               <Text className={`font-semibold text-center ${selectedLength === 120 ? 'text-primary' : 'text-foreground'}`}>2m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Medium</Text>
             </Pressable>
           </View>
 
-          <View className="flex-row gap-3">
+          <View className="flex-row gap-3" accessibilityRole="radiogroup">
             <Pressable
               onPress={() => setSelectedLength(180)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 180 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 180 }}
+              accessibilityLabel="3 minutes, long"
             >
               <Text className={`font-semibold text-center ${selectedLength === 180 ? 'text-primary' : 'text-foreground'}`}>3m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Long</Text>
@@ -451,6 +472,9 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(240)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 240 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 240 }}
+              accessibilityLabel="4 minutes, extended"
             >
               <Text className={`font-semibold text-center ${selectedLength === 240 ? 'text-primary' : 'text-foreground'}`}>4m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Extended</Text>
@@ -459,6 +483,9 @@ export function TopicVideoGenerator({
             <Pressable
               onPress={() => setSelectedLength(300)}
               className={`flex-1 p-3 rounded-lg border-2 ${selectedLength === 300 ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selectedLength === 300 }}
+              accessibilityLabel="5 minutes, full"
             >
               <Text className={`font-semibold text-center ${selectedLength === 300 ? 'text-primary' : 'text-foreground'}`}>5m</Text>
               <Text className="text-xs text-muted-foreground text-center mt-0.5">Full</Text>

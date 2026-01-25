@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, max, sql } from 'drizzle-orm';
 import { db } from '@/db/drizzle';
 import { topics, roadmapSteps, roadmaps, subtopics, userSubtopicPerformance, userKnowledge } from '@/db/schema';
 import { createId, isCuid } from '@paralleldrive/cuid2';
@@ -105,14 +105,16 @@ export async function createSubtopics(
     const existingNames = new Set(
       existingSubtopics.map(st => st.name.toLowerCase().trim())
     );
+    const seenNames = new Set(existingNames);
     
     // Filter out subtopics that already exist by name
     const newSubtopicsToCreate = explanation.subtopics.filter(st => {
       const normalizedName = st.title.toLowerCase().trim();
-      if (existingNames.has(normalizedName)) {
-        console.log(`⏭️ [DB] Subtopic "${st.title}" already exists, skipping`);
+      if (seenNames.has(normalizedName)) {
+        console.log(`⏭️ [DB] Subtopic "${st.title}" already exists or is duplicated in this batch, skipping`);
         return false;
       }
+      seenNames.add(normalizedName);
       return true;
     });
     
@@ -157,41 +159,80 @@ export async function createSubtopics(
     
     console.log(`🗄️ [DB] Starting subtopic insertion loop...`);
     
-    // Calculate the starting order number (after existing subtopics)
-    const startOrder = existingSubtopics.length;
+    // Helper function to insert subtopic with atomic order assignment and retry on conflict
+    const insertSubtopicWithRetry = async (subtopic: typeof newSubtopicsToCreate[0], maxRetries = 5): Promise<void> => {
+      const subtopicId = createId();
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          // Query max order atomically within each attempt to avoid race conditions
+          const maxOrderResult = await tx
+            .select({ maxOrder: max(subtopics.order) })
+            .from(subtopics)
+            .where(eq(subtopics.parentTopicId, parentTopicId));
+          
+          const nextOrder = (maxOrderResult[0]?.maxOrder ?? -1) + 1;
+          
+          // Attempt insert with the calculated order
+          await tx.insert(subtopics).values({
+            id: subtopicId,
+            parentTopicId: parentTopicId,
+            name: subtopic.title,
+            contentDefault: subtopic.explanationDefault,
+            contentSimplified: subtopic.explanationSimplified,
+            contentStory: subtopic.explanationStory,
+            order: nextOrder,
+            metadata: JSON.stringify({
+              source: source,
+              example: subtopic.example,
+              exampleExplanation: subtopic.exampleExplanation,
+              exampleSimplified: subtopic.exampleSimplified,
+              exampleStory: subtopic.exampleStory,
+              keyPoints: subtopic.keyPoints
+            })
+          });
+          
+          console.log(`✅ [DB] Created subtopic with 3 content types: ${subtopic.title} (order: ${nextOrder}, source: ${source})`);
+          return; // Success, exit retry loop
+          
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          
+          // Check if error is due to unique constraint violation on (parentTopicId, order)
+          const isOrderConflict = errorMessage.includes('UNIQUE constraint failed') && 
+                                  errorMessage.includes('parentTopicId') && 
+                                  errorMessage.includes('order');
+          
+          if (isOrderConflict && attempt < maxRetries - 1) {
+            // Retry after a brief delay with exponential backoff
+            const delayMs = Math.pow(2, attempt) * 10; // 10ms, 20ms, 40ms, 80ms, 160ms
+            console.warn(`⚠️ [DB] Order conflict for "${subtopic.title}", retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+          
+          // Either not an order conflict or max retries reached
+          console.error(`❌ [DB] Failed to create subtopic ${subtopic.title}:`, error);
+          throw error; // Propagate error to outer catch
+        }
+      }
+      
+      throw new Error(`Failed to insert subtopic "${subtopic.title}" after ${maxRetries} attempts`);
+    };
     
+    // Insert subtopics sequentially to maintain order consistency
     for (let i = 0; i < newSubtopicsToCreate.length; i++) {
       const subtopic = newSubtopicsToCreate[i];
-      const subtopicId = createId();
       
       console.log(`🗄️ [DB] Inserting subtopic ${i + 1}/${newSubtopicsToCreate.length}: "${subtopic.title}"`);
       console.log(`🗄️ [DB] Content lengths - Default: ${subtopic.explanationDefault?.length || 0}, Simplified: ${subtopic.explanationSimplified?.length || 0}, Story: ${subtopic.explanationStory?.length || 0}`);
       
       try {
-        await tx.insert(subtopics).values({
-          id: subtopicId,
-          parentTopicId: parentTopicId,
-          name: subtopic.title,
-          contentDefault: subtopic.explanationDefault,
-          contentSimplified: subtopic.explanationSimplified,
-          contentStory: subtopic.explanationStory,
-          order: startOrder + i + 1, // Continue numbering after existing subtopics
-          metadata: JSON.stringify({
-            source: source, // Track whether this is 'original' or 'websearch' content
-            example: subtopic.example,
-            exampleExplanation: subtopic.exampleExplanation,
-            exampleSimplified: subtopic.exampleSimplified,
-            exampleStory: subtopic.exampleStory,
-            keyPoints: subtopic.keyPoints
-          })
-        });
-
-        console.log(`✅ [DB] Created subtopic with 3 content types: ${subtopic.title} (source: ${source})`);
+        await insertSubtopicWithRetry(subtopic);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`Failed to create subtopic ${subtopic.title}:`, error);
         errors.push({
-          subtopicId,
+          subtopicId: subtopic.title, // Use title as identifier since subtopicId is internal to retry function
           title: subtopic.title,
           error: errorMessage
         });

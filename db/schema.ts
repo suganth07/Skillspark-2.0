@@ -107,6 +107,7 @@ export const subtopics = sqliteTable(
     index("subtopics_parent_idx").on(t.parentTopicId),
     index("subtopics_order_idx").on(t.parentTopicId, t.order),
     uniqueIndex("subtopics_parent_name_idx").on(t.parentTopicId, t.name),
+    uniqueIndex("subtopics_parent_order_idx").on(t.parentTopicId, t.order),
   ]
 );
 

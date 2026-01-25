@@ -22,6 +22,7 @@ interface VideoAgentState {
   apiKey: string;
   avatarId: string;
   voiceId: string;
+  lengthInSeconds: number;
 }
 
 // ------------------------------
@@ -57,14 +58,16 @@ async function withRetry<T>(
 // Script Generation Node
 // ------------------------------
 async function generateScriptNode(state: VideoAgentState): Promise<string> {
-  console.log("🎬 Agent Node: Generating video script...");
+  console.log(`🎬 Agent Node: Generating video script (${state.lengthInSeconds}s)...`);
   
   const script = await withRetry(
     async () => {
       return await geminiService.generateVideoScript(
         state.topicName,
         state.context,
-        state.subtopics
+        state.subtopics,
+        'default',
+        state.lengthInSeconds
       );
     },
     3,
@@ -147,9 +150,10 @@ export async function generateTopicVideo(
   subtopics: TopicSubtopic[],
   apiKey: string,
   avatarId: string,
-  voiceId: string
+  voiceId: string,
+  lengthInSeconds: number = 120
 ): Promise<VideoGenerationResult> {
-  console.log("🎬 Video Agent: Starting video generation for:", topicName);
+  console.log(`🎬 Video Agent: Starting video generation for: ${topicName} (${lengthInSeconds}s)`);
   
   // Validate inputs
   if (!apiKey || !avatarId || !voiceId) {
@@ -166,6 +170,7 @@ export async function generateTopicVideo(
     apiKey,
     avatarId,
     voiceId,
+    lengthInSeconds,
   };
 
   // Step 1: Generate script

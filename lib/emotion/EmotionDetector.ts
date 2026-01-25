@@ -395,7 +395,7 @@ export class EmotionDetector {
         emotion: "looking_away",
         confidence: Math.max(0.6, confidence),
         features,
-      };
+    };
     }
 
     // 2. Drowsy - very low EAR (eyes nearly closed)

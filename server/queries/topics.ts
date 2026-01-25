@@ -95,24 +95,33 @@ export async function createSubtopics(
   const source = isWebSearchGenerated ? 'websearch' : 'original';
   
   return await db.transaction(async (tx) => {
-    // Check if subtopics already exist for this topic with this source
+    // Check if subtopics already exist for this topic
     const existingSubtopics = await tx
-      .select({ id: subtopics.id, metadata: subtopics.metadata })
+      .select({ id: subtopics.id, name: subtopics.name, metadata: subtopics.metadata })
       .from(subtopics)
       .where(eq(subtopics.parentTopicId, parentTopicId));
     
-    // Filter existing subtopics by source
-    const existingWithSameSource = existingSubtopics.filter(st => {
-      const meta = (st.metadata as Record<string, any>) || {};
-      return meta.source === source;
+    // Create a set of existing subtopic names (normalized for comparison)
+    const existingNames = new Set(
+      existingSubtopics.map(st => st.name.toLowerCase().trim())
+    );
+    
+    // Filter out subtopics that already exist by name
+    const newSubtopicsToCreate = explanation.subtopics.filter(st => {
+      const normalizedName = st.title.toLowerCase().trim();
+      if (existingNames.has(normalizedName)) {
+        console.log(`⏭️ [DB] Subtopic "${st.title}" already exists, skipping`);
+        return false;
+      }
+      return true;
     });
     
-    if (existingWithSameSource.length > 0) {
-      console.log(`⏭️ [DB] Subtopics with source='${source}' already exist (${existingWithSameSource.length}), skipping creation`);
-      return; // Don't create duplicates
+    if (newSubtopicsToCreate.length === 0) {
+      console.log(`⏭️ [DB] All ${explanation.subtopics.length} subtopics already exist, skipping creation`);
+      return; // All subtopics already exist
     }
     
-    console.log(`✅ [DB] No existing subtopics with source='${source}', proceeding with creation`);
+    console.log(`✅ [DB] Creating ${newSubtopicsToCreate.length} new subtopics (${explanation.subtopics.length - newSubtopicsToCreate.length} already exist)`);
     
     // Update parent topic with metadata
     const parentTopic = await tx
@@ -148,11 +157,14 @@ export async function createSubtopics(
     
     console.log(`🗄️ [DB] Starting subtopic insertion loop...`);
     
-    for (let i = 0; i < explanation.subtopics.length; i++) {
-      const subtopic = explanation.subtopics[i];
+    // Calculate the starting order number (after existing subtopics)
+    const startOrder = existingSubtopics.length;
+    
+    for (let i = 0; i < newSubtopicsToCreate.length; i++) {
+      const subtopic = newSubtopicsToCreate[i];
       const subtopicId = createId();
       
-      console.log(`🗄️ [DB] Inserting subtopic ${i + 1}/${explanation.subtopics.length}: "${subtopic.title}"`);
+      console.log(`🗄️ [DB] Inserting subtopic ${i + 1}/${newSubtopicsToCreate.length}: "${subtopic.title}"`);
       console.log(`🗄️ [DB] Content lengths - Default: ${subtopic.explanationDefault?.length || 0}, Simplified: ${subtopic.explanationSimplified?.length || 0}, Story: ${subtopic.explanationStory?.length || 0}`);
       
       try {
@@ -163,7 +175,7 @@ export async function createSubtopics(
           contentDefault: subtopic.explanationDefault,
           contentSimplified: subtopic.explanationSimplified,
           contentStory: subtopic.explanationStory,
-          order: i + 1,
+          order: startOrder + i + 1, // Continue numbering after existing subtopics
           metadata: JSON.stringify({
             source: source, // Track whether this is 'original' or 'websearch' content
             example: subtopic.example,

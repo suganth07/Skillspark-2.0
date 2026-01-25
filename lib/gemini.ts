@@ -1115,14 +1115,16 @@ ${canonicalTitles.map((title, idx) => `      ${idx + 1}. "${title}"`).join('\n')
 
   /**
    * Generate a video script for HeyGen based on topic subtopics
-   * Creates a ~170 second (2 minutes 50 seconds) educational video script
+   * Creates an educational video script of specified length
    * @param tone - The tone/style of the script (default, simplified, or story)
+   * @param lengthInSeconds - The desired length of the video in seconds (default: 120)
    */
   async generateVideoScript(
     topicName: string,
     context: string,
     subtopics: TopicSubtopic[],
-    tone: 'default' | 'simplified' | 'story' = 'default'
+    tone: 'default' | 'simplified' | 'story' = 'default',
+    lengthInSeconds: number = 120
   ): Promise<string> {
     let toneGuidance = '';
     
@@ -1145,18 +1147,26 @@ Be clear and informative while maintaining accuracy.
 Include practical examples and key insights.`;
     }
 
+    // Calculate word count based on speaking rate (~140 words per minute average)
+    const targetWordCount = Math.round((lengthInSeconds / 60) * 140);
+    const hookDuration = Math.round(lengthInSeconds * 0.12); // 12% for hook
+    const introDuration = Math.round(lengthInSeconds * 0.18); // 18% for intro
+    const mainDuration = Math.round(lengthInSeconds * 0.53); // 53% for main content
+    const practicalDuration = Math.round(lengthInSeconds * 0.12); // 12% for practical
+    const conclusionDuration = Math.round(lengthInSeconds * 0.05); // 5% for conclusion
+    
     const prompt = `
-Create a comprehensive, engaging script for a 170 second (approximately 2 minutes 50 seconds) educational video about "${topicName}" in the context of learning "${context}".
+Create a comprehensive, engaging script for a ${lengthInSeconds} second (${Math.floor(lengthInSeconds / 60)} minutes ${lengthInSeconds % 60} seconds) educational video about "${topicName}" in the context of learning "${context}".
 ${toneGuidance}
 
-The script should be approximately 370-425 words (speaking pace: ~130-150 words per minute for 170 seconds).
+The script should be approximately ${targetWordCount} words (speaking pace: ~140 words per minute for ${lengthInSeconds} seconds).
 
 Structure the script as follows:
-1. Opening Hook (20 seconds): Grab attention with an interesting fact or question about ${topicName}
-2. Introduction (30 seconds): Explain what ${topicName} is and why it matters for ${context}
-3. Main Content (90 seconds): Cover the key subtopics below, with clear explanations and examples
-4. Practical Application (20 seconds): Show how to apply this knowledge in real scenarios
-5. Conclusion & Call-to-Action (10 seconds): Summarize key takeaways and encourage practice
+1. Opening Hook (${hookDuration} seconds): Grab attention with an interesting fact or question about ${topicName}
+2. Introduction (${introDuration} seconds): Explain what ${topicName} is and why it matters for ${context}
+3. Main Content (${mainDuration} seconds): Cover the key subtopics below, with clear explanations and examples
+4. Practical Application (${practicalDuration} seconds): Show how to apply this knowledge in real scenarios
+5. Conclusion & Call-to-Action (${conclusionDuration} seconds): Summarize key takeaways and encourage practice
 
 Cover these subtopics in the main content section:
 ${JSON.stringify(subtopics.map(s => ({ title: s.title, explanation: s.explanationDefault?.substring(0, 150) + '...' })), null, 2)}
@@ -1164,11 +1174,13 @@ ${JSON.stringify(subtopics.map(s => ({ title: s.title, explanation: s.explanatio
 Requirements:
 - Write in a conversational, engaging style as if speaking directly to the learner
 - Use transitions between sections to maintain flow
-- Include 1-2 concrete examples throughout
+- Include ${lengthInSeconds >= 180 ? '2-3' : lengthInSeconds >= 120 ? '1-2' : '1'} concrete example${lengthInSeconds >= 120 ? 's' : ''} throughout
 - Keep sentences concise and easy to understand when spoken aloud
 - Avoid overly complex vocabulary
 - Include natural pauses (indicated by periods and paragraph breaks)
-- Focus on the most important points given the 170 second time constraint
+- Focus on the most important points given the ${lengthInSeconds} second time constraint
+${lengthInSeconds <= 90 ? '- Keep explanations brief and focus only on essential concepts' : ''}
+${lengthInSeconds >= 240 ? '- Provide more detailed explanations with additional examples and context' : ''}
 
 Output ONLY the script text ready for voice narration. Do NOT include:
 - JSON formatting
@@ -1176,6 +1188,9 @@ Output ONLY the script text ready for voice narration. Do NOT include:
 - Section labels like "Introduction:" or "Section 1:"
 - Bullets or numbered lists
 - Stage directions or meta-commentary
+
+CRITICAL: The script MUST be approximately ${targetWordCount} words to achieve ${lengthInSeconds} seconds of speaking time.
+Count your words carefully. Too short = video ends abruptly. Too long = video gets cut off.
 
 The script should flow naturally as continuous narration that a presenter would speak.
     `;
@@ -1197,8 +1212,9 @@ The script should flow naturally as continuous narration that a presenter would 
         .replace(/^\s*\d+\.\s+/gm, '') // Remove numbered lists
         .trim();
 
-      if (!cleanedScript || cleanedScript.length < 300) {
-        throw new Error('Generated script is too short for a 170 second video');
+      const minLength = Math.round(lengthInSeconds * 2); // Roughly 2 chars per second minimum
+      if (!cleanedScript || cleanedScript.length < minLength) {
+        throw new Error(`Generated script is too short for a ${lengthInSeconds} second video (minimum ${minLength} characters)`);
       }
 
       return cleanedScript;

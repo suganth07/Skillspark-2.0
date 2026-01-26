@@ -37,6 +37,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: "com.skillspark.app",
     permissions: ["CAMERA"],
     versionCode: 1,
+    intentFilters: [
+      {
+        action: "VIEW",
+        data: [
+          {
+            scheme: "https",
+            host: "skillspark.app",
+          },
+        ],
+        category: ["BROWSABLE", "DEFAULT"],
+      },
+    ],
   },
   web: {
     bundler: "metro",
@@ -55,6 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         cameraPermission: "Allow $(PRODUCT_NAME) to access your camera for emotion detection during learning.",
       },
     ],
+    "./plugins/withFaceLandmarkerAsset",
   ],
   experiments: {
     typedRoutes: true,

@@ -27,11 +27,17 @@
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "NODE_ENV": "production"
       }
     },
     "production-aab": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "NODE_ENV": "production"
       }
     }
   },

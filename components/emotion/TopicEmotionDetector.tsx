@@ -22,8 +22,6 @@ import { Card } from "@/components/ui/card";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Brain, Camera, AlertCircle } from "lucide-react-native";
 
-// Import native face landmarks module
-import { FaceLandmarks, type FaceLandmarksResult } from "@/modules/face-landmarks/src";
 // Import emotion detector with Python-ported logic
 import {
   EmotionDetector,
@@ -31,16 +29,23 @@ import {
   type EmotionResult as EmotionDetectorResult,
 } from "@/lib/emotion/EmotionDetector";
 
-// Check if native module is available
+// Conditionally import native face landmarks module
+let FaceLandmarks: any = null;
 let isFaceLandmarksAvailable = false;
+let FaceLandmarksResult: any;
+
 try {
   if (Platform.OS !== "web") {
-    // Try to access the module - will throw if not available
+    // Try to import the module - will throw if not available
+    const faceLandmarksModule = require("@/modules/face-landmarks/src");
+    FaceLandmarks = faceLandmarksModule.FaceLandmarks;
+    FaceLandmarksResult = faceLandmarksModule.FaceLandmarksResult;
     isFaceLandmarksAvailable = FaceLandmarks !== null && FaceLandmarks !== undefined;
   }
 } catch (error) {
   console.warn("FaceLandmarks native module not available:", error);
   isFaceLandmarksAvailable = false;
+  FaceLandmarks = null;
 }
 
 interface EmotionResultState {
@@ -118,7 +123,7 @@ export function TopicEmotionDetector({
       console.log("📷 Photo captured:", photo.uri);
 
       // Detect face landmarks using native module
-      const result: FaceLandmarksResult =
+      const result: any =
         await FaceLandmarks.detectFromImageAsync(photo.uri);
 
       console.log(

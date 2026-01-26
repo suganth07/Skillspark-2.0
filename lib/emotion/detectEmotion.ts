@@ -1,5 +1,17 @@
-import { FaceLandmarks } from "@/modules/face-landmarks/src";
 import { EmotionDetector, normalizeLandmarks, type EmotionResult } from "./EmotionDetector";
+import { Platform } from "react-native";
+
+// Conditionally import native face landmarks module
+let FaceLandmarks: any = null;
+try {
+  if (Platform.OS !== "web") {
+    const faceLandmarksModule = require("@/modules/face-landmarks/src");
+    FaceLandmarks = faceLandmarksModule.FaceLandmarks;
+  }
+} catch (error) {
+  console.warn("FaceLandmarks native module not available:", error);
+  FaceLandmarks = null;
+}
 
 const detector = new EmotionDetector();
 
@@ -10,6 +22,27 @@ const detector = new EmotionDetector();
  * @returns EmotionResult with emotion label, confidence, and all computed features
  */
 export async function detectEmotionFromImageUri(uri: string): Promise<EmotionResult> {
+  // Check if module is available
+  if (!FaceLandmarks) {
+    return {
+      emotion: "no_face",
+      confidence: 0.0,
+      features: {
+        ear: 0,
+        mar: 0,
+        brow_height: 0,
+        brow_asymmetry: 0,
+        tilt_angle: 0,
+        rotation_ratio: 0,
+        symmetry_ratio: 0,
+        energy_concentration: 0,
+        jaw_width: 0,
+        brow_variance: 0,
+        looking_at_camera: false,
+      },
+    };
+  }
+
   try {
     // Call native module to get face landmarks
     const { width, height, landmarks } = await FaceLandmarks.detectFromImageAsync(uri);

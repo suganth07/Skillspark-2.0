@@ -39,6 +39,8 @@ app-example
 
 # Ignore the entire Android directory
 android/
+# But keep the model file for emotion detection
+!android/app/src/main/assets/face_landmarker.task
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 .github/copilot-instructions.md

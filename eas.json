@@ -37,5 +37,8 @@
   },
   "submit": {
     "production": {}
+  },
+  "hooks": {
+    "postInstall": "mkdir -p android/app/src/main/assets && curl -L https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task -o face_landmarker.task && cp face_landmarker.task android/app/src/main/assets/"
   }
 }

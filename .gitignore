@@ -41,6 +41,10 @@ app-example
 android/
 # But keep the model file for emotion detection
 !android/app/src/main/assets/face_landmarker.task
+!modules/face-landmarks/android/
+!modules/face-landmarks/android/**
+modules/face-landmarks/android/.gradle/
+modules/face-landmarks/android/build/
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 android/app/src/main/java/com/expostarter/base/MainActivity.kt
 .github/copilot-instructions.md
